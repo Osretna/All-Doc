@@ -1,0 +1,8 @@
+{
+  "name": "Infinity Technology & Sovereign Office Suite",
+  "description": "منصة تقنية متكاملة تضم استضافة سحابية وحلول برمجية وجناح مكتبي سيادي (Docs, Sheets, Slides, Notes, Base, PDF, Photo) بتصميم مايكروسوفت أوفيس ودعم PWA والتثبيت على الكمبيوتر والهاتف.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

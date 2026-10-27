@@ -1,0 +1,109 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --font-cairo: 'Cairo', 'Segoe UI', system-ui, sans-serif;
+    --font-tajawal: 'Tajawal', 'Segoe UI', system-ui, sans-serif;
+    --font-almarai: 'Almarai', 'Segoe UI', system-ui, sans-serif;
+    --font-amiri: 'Amiri', 'Traditional Arabic', serif;
+    --font-readex: 'Readex Pro', 'Segoe UI', sans-serif;
+    --font-ibm: 'IBM Plex Sans Arabic', 'Segoe UI', sans-serif;
+  }
+
+  body {
+    font-family: var(--font-cairo);
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+}
+
+/* Custom Scrollbars to look like Microsoft Office / Windows 11 Fluent */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f1f1;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 4px;
+  border: 2px solid #f1f1f1;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #a0a0a0;
+}
+
+/* Office Ribbon Button Styles */
+.ribbon-btn {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 11px;
+  color: #323130;
+  transition: all 0.1s ease;
+  user-select: none;
+  cursor: pointer;
+}
+
+.ribbon-btn:hover {
+  background-color: #edebe9;
+}
+
+.ribbon-btn:active, .ribbon-btn.active {
+  background-color: #e1dfdd;
+  box-shadow: inset 0 1px 2px rgba(0,0,0,0.1);
+}
+
+.ribbon-btn-sm {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border-radius: 3px;
+  padding: 3px 6px;
+  font-size: 11.5px;
+  color: #323130;
+  transition: all 0.1s ease;
+  cursor: pointer;
+}
+
+.ribbon-btn-sm:hover {
+  background-color: #edebe9;
+}
+
+.ribbon-btn-sm:active, .ribbon-btn-sm.active {
+  background-color: #e1dfdd;
+}
+
+/* Paper Page View (Docs A4) */
+.office-page-canvas {
+  background: white;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.08), 0 0 1px rgba(0, 0, 0, 0.15);
+  min-height: 297mm;
+  width: 210mm;
+  max-width: 100%;
+  margin: 0 auto;
+}
+
+@media print {
+  body {
+    background: white !important;
+    color: black !important;
+  }
+  .no-print {
+    display: none !important;
+  }
+  .office-page-canvas {
+    box-shadow: none !important;
+    margin: 0 !important;
+    width: 100% !important;
+    min-height: auto !important;
+  }
+}
