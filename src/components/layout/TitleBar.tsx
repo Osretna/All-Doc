@@ -80,7 +80,7 @@ export const TitleBar: React.FC<Props> = ({
   ];
 
   return (
-    <div className="bg-[#f3f2f1] border-b border-[#e1dfdd] select-none text-[#323130] text-xs">
+    <div className="bg-[#f3f2f1] border-b border-[#e1dfdd] select-none text-[#323130] text-xs no-print title-bar-container" data-no-print="true">
       {/* 1. Master Microsoft 365 App Launcher Bar */}
       <div className="flex items-center justify-between px-3 py-1.5 bg-white border-b border-gray-200">
         <div className="flex items-center gap-2 overflow-x-auto">
@@ -142,21 +142,7 @@ export const TitleBar: React.FC<Props> = ({
             })}
           </div>
 
-          <div className="h-5 w-[1px] bg-gray-200 mx-1 hidden lg:block"></div>
 
-          {/* Cloud Portal Switcher Button */}
-          <button
-            onClick={() => setActiveSection('hosting')}
-            className={`px-2.5 py-1 rounded-md text-xs font-semibold transition flex items-center gap-1.5 cursor-pointer shrink-0 ${
-              activeSection !== 'office'
-                ? 'bg-slate-900 text-white shadow-sm'
-                : 'text-gray-600 hover:bg-gray-100 border border-gray-200'
-            }`}
-          >
-            <Cloud className="w-3.5 h-3.5 text-sky-400" />
-            <span className="hidden sm:inline">منصة السحابة والاستضافة</span>
-            <span className="sm:hidden">السحابة</span>
-          </button>
         </div>
 
         {/* Right Status & PWA Install Controls */}
@@ -193,13 +179,7 @@ export const TitleBar: React.FC<Props> = ({
               <span>ملف (File)</span>
             </button>
 
-            {/* Current App Badge */}
-            <div className="flex items-center gap-1.5 text-white/90 font-bold text-xs">
-              {getAppIcon(activeApp, 'w-4 h-4')}
-              <span>{currentConfig.name}</span>
-            </div>
 
-            <div className="h-4 w-[1px] bg-white/20 hidden sm:block"></div>
 
             {/* Document Title Editable */}
             <div className="flex items-center gap-1.5">

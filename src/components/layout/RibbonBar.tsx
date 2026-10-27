@@ -150,7 +150,7 @@ export const RibbonBar: React.FC<Props> = ({
   const tabs = getTabsForApp();
 
   return (
-    <div className="bg-[#fbfbfb] border-b border-[#d1d1d1] select-none text-xs text-[#242424] shadow-xs">
+    <div className="bg-[#fbfbfb] border-b border-[#d1d1d1] select-none text-xs text-[#242424] shadow-xs no-print ribbon-container" data-no-print="true">
       {/* 1. Ribbon Tabs Bar */}
       <div className="flex items-center gap-0.5 px-3 bg-[#f3f2f1] border-b border-[#e1dfdd] overflow-x-auto">
         {/* File (ملف) Tab */}

@@ -190,11 +190,18 @@ export const BackstageModal: React.FC<Props> = ({
                 </p>
               </div>
 
-              {/* Blank Document */}
+              {/* Blank Document - Dynamic for all Office Apps */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
                 <div
                   onClick={() => {
-                    onApplyTemplate('', 'مستند فارغ جديد');
+                    const defaultTitle = 
+                      activeApp === 'sheets' ? 'مصنف فارغ جديد' :
+                      activeApp === 'slides' ? 'عرض تقديمي فارغ جديد' :
+                      activeApp === 'pdf' ? 'مستند PDF فارغ جديد' :
+                      activeApp === 'base' ? 'قاعدة بيانات فارغة جديدة' :
+                      activeApp === 'notes' ? 'دفتر ملاحظات فارغ جديد' :
+                      activeApp === 'photo' ? 'لوحة تصميم فارغة جديدة' : 'مستند فارغ جديد';
+                    onApplyTemplate('', defaultTitle);
                     onClose();
                   }}
                   className="group p-5 rounded-xl border-2 border-dashed border-gray-300 hover:border-[#0078d4] hover:bg-blue-50/50 cursor-pointer transition flex flex-col items-center justify-center text-center h-48"
@@ -202,8 +209,15 @@ export const BackstageModal: React.FC<Props> = ({
                   <div className="w-12 h-12 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center mb-3 group-hover:scale-110 transition">
                     <Plus className="w-6 h-6" />
                   </div>
-                  <span className="font-bold text-gray-800 text-sm">مستند فارغ جديد</span>
-                  <span className="text-xs text-gray-400 mt-1">ابدأ من صفحة بيضاء</span>
+                  <span className="font-bold text-gray-800 text-sm">
+                    {activeApp === 'sheets' ? 'مصنف إكسيل فارغ جديد' :
+                     activeApp === 'slides' ? 'عرض تقديمي فارغ جديد' :
+                     activeApp === 'pdf' ? 'مستند PDF فارغ جديد' :
+                     activeApp === 'base' ? 'قاعدة بيانات فارغة جديدة' :
+                     activeApp === 'notes' ? 'دفتر ملاحظات فارغ جديد' :
+                     activeApp === 'photo' ? 'لوحة تصميم فارغة جديدة' : 'مستند فارغ جديد'}
+                  </span>
+                  <span className="text-xs text-gray-400 mt-1">ابدأ من صفحة أو ملف فارغ بالكامل</span>
                 </div>
 
                 {/* DOCS TEMPLATES */}
