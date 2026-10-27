@@ -81,6 +81,7 @@ export interface SheetCell {
   mergeRowSpan?: number;
   mergedWith?: string;
   decimalPlaces?: number;
+  image?: string;
 }
 
 export type SheetData = { [cellId: string]: SheetCell };

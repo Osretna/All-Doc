@@ -134,7 +134,15 @@ export function evaluateExcelFormula(
 ): string {
   if (!expr.startsWith('=')) return expr;
 
-  const raw = expr.substring(1).trim();
+  let raw = expr.substring(1).trim();
+
+  // Auto-close missing parentheses if any (e.g. =SUM(G8+G7 or =(A1+B1)
+  const openCount = (raw.match(/\(/g) || []).length;
+  const closeCount = (raw.match(/\)/g) || []).length;
+  if (openCount > closeCount) {
+    raw += ')'.repeat(openCount - closeCount);
+  }
+
   const upper = raw.toUpperCase();
 
   try {
@@ -616,6 +624,17 @@ function resolveArgValue(
   if (/^[A-Z]+[0-9]+$/i.test(trimmed)) {
     return String(sheetData[trimmed.toUpperCase()]?.value || '');
   }
+
+  // If argument contains arithmetic expression like G8+G7 or A1*2
+  if (/[+\-*/^]/.test(trimmed)) {
+    try {
+      const evalSub = evaluateExcelFormula('=' + trimmed, sheetData, allSheets);
+      return String(evalSub);
+    } catch {
+      // fallback
+    }
+  }
+
   return trimmed;
 }
 

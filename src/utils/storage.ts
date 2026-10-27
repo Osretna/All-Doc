@@ -10,6 +10,10 @@ const STORAGE_KEYS = {
   NOTES_DATA: 'infinity_office_notes_v1',
   BASE_DATA: 'infinity_office_base_v1',
   ACTIVE_APP: 'infinity_office_active_app',
+  ACTIVE_SECTION: 'infinity_office_active_section',
+  DOCUMENT_TITLE: 'infinity_office_doc_title',
+  ACTIVE_SHEET_KEY: 'infinity_office_active_sheet_key',
+  SELECTED_CELL: 'infinity_office_selected_cell',
   SOVEREIGN_MODE: 'infinity_office_sovereign_strict',
 };
 

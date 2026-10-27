@@ -69,21 +69,64 @@ import JSZip from 'jszip';
 import { UploadCloud } from 'lucide-react';
 
 export default function App() {
-  // Navigation & Suite State
-  const [activeSection, setActiveSection] = useState<MainNavSection>('office');
-  const [activeApp, setActiveApp] = useState<OfficeAppId>('docs');
-  const [documentTitle, setDocumentTitle] = useState<string>('مستند 1 - Word');
+  // Navigation & Suite State (persisted across browser refresh so active app & data never get lost)
+  const [activeSection, setActiveSectionState] = useState<MainNavSection>(() => localVault.get('infinity_office_active_section', 'office'));
+  const [activeApp, setActiveAppState] = useState<OfficeAppId>(() => localVault.get(localVault.KEYS.ACTIVE_APP, 'sheets'));
+  const [documentTitle, setDocumentTitleState] = useState<string>(() => localVault.get('infinity_office_doc_title', 'مصنف إكسيل 1 - Excel'));
   const [isBackstageOpen, setIsBackstageOpen] = useState<boolean>(false);
 
+  const setActiveApp = (app: OfficeAppId) => {
+    setActiveAppState(app);
+    localVault.set(localVault.KEYS.ACTIVE_APP, app);
+  };
+
+  const setActiveSection = (sec: MainNavSection) => {
+    setActiveSectionState(sec);
+    localVault.set('infinity_office_active_section', sec);
+  };
+
+  const setDocumentTitle = (title: string) => {
+    setDocumentTitleState(title);
+    localVault.set('infinity_office_doc_title', title);
+  };
+
   // Shared Suite File Data States (Excel, Slides, Access, PDF)
-  const [excelData, setExcelData] = useState<Record<string, { label: string; data: SheetData }> | undefined>(undefined);
-  const [slidesData, setSlidesData] = useState<SlideItem[] | undefined>(undefined);
-  const [accessData, setAccessData] = useState<DbTable[] | undefined>(undefined);
+  const [excelData, setExcelDataState] = useState<Record<string, { label: string; data: SheetData }> | undefined>(() => {
+    return localVault.get(localVault.KEYS.SHEETS_DATA, undefined);
+  });
+  const [slidesData, setSlidesDataState] = useState<SlideItem[] | undefined>(() => {
+    return localVault.get(localVault.KEYS.SLIDES_DATA, undefined);
+  });
+  const [accessData, setAccessDataState] = useState<DbTable[] | undefined>(() => {
+    return localVault.get(localVault.KEYS.BASE_DATA, undefined);
+  });
   const [pdfFile, setPdfFile] = useState<File | null>(null);
   const [notesSignal, setNotesSignal] = useState<number>(0);
   const [photoSignal, setPhotoSignal] = useState<number>(0);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const [isDraggingFile, setIsDraggingFile] = useState<boolean>(false);
+
+  // Save State: true = Green Dot 🟢 (saved), false = Orange Dot 🟠 (unsaved)
+  const [isSaved, setIsSaved] = useState<boolean>(true);
+  const [autoSaveCountdown, setAutoSaveCountdown] = useState<number>(300); // 5 minutes in seconds
+
+  const setExcelData = (data: Record<string, { label: string; data: SheetData }> | undefined) => {
+    setExcelDataState(data);
+    if (data) localVault.set(localVault.KEYS.SHEETS_DATA, data);
+    setIsSaved(false);
+  };
+
+  const setSlidesData = (data: SlideItem[] | undefined) => {
+    setSlidesDataState(data);
+    if (data) localVault.set(localVault.KEYS.SLIDES_DATA, data);
+    setIsSaved(false);
+  };
+
+  const setAccessData = (data: DbTable[] | undefined) => {
+    setAccessDataState(data);
+    if (data) localVault.set(localVault.KEYS.BASE_DATA, data);
+    setIsSaved(false);
+  };
 
   const addNotification = (text: string, type: 'success' | 'info' | 'error' = 'info') => {
     const newToast: ToastMessage = {
@@ -176,8 +219,9 @@ export default function App() {
     { id: 'h2', text: '2. جدول مؤشرات الأداء والنتائج', level: 1 },
   ]);
 
-  // Recalculate Word statistics dynamically
+  // Recalculate Word statistics dynamically & track save state
   const handleContentChange = useCallback(() => {
+    setIsSaved(false);
     if (!editorRef.current) return;
     const text = editorRef.current.innerText || '';
     const html = editorRef.current.innerHTML || '';
@@ -202,6 +246,73 @@ export default function App() {
     });
     setHeadings(newHeadings);
   }, []);
+
+  // Quick Manual Save (When clicking the Save button with green/orange dot)
+  const handleQuickSave = useCallback(() => {
+    if (activeApp === 'docs' && editorRef.current) {
+      localVault.set(localVault.KEYS.DOCS_CONTENT, editorRef.current.innerHTML);
+    } else if (activeApp === 'sheets' && excelData) {
+      localVault.set(localVault.KEYS.SHEETS_DATA, excelData);
+    } else if (activeApp === 'slides' && slidesData) {
+      localVault.set(localVault.KEYS.SLIDES_DATA, slidesData);
+    } else if (activeApp === 'base' && accessData) {
+      localVault.set(localVault.KEYS.BASE_DATA, accessData);
+    }
+    localVault.set(localVault.KEYS.ACTIVE_APP, activeApp);
+    localVault.set('infinity_office_active_section', activeSection);
+    localVault.set('infinity_office_doc_title', documentTitle);
+    setIsSaved(true);
+    setAutoSaveCountdown(300);
+    addNotification('تم حفظ جميع البيانات والتغييرات بنجاح! (الدائرة الخضراء مفعلة)', 'success');
+  }, [activeApp, activeSection, documentTitle, excelData, slidesData, accessData]);
+
+  // 5-Minute Auto-Save Timer
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setAutoSaveCountdown((prev) => {
+        if (prev <= 1) {
+          if (activeApp === 'docs' && editorRef.current) {
+            localVault.set(localVault.KEYS.DOCS_CONTENT, editorRef.current.innerHTML);
+          } else if (activeApp === 'sheets' && excelData) {
+            localVault.set(localVault.KEYS.SHEETS_DATA, excelData);
+          } else if (activeApp === 'slides' && slidesData) {
+            localVault.set(localVault.KEYS.SLIDES_DATA, slidesData);
+          } else if (activeApp === 'base' && accessData) {
+            localVault.set(localVault.KEYS.BASE_DATA, accessData);
+          }
+          localVault.set(localVault.KEYS.ACTIVE_APP, activeApp);
+          localVault.set('infinity_office_active_section', activeSection);
+          localVault.set('infinity_office_doc_title', documentTitle);
+          setIsSaved(true);
+          addNotification('تم الحفظ التلقائي بنجاح (كل 5 دقائق)', 'success');
+          return 300;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [activeApp, activeSection, documentTitle, excelData, slidesData, accessData]);
+
+  // Prevent data loss on accidental browser close or page refresh
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (activeApp === 'docs' && editorRef.current) {
+        localVault.set(localVault.KEYS.DOCS_CONTENT, editorRef.current.innerHTML);
+      } else if (activeApp === 'sheets' && excelData) {
+        localVault.set(localVault.KEYS.SHEETS_DATA, excelData);
+      }
+      localVault.set(localVault.KEYS.ACTIVE_APP, activeApp);
+      localVault.set('infinity_office_active_section', activeSection);
+      localVault.set('infinity_office_doc_title', documentTitle);
+      if (!isSaved) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [activeApp, activeSection, documentTitle, excelData, isSaved]);
 
   // Universal File Upload Handler (Word, Excel, PowerPoint, Access, PDF)
   const handleFileUpload = async (file: File) => {
@@ -759,6 +870,9 @@ export default function App() {
         onUploadFile={handleFileUpload}
         onSaveToDevice={handleSaveToDevice}
         onPrintIsolated={handlePrintIsolated}
+        isSaved={isSaved}
+        autoSaveCountdown={autoSaveCountdown}
+        onQuickSave={handleQuickSave}
       />
 
       {/* 2. Main Workspace Body */}
