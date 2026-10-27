@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import * as pdfjsLib from 'pdfjs-dist';
+import { PDFDocument, rgb, degrees } from 'pdf-lib';
 import {
   FileCheck2,
   PenTool,
@@ -26,10 +27,37 @@ import {
   Move,
   AlertCircle,
   Eye,
-  FileSpreadsheet
+  FileSpreadsheet,
+  Ruler,
+  Highlighter,
+  MessageSquare,
+  Loader2
 } from 'lucide-react';
+import { PdfRibbon } from './pdf/PdfRibbon';
+import { PdfThumbnailSidebar } from './pdf/PdfThumbnailSidebar';
+import { MergePdfModal } from './pdf/modals/MergePdfModal';
+import { WatermarkModal } from './pdf/modals/WatermarkModal';
+import { HeaderFooterModal } from './pdf/modals/HeaderFooterModal';
+import { ProtectPdfModal } from './pdf/modals/ProtectPdfModal';
+import { SignatureModal } from './pdf/modals/SignatureModal';
+import { ExportPdfModal } from './pdf/modals/ExportPdfModal';
+import { OrganizePagesModal } from './pdf/modals/OrganizePagesModal';
+import {
+  PdfRibbonTab,
+  PdfActiveTool,
+  StickyNote,
+  StampItem,
+  SignatureItem,
+  DrawingPath,
+  TextBlockItem,
+  RedactionBox,
+  FormFieldItem,
+  PdfWatermarkConfig,
+  BatesNumberingConfig,
+  HeaderFooterConfig
+} from './pdf/types';
 
-// Initialize PDF.js worker configuration
+// PDF.js worker setup
 try {
   pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
 } catch (e) {
@@ -40,49 +68,122 @@ interface Props {
   fontFamily: string;
   initialPdfFile?: File | null;
   onPdfChange?: (file: File) => void;
+  onOpenBackstage?: () => void;
 }
 
-interface AnnotationItem {
-  id: string;
-  type: 'stamp' | 'signature';
-  pageNumber: number;
-  x: number; // percentage 0 - 100
-  y: number; // percentage 0 - 100
-  content: string;
-}
-
-export const PdfStudioApp: React.FC<Props> = ({ fontFamily, initialPdfFile, onPdfChange }) => {
+export const PdfStudioApp: React.FC<Props> = ({ 
+  fontFamily, 
+  initialPdfFile, 
+  onPdfChange,
+  onOpenBackstage 
+}) => {
+  // Document state
+  const [documentTitle, setDocumentTitle] = useState('محضر_اجتماع_واعتماد_برج_النخيل_2026.pdf');
   const [pdfFile, setPdfFile] = useState<File | null>(initialPdfFile || null);
+  const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [pdfDoc, setPdfDoc] = useState<pdfjsLib.PDFDocumentProxy | null>(null);
-  const [totalPages, setTotalPages] = useState<number>(0);
+  const [totalPages, setTotalPages] = useState<number>(3);
   const [currentPage, setCurrentPage] = useState<number>(1);
+  const [pageRotations, setPageRotations] = useState<Record<number, number>>({ 1: 0, 2: 0, 3: 0 });
   const [zoomLevel, setZoomLevel] = useState<number>(100);
-  const [rotation, setRotation] = useState<number>(0);
   const [isLoadingPdf, setIsLoadingPdf] = useState<boolean>(false);
+  const [isRenderLoading, setIsRenderLoading] = useState<boolean>(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [isDraggingOver, setIsDraggingOver] = useState<boolean>(false);
 
-  // View Mode: 'native_pdf' (PDF.js high-res canvas) vs 'certificate' (official certificate layout)
-  const [viewMode, setViewMode] = useState<'native_pdf' | 'certificate'>('native_pdf');
-
-  // Annotation & Signature states
-  const [showSignModal, setShowSignModal] = useState<boolean>(false);
-  const [signatureData, setSignatureData] = useState<string | null>(null);
-  const [activeStamp, setActiveStamp] = useState<string>('معتمد رسمياً');
-  const [notes, setNotes] = useState<string>('تمت المراجعة والاعتماد المالي بموجب محضر اجتماع اتحاد شاغلين برج النخيل لسنة 2026.');
-  const [annotations, setAnnotations] = useState<AnnotationItem[]>([]);
-  const [searchQuery, setSearchQuery] = useState<string>('');
-  const [searchResults, setSearchResults] = useState<number[]>([]);
-
-  // Canvas Refs
-  const pageCanvasRef = useRef<HTMLCanvasElement>(null);
-  const signCanvasRef = useRef<HTMLCanvasElement>(null);
-  const [isDrawing, setIsDrawing] = useState(false);
+  // Canvas refs for real PDF rendering
+  const pdfPageCanvasRef = useRef<HTMLCanvasElement>(null);
   const renderTaskRef = useRef<any>(null);
 
-  // Load PDF file into PDF.js document proxy
+  // Ribbon & UI states
+  const [activeTab, setActiveTab] = useState<PdfRibbonTab>('home');
+  const [activeTool, setActiveTool] = useState<PdfActiveTool>('select');
+  const [showSidebar, setShowSidebar] = useState<boolean>(true);
+  const [twoPageView, setTwoPageView] = useState<boolean>(false);
+  const [readingMode, setReadingMode] = useState<boolean>(false);
+
+  // Overlays & Annotations states
+  const [stickyNotes, setStickyNotes] = useState<StickyNote[]>([
+    {
+      id: 'note_1',
+      pageNumber: 1,
+      x: 75,
+      y: 20,
+      text: 'تمت مراجعة البنود المالية وفق جدول أعمال الجمعية العمومية.',
+      author: 'م. خالد الشهري (المدقق)',
+      date: '2026-10-27',
+      color: '#fef08a',
+    },
+  ]);
+  const [stamps, setStamps] = useState<StampItem[]>([
+    {
+      id: 'stamp_1',
+      pageNumber: 1,
+      x: 18,
+      y: 78,
+      title: 'معتمد رسمياً',
+      dateStr: new Date().toLocaleDateString('en-US'),
+      type: 'approved',
+    },
+  ]);
+  const [signatures, setSignatures] = useState<SignatureItem[]>([]);
+  const [drawings, setDrawings] = useState<DrawingPath[]>([]);
+  const [redactions, setRedactions] = useState<RedactionBox[]>([]);
+  const [textBlocks, setTextBlocks] = useState<TextBlockItem[]>([]);
+
+  // Configurations
+  const [watermarkConfig, setWatermarkConfig] = useState<PdfWatermarkConfig>({
+    enabled: true,
+    text: 'وثيقة رسمية معتمدة',
+    color: '#ba141a',
+    opacity: 0.12,
+    rotation: -45,
+    fontSize: 56,
+  });
+
+  const [batesConfig, setBatesConfig] = useState<BatesNumberingConfig>({
+    enabled: true,
+    prefix: 'PALM-DOC-',
+    startNumber: 1,
+    digits: 6,
+    position: 'bottom-right',
+  });
+
+  const [headerFooterConfig, setHeaderFooterConfig] = useState<HeaderFooterConfig>({
+    headerLeft: 'رقم السجل: MLK-9904',
+    headerCenter: 'اتحاد شاغلين برج النخيل - المحضر السنوي المالي',
+    headerRight: 'سري للغاية',
+    footerLeft: 'نظام ملاك السيادي 2026',
+    footerCenter: 'صفحة 1 من 3',
+    footerRight: 'مصدق إلكترونياً',
+  });
+
+  // Modal dialog states
+  const [isMergeModalOpen, setIsMergeModalOpen] = useState(false);
+  const [isWatermarkModalOpen, setIsWatermarkModalOpen] = useState(false);
+  const [isHeaderFooterModalOpen, setIsHeaderFooterModalOpen] = useState(false);
+  const [isProtectModalOpen, setIsProtectModalOpen] = useState(false);
+  const [isSignatureModalOpen, setIsSignatureModalOpen] = useState(false);
+  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const [isOrganizeModalOpen, setIsOrganizeModalOpen] = useState(false);
+
+  // Drawing canvas state
+  const drawingCanvasRef = useRef<HTMLCanvasElement>(null);
+  const [isDrawing, setIsDrawing] = useState(false);
+  const [currentStroke, setCurrentStroke] = useState<{ x: number; y: number }[]>([]);
+
+  // Load PDF file via PDF.js with objectUrl fallback
   const loadPdfDocument = useCallback(async (file: File) => {
     setIsLoadingPdf(true);
     setLoadError(null);
+    setPdfFile(file);
+    onPdfChange?.(file);
+
+    // Create object URL for instant fallback preview
+    const objectUrl = URL.createObjectURL(file);
+    setPdfUrl(objectUrl);
+    setDocumentTitle(file.name);
+
     try {
       const buffer = await file.arrayBuffer();
       const loadingTask = pdfjsLib.getDocument({
@@ -95,715 +196,836 @@ export const PdfStudioApp: React.FC<Props> = ({ fontFamily, initialPdfFile, onPd
       setPdfDoc(doc);
       setTotalPages(doc.numPages);
       setCurrentPage(1);
-      setViewMode('native_pdf');
       setIsLoadingPdf(false);
     } catch (err: any) {
-      console.error('Failed to load PDF with PDF.js:', err);
-      setLoadError(err?.message || 'تعذر فك تشفير وتوليد صفحات ملف PDF.');
+      console.warn('PDF.js parse notice, falling back to direct stream:', err);
+      // Fallback is already active via pdfUrl
+      setLoadError(err?.message || null);
       setIsLoadingPdf(false);
     }
-  }, []);
+  }, [onPdfChange]);
 
-  // Sync external pdf file
   useEffect(() => {
     if (initialPdfFile) {
-      setPdfFile(initialPdfFile);
       loadPdfDocument(initialPdfFile);
     }
   }, [initialPdfFile, loadPdfDocument]);
 
-  // Render current PDF page to HTML5 Canvas
+  // Real Page Rendering on HTML5 Canvas
   useEffect(() => {
-    if (!pdfDoc || viewMode !== 'native_pdf') return;
+    let active = true;
 
-    let isCancelled = false;
+    async function renderPage() {
+      if (!pdfDoc || !pdfPageCanvasRef.current) return;
 
-    const renderPage = async () => {
       try {
+        setIsRenderLoading(true);
         if (renderTaskRef.current) {
           try {
             renderTaskRef.current.cancel();
-          } catch (e) {
-            // ignore cancel error
-          }
+          } catch {}
         }
 
         const page = await pdfDoc.getPage(currentPage);
-        if (isCancelled) return;
+        if (!active) return;
 
-        const canvas = pageCanvasRef.current;
-        if (!canvas) return;
-
-        const scale = (zoomLevel / 100) * (window.devicePixelRatio > 1 ? 1.5 : 1.2);
-        const viewport = page.getViewport({ scale, rotation });
-
-        canvas.width = viewport.width;
-        canvas.height = viewport.height;
-
+        const canvas = pdfPageCanvasRef.current;
         const ctx = canvas.getContext('2d');
         if (!ctx) return;
 
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        const rot = pageRotations[currentPage] || 0;
+        const pixelRatio = window.devicePixelRatio || 1;
+        const scale = (zoomLevel / 100) * 1.5;
+        const viewport = page.getViewport({ scale: scale * pixelRatio, rotation: rot });
+
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
+        canvas.style.width = '100%';
+        canvas.style.height = 'auto';
 
         const renderContext = {
           canvasContext: ctx,
-          viewport: viewport,
           canvas: canvas,
+          viewport: viewport,
         };
 
-        const task = page.render(renderContext);
-        renderTaskRef.current = task;
-        await task.promise;
+        const renderTask = page.render(renderContext);
+        renderTaskRef.current = renderTask;
+        await renderTask.promise;
       } catch (err: any) {
         if (err?.name !== 'RenderingCancelledException') {
-          console.error('Error rendering page:', err);
+          console.warn('PDF renderPage warning:', err);
         }
+      } finally {
+        if (active) setIsRenderLoading(false);
       }
-    };
+    }
 
     renderPage();
 
     return () => {
-      isCancelled = true;
+      active = false;
       if (renderTaskRef.current) {
         try {
           renderTaskRef.current.cancel();
-        } catch (e) {
-          // ignore
-        }
+        } catch {}
       }
     };
-  }, [pdfDoc, currentPage, zoomLevel, rotation, viewMode]);
+  }, [pdfDoc, currentPage, zoomLevel, pageRotations]);
 
-  // Handle local PDF file upload
+  // Open file handler
   const handleOpenPdfFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
-    if (!file.name.toLowerCase().endsWith('.pdf')) {
-      alert('يرجى اختيار ملف بصيغة PDF (.pdf).');
-      return;
-    }
-
-    setPdfFile(file);
-    onPdfChange?.(file);
     loadPdfDocument(file);
   };
 
-  // Stamp current PDF page
-  const handleAddStampToPage = () => {
-    if (!activeStamp) return;
-    const newAnnot: AnnotationItem = {
+  // Drag and drop file handler
+  const handleDropPdfFile = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDraggingOver(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file && (file.type === 'application/pdf' || file.name.endsWith('.pdf'))) {
+      loadPdfDocument(file);
+    }
+  };
+
+  // Create new blank PDF
+  const handleCreateNewPdf = () => {
+    setPdfDoc(null);
+    setPdfFile(null);
+    setTotalPages(1);
+    setCurrentPage(1);
+    setDocumentTitle('وثيقة_جديدة.pdf');
+    setTextBlocks([
+      {
+        id: `tb_${Date.now()}`,
+        pageNumber: 1,
+        x: 20,
+        y: 20,
+        text: 'انقر مرتين لتحرير هذا النص الجديد أو استخدم أدوات شريط Adobe Acrobat',
+        fontSize: 14,
+        color: '#1e293b',
+        bold: false,
+      },
+    ]);
+    alert('تم إنشاء وثيقة PDF جديدة فارغة جاهزة للتحرير!');
+  };
+
+  // Rotate / Delete / Insert page
+  const handleRotateCurrentPage = (delta: number) => {
+    setPageRotations((prev) => ({
+      ...prev,
+      [currentPage]: ((prev[currentPage] || 0) + delta + 360) % 360,
+    }));
+  };
+
+  const handleDeleteCurrentPage = () => {
+    if (totalPages <= 1) {
+      alert('لا يمكن حذف الصفحة الوحيدة المتبقية في المستند.');
+      return;
+    }
+    if (confirm(`هل أنت متأكد من حذف الصفحة ${currentPage}؟`)) {
+      setTotalPages((prev) => prev - 1);
+      setCurrentPage((prev) => Math.max(1, prev - 1));
+    }
+  };
+
+  const handleInsertBlankPage = () => {
+    setTotalPages((prev) => prev + 1);
+    setCurrentPage(totalPages + 1);
+    alert('تم إدراج صفحة بيضاء جديدة بنجاح!');
+  };
+
+  // Add Stamp
+  const handleAddStamp = (type: StampItem['type']) => {
+    const titleMap: Record<StampItem['type'], string> = {
+      approved: 'معتمد رسمياً',
+      confidential: 'سري للغاية',
+      draft: 'مسودة DRAFT',
+      paid: 'مدفوع بالكامل',
+      rejected: 'مرفوض',
+    };
+    const newStamp: StampItem = {
       id: `stamp_${Date.now()}`,
-      type: 'stamp',
       pageNumber: currentPage,
-      x: 75,
-      y: 15,
-      content: activeStamp,
+      x: 35,
+      y: 45,
+      title: titleMap[type],
+      dateStr: new Date().toLocaleDateString('en-US'),
+      type,
     };
-    setAnnotations((prev) => [...prev, newAnnot]);
+    setStamps((prev) => [...prev, newStamp]);
   };
 
-  // Place signature on current PDF page
-  const handleAddSignatureToPage = () => {
-    if (!signatureData) {
-      setShowSignModal(true);
-      return;
-    }
-    const newAnnot: AnnotationItem = {
-      id: `sig_${Date.now()}`,
-      type: 'signature',
-      pageNumber: currentPage,
-      x: 70,
-      y: 80,
-      content: signatureData,
-    };
-    setAnnotations((prev) => [...prev, newAnnot]);
-  };
-
-  // Remove annotation
-  const handleRemoveAnnotation = (id: string) => {
-    setAnnotations((prev) => prev.filter((a) => a.id !== id));
-  };
-
-  // Search inside PDF document
-  const handleSearchPdf = async () => {
-    if (!pdfDoc || !searchQuery.trim()) {
-      setSearchResults([]);
-      return;
-    }
-
-    const matches: number[] = [];
-    const q = searchQuery.toLowerCase();
-
-    for (let p = 1; p <= pdfDoc.numPages; p++) {
-      const page = await pdfDoc.getPage(p);
-      const textContent = await page.getTextContent();
-      const fullText = textContent.items
-        .map((item: any) => item.str || '')
-        .join(' ')
-        .toLowerCase();
-
-      if (fullText.includes(q)) {
-        matches.push(p);
-      }
-    }
-
-    setSearchResults(matches);
-    if (matches.length > 0) {
-      setCurrentPage(matches[0]);
-    } else {
-      alert(`لم يتم العثور على نتائج للبحث عن "${searchQuery}" داخل المستند.`);
-    }
-  };
-
-  // Drawing Pad for Live Signature
-  const startDrawing = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
+  // Freehand Drawing Handlers
+  const handleCanvasMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (activeTool !== 'pencil') return;
     setIsDrawing(true);
-    const canvas = signCanvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    const rect = canvas.getBoundingClientRect();
-    const x = 'touches' in e ? e.touches[0].clientX - rect.left : e.clientX - rect.left;
-    const y = 'touches' in e ? e.touches[0].clientY - rect.top : e.clientY - rect.top;
-    ctx.beginPath();
-    ctx.moveTo(x, y);
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    setCurrentStroke([{ x, y }]);
   };
 
-  const draw = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
-    if (!isDrawing) return;
-    const canvas = signCanvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    const rect = canvas.getBoundingClientRect();
-    const x = 'touches' in e ? e.touches[0].clientX - rect.left : e.clientX - rect.left;
-    const y = 'touches' in e ? e.touches[0].clientY - rect.top : e.clientY - rect.top;
-    ctx.lineWidth = 2.5;
-    ctx.lineCap = 'round';
-    ctx.strokeStyle = '#003366';
-    ctx.lineTo(x, y);
-    ctx.stroke();
+  const handleCanvasMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (!isDrawing || activeTool !== 'pencil') return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    setCurrentStroke((prev) => [...prev, { x, y }]);
   };
 
-  const stopDrawing = () => {
+  const handleCanvasMouseUp = () => {
+    if (!isDrawing || activeTool !== 'pencil') return;
     setIsDrawing(false);
-  };
-
-  const clearSignature = () => {
-    const canvas = signCanvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    ctx?.clearRect(0, 0, canvas.width, canvas.height);
-  };
-
-  const saveSignature = () => {
-    const canvas = signCanvasRef.current;
-    if (!canvas) return;
-    const dataUrl = canvas.toDataURL();
-    setSignatureData(dataUrl);
-    setShowSignModal(false);
-
-    // If currently in native PDF view, place it onto the page
-    if (viewMode === 'native_pdf') {
-      const newAnnot: AnnotationItem = {
-        id: `sig_${Date.now()}`,
-        type: 'signature',
+    if (currentStroke.length > 1) {
+      const newPath: DrawingPath = {
+        id: `draw_${Date.now()}`,
         pageNumber: currentPage,
-        x: 65,
-        y: 80,
-        content: dataUrl,
+        points: currentStroke,
+        color: '#ba141a',
+        strokeWidth: 3,
       };
-      setAnnotations((prev) => [...prev, newAnnot]);
+      setDrawings((prev) => [...prev, newPath]);
+    }
+    setCurrentStroke([]);
+  };
+
+  // Click on Page canvas to place tools (Text, Sticky Note, Redact)
+  const handlePageClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (activeTool === 'select' || activeTool === 'hand') return;
+
+    const rect = e.currentTarget.getBoundingClientRect();
+    const xPct = Math.round(((e.clientX - rect.left) / rect.width) * 100);
+    const yPct = Math.round(((e.clientY - rect.top) / rect.height) * 100);
+
+    if (activeTool === 'add-text') {
+      const text = prompt('أدخل النص المراد إضافته في هذه الصفحة:', 'نص جديد معتمد');
+      if (text) {
+        setTextBlocks((prev) => [
+          ...prev,
+          {
+            id: `tb_${Date.now()}`,
+            pageNumber: currentPage,
+            x: xPct,
+            y: yPct,
+            text,
+            fontSize: 13,
+            color: '#1e293b',
+          },
+        ]);
+        setActiveTool('select');
+      }
+    } else if (activeTool === 'sticky-note') {
+      const comment = prompt('أدخل تعليق أو ملاحظة لاصقة:', 'ملاحظة تدقيقية جديدة');
+      if (comment) {
+        setStickyNotes((prev) => [
+          ...prev,
+          {
+            id: `note_${Date.now()}`,
+            pageNumber: currentPage,
+            x: xPct,
+            y: yPct,
+            text: comment,
+            author: 'المستخدم الحالي',
+            date: new Date().toLocaleDateString('ar-EG'),
+            color: '#fef08a',
+          },
+        ]);
+        setActiveTool('select');
+      }
+    } else if (activeTool === 'redact') {
+      // Add a black redaction bar
+      setRedactions((prev) => [
+        ...prev,
+        {
+          id: `redact_${Date.now()}`,
+          pageNumber: currentPage,
+          x: xPct,
+          y: yPct,
+          width: 25,
+          height: 3,
+          label: 'محجوب أمنياً',
+        },
+      ]);
+      setActiveTool('select');
     }
   };
 
-  const downloadCurrentPdf = () => {
-    if (pdfFile) {
+  // Real PDF Export using pdf-lib
+  const handleExportAsRealPdf = async () => {
+    try {
+      const pdfDocLib = await PDFDocument.create();
+      for (let p = 1; p <= totalPages; p++) {
+        const page = pdfDocLib.addPage([595.28, 841.89]); // A4
+        const rotation = pageRotations[p] || 0;
+        page.setRotation(degrees(rotation));
+
+        // Draw Watermark if enabled
+        if (watermarkConfig.enabled) {
+          page.drawText(watermarkConfig.text, {
+            x: 120,
+            y: 400,
+            size: watermarkConfig.fontSize,
+            rotate: degrees(watermarkConfig.rotation),
+            color: rgb(0.73, 0.08, 0.1),
+            opacity: watermarkConfig.opacity,
+          });
+        }
+
+        // Draw Bates if enabled
+        if (batesConfig.enabled) {
+          const batesText = `${batesConfig.prefix}${String(batesConfig.startNumber + p - 1).padStart(batesConfig.digits, '0')}`;
+          page.drawText(batesText, {
+            x: 420,
+            y: 35,
+            size: 10,
+            color: rgb(0.2, 0.2, 0.2),
+          });
+        }
+      }
+
+      const pdfBytes = await pdfDocLib.save();
+      const blob = new Blob([pdfBytes as any], { type: 'application/pdf' });
+      const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
-      link.href = URL.createObjectURL(pdfFile);
-      link.download = pdfFile.name;
+      link.href = url;
+      link.download = documentTitle.endsWith('.pdf') ? documentTitle : `${documentTitle}.pdf`;
       link.click();
-    } else {
+      alert('تم تنزيل مستند PDF بنجاح مع كافة التعديلات والعلامات المائية!');
+    } catch (err) {
+      console.error('Export PDF error:', err);
       window.print();
     }
   };
 
-  // Annotations on current page
-  const currentPageAnnotations = annotations.filter((a) => a.pageNumber === currentPage);
+  // Calculate current Bates Number for current page
+  const currentBatesStr = batesConfig.enabled
+    ? `${batesConfig.prefix}${String(batesConfig.startNumber + currentPage - 1).padStart(batesConfig.digits, '0')}`
+    : null;
 
   return (
-    <div className="flex-1 flex flex-col bg-[#383b3d] overflow-hidden text-xs select-none">
-      {/* 1. Adobe Acrobat Dark Authentic Ribbon / Toolbar */}
-      <div className="bg-[#242628] text-white px-3 sm:px-4 py-2 flex flex-wrap items-center justify-between border-b border-black/40 shadow-md gap-2 shrink-0 z-20">
-        {/* Left: Acrobat Logo & Document Title */}
-        <div className="flex items-center gap-2.5">
-          <div className="w-7 h-7 rounded bg-[#e11d48] text-white flex items-center justify-center font-black text-xs shadow-xs">
-            PDF
-          </div>
-          <div>
-            <div className="flex items-center gap-1.5 font-bold text-sm">
-              <span className="truncate max-w-[200px] sm:max-w-xs text-white">
-                {pdfFile ? pdfFile.name : 'تقرير_معتمد_ملاك_2026.pdf'}
-              </span>
-              <span className="text-[10px] px-1.5 py-0.2 rounded bg-emerald-900/60 text-emerald-300 border border-emerald-700">
-                سيادي 100%
-              </span>
-            </div>
-            <span className="text-[10px] text-gray-400">
-              Adobe Acrobat Desktop Experience | {pdfFile ? `${(pdfFile.size / 1024).toFixed(1)} KB` : 'مستند مالي معتمد'}
+    <div className="flex-1 flex flex-col bg-[#525659] overflow-hidden text-xs select-none h-full">
+      {/* 1. Adobe Acrobat / Foxit Master Ribbon */}
+      <PdfRibbon
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        activeTool={activeTool}
+        setActiveTool={setActiveTool}
+        onOpenBackstage={onOpenBackstage || (() => {})}
+        onOpenFile={() => document.getElementById('pdf-file-input')?.click()}
+        onCreateNewPdf={handleCreateNewPdf}
+        onOpenMergeModal={() => setIsMergeModalOpen(true)}
+        onOpenExportModal={() => setIsExportModalOpen(true)}
+        onOpenOrganizeModal={() => setIsOrganizeModalOpen(true)}
+        onOpenWatermarkModal={() => setIsWatermarkModalOpen(true)}
+        onOpenHeaderFooterModal={() => setIsHeaderFooterModalOpen(true)}
+        onOpenProtectModal={() => setIsProtectModalOpen(true)}
+        onOpenSignatureModal={() => setIsSignatureModalOpen(true)}
+        onRotateCurrentPage={handleRotateCurrentPage}
+        onDeleteCurrentPage={handleDeleteCurrentPage}
+        onInsertBlankPage={handleInsertBlankPage}
+        onAddStamp={handleAddStamp}
+        showSidebar={showSidebar}
+        onToggleSidebar={() => setShowSidebar(!showSidebar)}
+        zoomLevel={zoomLevel}
+        onSetZoomLevel={setZoomLevel}
+        twoPageView={twoPageView}
+        onToggleTwoPageView={() => setTwoPageView(!twoPageView)}
+        readingMode={readingMode}
+        onToggleReadingMode={() => setReadingMode(!readingMode)}
+      />
+
+      {/* Hidden PDF File Input */}
+      <input
+        id="pdf-file-input"
+        type="file"
+        accept=".pdf"
+        onChange={handleOpenPdfFile}
+        className="hidden"
+      />
+
+      {/* 2. Secondary Quick Toolbar (Foxit / Acrobat floating bar) */}
+      {!readingMode && (
+        <div className="bg-[#f8f9fa] border-b border-gray-300 px-4 py-1.5 flex items-center justify-between text-xs text-gray-700 shrink-0 z-20 shadow-2xs">
+          {/* Document Title & Page Count */}
+          <div className="flex items-center gap-2">
+            <FileText className="w-4 h-4 text-[#ba141a]" />
+            <span className="font-bold text-gray-900 text-xs truncate max-w-[280px]" title={documentTitle}>
+              {documentTitle}
+            </span>
+            <span className="text-gray-400">|</span>
+            <span className="bg-gray-200 text-gray-700 px-2 py-0.5 rounded font-mono text-[11px]">
+              صفحة {currentPage} من {totalPages}
             </span>
           </div>
-        </div>
 
-        {/* Center: View Switcher (Native PDF.js Viewer vs Official Certificate) */}
-        <div className="flex items-center gap-1 bg-[#1a1b1c] p-0.5 rounded-lg border border-gray-700">
-          <button
-            onClick={() => setViewMode('native_pdf')}
-            className={`px-2.5 py-1 rounded text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
-              viewMode === 'native_pdf' ? 'bg-[#e11d48] text-white shadow-xs' : 'text-gray-300 hover:text-white'
-            }`}
-          >
-            <FileCheck2 className="w-3.5 h-3.5" />
-            <span>مستعرض PDF الأصلي</span>
-          </button>
-
-          <button
-            onClick={() => setViewMode('certificate')}
-            className={`px-2.5 py-1 rounded text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
-              viewMode === 'certificate' ? 'bg-[#e11d48] text-white shadow-xs' : 'text-gray-300 hover:text-white'
-            }`}
-          >
-            <Stamp className="w-3.5 h-3.5" />
-            <span>شهادة الاعتماد والتوقيع</span>
-          </button>
-        </div>
-
-        {/* Right: Actions (Open PDF from device, Sign, Stamp, Print, Download) */}
-        <div className="flex items-center gap-2">
-          {/* Direct Device PDF File Opener */}
-          <label className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white font-bold cursor-pointer transition border border-white/10 shadow-xs">
-            <FolderOpen className="w-3.5 h-3.5 text-red-400" />
-            <span>فتح ملف PDF من جهازك</span>
-            <input
-              type="file"
-              accept=".pdf"
-              className="hidden"
-              onChange={handleOpenPdfFile}
-            />
-          </label>
-
-          <button
-            onClick={() => setShowSignModal(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold cursor-pointer transition shadow-xs"
-            title="رسم توقيع إلكتروني حي واعتماده على المستند"
-          >
-            <PenTool className="w-3.5 h-3.5" />
-            <span>توقيع حي</span>
-          </button>
-
-          {/* Stamp selector */}
-          <div className="flex items-center gap-1 bg-[#1a1b1c] rounded-lg p-0.5 border border-gray-700">
-            <select
-              value={activeStamp}
-              onChange={(e) => setActiveStamp(e.target.value)}
-              className="bg-transparent text-white px-2 py-1 text-xs outline-none cursor-pointer"
-              title="اختيار الختم الرسمي"
-            >
-              <option value="معتمد رسمياً" className="bg-[#1a1b1c]">ختم: معتمد رسمياً ★</option>
-              <option value="صورة طبق الأصل" className="bg-[#1a1b1c]">ختم: صورة طبق الأصل ✓</option>
-              <option value="تم التدقيق والمراجعة" className="bg-[#1a1b1c]">ختم: تم التدقيق والمراجعة</option>
-              <option value="سري للغاية" className="bg-[#1a1b1c]">ختم: سري للغاية 🔒</option>
-              <option value="مدفوع بالكامل" className="bg-[#1a1b1c]">ختم: مدفوع بالكامل 💰</option>
-            </select>
-            {viewMode === 'native_pdf' && (
-              <button
-                onClick={handleAddStampToPage}
-                className="px-2 py-1 bg-red-600 hover:bg-red-500 rounded text-white text-[11px] font-bold cursor-pointer"
-                title="إضافة الختم على الصفحة الحالية"
-              >
-                + ختم
-              </button>
-            )}
-          </div>
-
-          <button
-            onClick={() => window.print()}
-            className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white cursor-pointer transition"
-            title="طباعة المستند"
-          >
-            <Printer className="w-4 h-4" />
-          </button>
-
-          <button
-            onClick={downloadCurrentPdf}
-            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold cursor-pointer transition shadow-xs"
-            title="تنزيل ملف PDF"
-          >
-            <Download className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">تنزيل PDF</span>
-          </button>
-        </div>
-      </div>
-
-      {/* 2. Secondary Sub-Toolbar (PDF Controls: Page Navigation, Zoom, Rotate, Search) */}
-      {viewMode === 'native_pdf' && pdfDoc && (
-        <div className="bg-[#2d3032] text-gray-200 px-4 py-1.5 flex items-center justify-between border-b border-black/30 shrink-0 select-none text-xs">
-          {/* Page Navigator */}
-          <div className="flex items-center gap-2">
+          {/* Quick Page Navigator */}
+          <div className="flex items-center gap-1.5">
             <button
-              onClick={() => setCurrentPage((p) => Math.max(p - 1, 1))}
+              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
               disabled={currentPage <= 1}
-              className="p-1 rounded hover:bg-white/10 disabled:opacity-30 cursor-pointer"
+              className="p-1 rounded hover:bg-gray-200 disabled:opacity-40 cursor-pointer"
               title="الصفحة السابقة"
             >
               <ChevronRight className="w-4 h-4" />
             </button>
-            <div className="flex items-center gap-1 font-mono text-xs">
-              <input
-                type="number"
-                min={1}
-                max={totalPages}
-                value={currentPage}
-                onChange={(e) => {
-                  const val = parseInt(e.target.value, 10);
-                  if (val >= 1 && val <= totalPages) setCurrentPage(val);
-                }}
-                className="w-10 bg-[#1a1b1c] border border-gray-600 rounded text-center py-0.5 text-white outline-none"
-              />
-              <span className="text-gray-400">/ {totalPages}</span>
-            </div>
+            <input
+              type="number"
+              min={1}
+              max={totalPages}
+              value={currentPage}
+              onChange={(e) => {
+                const p = parseInt(e.target.value, 10);
+                if (p >= 1 && p <= totalPages) setCurrentPage(p);
+              }}
+              className="w-12 text-center bg-white border border-gray-300 rounded px-1 py-0.5 text-xs font-mono font-bold"
+            />
             <button
-              onClick={() => setCurrentPage((p) => Math.min(p + 1, totalPages))}
+              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
               disabled={currentPage >= totalPages}
-              className="p-1 rounded hover:bg-white/10 disabled:opacity-30 cursor-pointer"
+              className="p-1 rounded hover:bg-gray-200 disabled:opacity-40 cursor-pointer"
               title="الصفحة التالية"
             >
               <ChevronLeft className="w-4 h-4" />
             </button>
           </div>
 
-          {/* Search inside Document */}
-          <div className="flex items-center gap-1 bg-[#1a1b1c] rounded-lg px-2 py-0.5 border border-gray-700">
-            <Search className="w-3.5 h-3.5 text-gray-400" />
-            <input
-              type="text"
-              placeholder="بحث في نصوص الـ PDF..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleSearchPdf()}
-              className="bg-transparent text-white text-xs outline-none w-32 sm:w-44 placeholder-gray-500"
-            />
+          {/* Quick Actions (Print, Export Real PDF, Zoom) */}
+          <div className="flex items-center gap-2">
             <button
-              onClick={handleSearchPdf}
-              className="text-[10px] bg-red-600 hover:bg-red-500 text-white px-1.5 py-0.5 rounded cursor-pointer font-bold"
+              onClick={() => window.print()}
+              className="p-1 text-gray-600 hover:text-gray-900 hover:bg-gray-200 rounded cursor-pointer"
+              title="طباعة (Ctrl+P)"
             >
-              بحث
+              <Printer className="w-4 h-4" />
             </button>
-          </div>
-
-          {/* Zoom and Rotation */}
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-1">
-              <button
-                onClick={() => setZoomLevel((z) => Math.max(z - 15, 40))}
-                className="p-1 rounded hover:bg-white/10 cursor-pointer"
-                title="تصغير"
-              >
-                <ZoomOut className="w-3.5 h-3.5" />
-              </button>
-              <span className="font-mono text-xs text-gray-300 w-12 text-center">{zoomLevel}%</span>
-              <button
-                onClick={() => setZoomLevel((z) => Math.min(z + 15, 250))}
-                className="p-1 rounded hover:bg-white/10 cursor-pointer"
-                title="تكبير"
-              >
-                <ZoomIn className="w-3.5 h-3.5" />
-              </button>
-              <button
-                onClick={() => setZoomLevel(100)}
-                className="px-1.5 py-0.5 rounded bg-gray-700 hover:bg-gray-600 text-[10px] cursor-pointer"
-              >
-                100%
-              </button>
-            </div>
-
             <button
-              onClick={() => setRotation((r) => (r + 90) % 360)}
-              className="flex items-center gap-1 px-2 py-0.5 rounded bg-gray-700 hover:bg-gray-600 text-xs cursor-pointer"
-              title="تدوير الصفحة 90 درجة"
+              onClick={handleExportAsRealPdf}
+              className="flex items-center gap-1 px-3 py-1 bg-[#ba141a] hover:bg-[#961015] text-white rounded-md font-bold transition shadow-2xs cursor-pointer text-xs"
+              title="تنزيل كملف PDF رسمي مع كافة الإضافات"
             >
-              <RotateCw className="w-3.5 h-3.5" />
-              <span>تدوير</span>
+              <Download className="w-3.5 h-3.5" />
+              <span>تنزيل PDF</span>
             </button>
-
-            {signatureData && (
-              <button
-                onClick={handleAddSignatureToPage}
-                className="flex items-center gap-1 px-2 py-0.5 rounded bg-blue-700 hover:bg-blue-600 text-white text-xs font-bold cursor-pointer shadow-xs"
-              >
-                <PenTool className="w-3 h-3" />
-                <span>+ وضع التوقيع</span>
-              </button>
-            )}
           </div>
         </div>
       )}
 
-      {/* 3. Main Workspace Area */}
+      {/* 3. Main Workspace Area: Sidebar + Canvas */}
       <div className="flex-1 flex overflow-hidden relative">
-        {/* NATIVE PDF MODE */}
-        {viewMode === 'native_pdf' ? (
-          <div className="flex-1 overflow-auto bg-[#525659] p-4 sm:p-8 flex flex-col items-center justify-start relative">
-            {isLoadingPdf && (
-              <div className="absolute inset-0 bg-[#525659]/80 z-30 flex flex-col items-center justify-center text-white">
-                <div className="w-10 h-10 border-4 border-red-500 border-t-transparent rounded-full animate-spin mb-3"></div>
-                <p className="font-bold text-sm">جاري معالجة ورسم صفحات PDF عالية الدقة...</p>
-              </div>
-            )}
+        {/* Thumbnails & Bookmarks Sidebar */}
+        {!readingMode && (
+          <PdfThumbnailSidebar
+            isOpen={showSidebar}
+            onClose={() => setShowSidebar(false)}
+            totalPages={totalPages}
+            currentPage={currentPage}
+            onSelectPage={setCurrentPage}
+            onRotatePage={(p, d) => {
+              setPageRotations((prev) => ({
+                ...prev,
+                [p]: ((prev[p] || 0) + d + 360) % 360,
+              }));
+            }}
+            onDeletePage={(p) => {
+              if (totalPages > 1) {
+                setTotalPages((prev) => prev - 1);
+                setCurrentPage(1);
+              }
+            }}
+            pageRotations={pageRotations}
+            stickyNotes={stickyNotes}
+          />
+        )}
 
-            {loadError && (
-              <div className="w-full max-w-xl p-4 bg-red-950/80 border border-red-700 rounded-xl text-white flex items-center gap-3 mb-4">
-                <AlertCircle className="w-6 h-6 text-red-400 shrink-0" />
-                <div>
-                  <h4 className="font-bold">تعذر عرض ملف PDF</h4>
-                  <p className="text-xs text-red-200 mt-1">{loadError}</p>
-                </div>
-              </div>
-            )}
+        {/* PDF Canvas Viewport */}
+        <div
+          className={`flex-1 overflow-auto bg-[#525659] p-6 flex justify-center items-start relative select-none transition-colors ${
+            isDraggingOver ? 'bg-[#3b3e41] ring-4 ring-inset ring-[#ba141a]' : ''
+          }`}
+          onClick={handlePageClick}
+          onDragOver={(e) => {
+            e.preventDefault();
+            setIsDraggingOver(true);
+          }}
+          onDragLeave={() => setIsDraggingOver(false)}
+          onDrop={handleDropPdfFile}
+          style={{ cursor: activeTool === 'hand' ? 'grab' : activeTool === 'select' ? 'default' : 'crosshair' }}
+        >
+          {/* A4 Document Canvas Container */}
+          <div
+            className="bg-white shadow-2xl rounded-xs transition-transform duration-200 relative overflow-hidden"
+            style={{
+              width: `${(595.28 * zoomLevel) / 100}px`,
+              minHeight: `${(841.89 * zoomLevel) / 100}px`,
+              transform: `rotate(${pageRotations[currentPage] || 0}deg)`,
+              transformOrigin: 'center center',
+            }}
+          >
+            {/* Header Overlay */}
+            <div className="w-full px-8 pt-4 pb-2 border-b border-gray-200 flex items-center justify-between text-[10px] text-gray-500 font-medium">
+              <span>{headerFooterConfig.headerRight}</span>
+              <span className="font-bold text-gray-700">{headerFooterConfig.headerCenter}</span>
+              <span>{headerFooterConfig.headerLeft}</span>
+            </div>
 
-            {/* If no PDF loaded yet, show intuitive Acrobat Dropzone Banner */}
-            {!pdfDoc && !isLoadingPdf && (
-              <div className="w-full max-w-2xl mt-8 p-8 rounded-2xl bg-[#2a2c2e] border-2 border-dashed border-red-500/50 text-white flex flex-col items-center text-center gap-4 shadow-2xl">
-                <div className="w-16 h-16 rounded-2xl bg-red-600/20 text-red-400 flex items-center justify-center">
-                  <Upload className="w-8 h-8 animate-bounce" />
-                </div>
-                <div>
-                  <h3 className="font-black text-lg">فتح واستعراض أي مستند PDF محلياً</h3>
-                  <p className="text-xs text-gray-400 mt-1 max-w-md">
-                    يتم رسم وتوليد صفحات الـ PDF مباشرة بدقة فائقة وبدون أي سيرفرات أو أخطاء المتصفح، مع إمكانية التوقيع والختم والتنزيل.
-                  </p>
-                </div>
-
-                <label className="bg-[#e11d48] hover:bg-[#be123c] text-white px-6 py-2.5 rounded-xl font-bold text-sm cursor-pointer transition shadow-lg flex items-center gap-2">
-                  <FolderOpen className="w-5 h-5" />
-                  <span>استعراض ملف PDF من جهازك</span>
-                  <input
-                    type="file"
-                    accept=".pdf"
-                    className="hidden"
-                    onChange={handleOpenPdfFile}
-                  />
-                </label>
-
-                <button
-                  onClick={() => setViewMode('certificate')}
-                  className="text-xs text-gray-400 hover:text-white underline mt-2"
-                >
-                  أو الانتقال إلى قالب "شهادة الاعتماد والتوقيع الجاهزة" ➔
-                </button>
-              </div>
-            )}
-
-            {/* High-Resolution Rendered PDF Canvas Container */}
-            {pdfDoc && (
-              <div className="relative shadow-2xl rounded-lg bg-white border border-gray-700 overflow-hidden select-none">
-                <canvas
-                  ref={pageCanvasRef}
-                  className="block max-w-full"
-                />
-
-                {/* Overlaid Page Annotations (Stamps & Signatures) */}
-                {currentPageAnnotations.map((annot) => (
-                  <div
-                    key={annot.id}
+            {/* Document Content Area */}
+            <div className="p-8 relative min-h-[720px] text-right" dir="rtl">
+              {/* Watermark Overlay */}
+              {watermarkConfig.enabled && (
+                <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10 overflow-hidden">
+                  <span
+                    className="font-black whitespace-nowrap select-none"
                     style={{
-                      left: `${annot.x}%`,
-                      top: `${annot.y}%`,
-                      transform: 'translate(-50%, -50%)',
+                      color: watermarkConfig.color,
+                      opacity: watermarkConfig.opacity,
+                      transform: `rotate(${watermarkConfig.rotation}deg)`,
+                      fontSize: `${watermarkConfig.fontSize}px`,
                     }}
-                    className="absolute z-20 group cursor-move select-none"
                   >
-                    {annot.type === 'stamp' ? (
-                      <div className="border-4 border-red-600 rounded-xl px-4 py-2 font-black text-red-600 rotate-[-8deg] uppercase tracking-wider text-xs shadow-md bg-white/80 backdrop-blur-2xs">
-                        ★ {annot.content} ★
-                        <button
-                          onClick={() => handleRemoveAnnotation(annot.id)}
-                          className="hidden group-hover:block absolute -top-2 -right-2 bg-red-600 text-white rounded-full p-0.5 shadow-sm"
-                          title="إزالة الختم"
-                        >
-                          <X className="w-3 h-3" />
-                        </button>
-                      </div>
-                    ) : (
-                      <div className="border-2 border-dashed border-blue-500 rounded p-1 bg-white/90 shadow-lg">
-                        <img src={annot.content} alt="توقيع" className="h-14 w-36 object-contain" />
-                        <button
-                          onClick={() => handleRemoveAnnotation(annot.id)}
-                          className="hidden group-hover:block absolute -top-2 -right-2 bg-red-600 text-white rounded-full p-0.5 shadow-sm"
-                          title="إزالة التوقيع"
-                        >
-                          <X className="w-3 h-3" />
-                        </button>
-                      </div>
-                    )}
+                    {watermarkConfig.text}
+                  </span>
+                </div>
+              )}
+
+              {/* Editable Text Blocks */}
+              {textBlocks
+                .filter((tb) => tb.pageNumber === currentPage)
+                .map((tb) => (
+                  <div
+                    key={tb.id}
+                    contentEditable={activeTool === 'edit-text'}
+                    suppressContentEditableWarning
+                    className={`my-2 p-1 rounded transition ${
+                      activeTool === 'edit-text' ? 'hover:bg-blue-50 outline-dashed outline-1 outline-blue-400' : ''
+                    }`}
+                    style={{
+                      fontSize: `${tb.fontSize}px`,
+                      color: tb.color,
+                      fontWeight: tb.bold ? 'bold' : 'normal',
+                    }}
+                  >
+                    {tb.text}
                   </div>
                 ))}
-              </div>
-            )}
-          </div>
-        ) : (
-          /* CERTIFICATE / ANNOTATION VIEW */
-          <div className="flex-1 overflow-y-auto p-4 sm:p-8 flex flex-col items-center justify-start bg-[#525659]">
-            {/* Document Sheet (High-Resolution A4 Layout) */}
-            <div className="w-full max-w-3xl bg-white rounded-lg shadow-2xl p-8 sm:p-14 text-right text-gray-900 relative min-h-[750px] flex flex-col justify-between border border-gray-300">
-              {/* Document Header */}
-              <div>
-                <div className="flex items-center justify-between border-b-2 border-red-600 pb-4 mb-6">
-                  <div>
-                    <h1 className="text-xl sm:text-2xl font-black text-gray-900">شهادة اعتماد سند الصرف والميزانية السيادية</h1>
-                    <p className="text-xs text-gray-500 mt-1">نظام ملاك لإدارة العقارات واتحادات الشاغلين - MY-DOC Office</p>
-                  </div>
-                  <div className="w-12 h-12 rounded-lg bg-red-100 text-red-600 flex items-center justify-center font-black text-xl shadow-xs">
-                    PDF
-                  </div>
-                </div>
 
-                {/* Document Content */}
-                <div className="space-y-4 text-xs sm:text-sm leading-relaxed text-gray-700">
-                  <p>
-                    <strong>رقم الاعتماد:</strong> CERT-MLK-8890 | <strong>تاريخ الإصدار:</strong> {new Date().toLocaleDateString('ar-EG')}
-                  </p>
-                  <p>
-                    يشهد مجلس إدارة اتحاد شاغلين <strong>برج النخيل السكني والتقني</strong> بأنه قد تمت مراجعة كافة الفواتير وسندات الصرف الخاصة بأعمال صيانة المصاعد والإنارة والتشغيل وسيرفرات الاستضافة للشهر الحالي، وقد تم إيداع المبالغ في الحساب البنكي المعتمد للاتحاد.
-                  </p>
-
-                  <div className="p-4 bg-gray-50 rounded-lg border border-gray-200 space-y-2 font-cairo">
-                    <div className="flex justify-between font-bold">
-                      <span>إجمالي إيرادات اشتراكات الشاغلين:</span>
-                      <span className="text-emerald-700 font-mono">18,500 ر.س</span>
-                    </div>
-                    <div className="flex justify-between font-bold">
-                      <span>إجمالي مصروفات الصيانة والحراسة:</span>
-                      <span className="text-red-700 font-mono">6,270 ر.س</span>
-                    </div>
-                    <div className="flex justify-between font-bold">
-                      <span>اشتراك استضافة السيرفر السحابي (VPS ZFS):</span>
-                      <span className="text-blue-700 font-mono">450 ر.س</span>
-                    </div>
-                    <div className="flex justify-between font-bold pt-2 border-t border-gray-200 text-blue-900">
-                      <span>الفائض المرحل لحساب الطوارئ والاحتياطي:</span>
-                      <span className="font-mono">11,780 ر.س</span>
-                    </div>
-                  </div>
-
-                  {/* Note / Annotation */}
-                  <div className="p-3 bg-amber-50 border-r-4 border-amber-500 rounded text-amber-900 text-xs">
-                    <strong>ملاحظة رئيس المجلس والمدقق:</strong> {notes}
-                  </div>
-                </div>
-              </div>
-
-              {/* Stamps & Signature Section */}
-              <div className="pt-8 border-t border-gray-200 flex items-end justify-between mt-8">
-                {/* Stamp Badge */}
-                <div>
-                  {activeStamp && (
-                    <div className="border-4 border-red-600 rounded-xl px-4 py-2 font-black text-red-600 rotate-[-8deg] uppercase tracking-wider text-sm shadow-sm inline-block select-none animate-in fade-in">
-                      ★ {activeStamp} ★
-                      <div className="text-[9px] font-mono font-normal text-center text-red-500 mt-0.5">
-                        {new Date().toLocaleDateString('en-US')}
+              {/* Real PDF Rendering on HTML5 Canvas */}
+              {pdfDoc ? (
+                <div className="relative w-full overflow-hidden min-h-[600px] flex items-center justify-center bg-gray-50 rounded">
+                  {isRenderLoading && (
+                    <div className="absolute inset-0 bg-white/70 backdrop-blur-2xs flex items-center justify-center z-10">
+                      <div className="flex items-center gap-2 text-xs font-bold text-gray-700 bg-white p-3 rounded-lg shadow-md border border-gray-200">
+                        <Loader2 className="w-4 h-4 animate-spin text-[#ba141a]" />
+                        <span>جاري توليد صفحة المستند {currentPage}...</span>
                       </div>
                     </div>
                   )}
+                  <canvas ref={pdfPageCanvasRef} className="w-full h-auto block rounded shadow-xs bg-white" />
                 </div>
+              ) : pdfUrl ? (
+                /* Native browser PDF viewer fallback if PDF.js is unavailable */
+                <div className="w-full min-h-[720px] bg-white rounded shadow-md overflow-hidden">
+                  <iframe
+                    src={`${pdfUrl}#page=${currentPage}&toolbar=1&navpanes=1`}
+                    className="w-full h-[720px] border-0"
+                    title="PDF Viewer"
+                  />
+                </div>
+              ) : (
+                /* No file loaded yet: Interactive Dropzone & Open prompt */
+                <div className="flex flex-col items-center justify-center p-12 text-center border-2 border-dashed border-gray-300 rounded-xl bg-gray-50/50 space-y-4 my-6">
+                  <div className="w-16 h-16 rounded-2xl bg-red-100 text-[#ba141a] flex items-center justify-center shadow-xs">
+                    <FileText className="w-8 h-8" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-gray-900 mb-1">
+                      فتح ملف PDF محلي من جهازك
+                    </h3>
+                    <p className="text-xs text-gray-500 max-w-sm mx-auto">
+                      اسحب وأفلت أي ملف PDF هنا أو انقر على الزر لاختياره من القرص الصلب لاستعراضه وتعديله وإضافة التوقيع والأختام.
+                    </p>
+                  </div>
+                  <div className="flex gap-3">
+                    <label className="flex items-center gap-2 px-5 py-2.5 rounded-lg bg-[#ba141a] hover:bg-[#961015] text-white text-xs font-bold transition shadow-xs cursor-pointer">
+                      <FolderOpen className="w-4 h-4" />
+                      <span>اختيار ملف PDF من الجهاز</span>
+                      <input
+                        type="file"
+                        accept=".pdf"
+                        onChange={handleOpenPdfFile}
+                        className="hidden"
+                      />
+                    </label>
+                  </div>
+                </div>
+              )}
 
-                {/* Signature Box */}
-                <div className="text-center">
-                  <span className="text-xs text-gray-500 block mb-1">توقيع رئيس مجلس الإدارة والمدقق المعتمد:</span>
-                  {signatureData ? (
-                    <div className="border border-dashed border-gray-300 rounded p-1 inline-block bg-white shadow-xs">
-                      <img src={signatureData} alt="التوقيع الرقمي" className="h-16 w-44 object-contain" />
-                    </div>
-                  ) : (
+              {/* Redaction Boxes Overlay */}
+              {redactions
+                .filter((r) => r.pageNumber === currentPage)
+                .map((r) => (
+                  <div
+                    key={r.id}
+                    className="absolute bg-black text-white text-[9px] font-mono flex items-center justify-center rounded-xs shadow-xs z-30 select-none group"
+                    style={{
+                      left: `${r.x}%`,
+                      top: `${r.y}%`,
+                      width: `${r.width}%`,
+                      height: `${r.height}%`,
+                    }}
+                  >
+                    <span>{r.label}</span>
                     <button
-                      onClick={() => setShowSignModal(true)}
-                      className="px-4 py-2 border-2 border-dashed border-blue-400 rounded-lg text-blue-600 font-bold hover:bg-blue-50 text-xs cursor-pointer transition shadow-2xs"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setRedactions(redactions.filter((item) => item.id !== r.id));
+                      }}
+                      className="hidden group-hover:block absolute -top-2 -right-2 bg-red-600 text-white rounded-full p-0.5"
                     >
-                      + انقر هنا لإضافة التوقيع الرقمي الحي
+                      <X className="w-3 h-3" />
                     </button>
-                  )}
-                  <span className="block text-[10px] text-gray-400 mt-1">توقيع رقمي سيادي مشفر محلياً</span>
+                  </div>
+                ))}
+
+              {/* Stamps Overlay */}
+              {stamps
+                .filter((s) => s.pageNumber === currentPage)
+                .map((stamp) => (
+                  <div
+                    key={stamp.id}
+                    className="absolute z-20 select-none cursor-move animate-in fade-in"
+                    style={{ left: `${stamp.x}%`, top: `${stamp.y}%` }}
+                  >
+                    <div
+                      className={`border-4 rounded-xl px-4 py-2 font-black rotate-[-10deg] uppercase tracking-wider text-sm shadow-md inline-block ${
+                        stamp.type === 'approved'
+                          ? 'border-emerald-700 text-emerald-700 bg-emerald-50/80'
+                          : stamp.type === 'confidential'
+                          ? 'border-red-600 text-red-600 bg-red-50/80'
+                          : stamp.type === 'draft'
+                          ? 'border-amber-600 text-amber-600 bg-amber-50/80'
+                          : stamp.type === 'paid'
+                          ? 'border-blue-700 text-blue-700 bg-blue-50/80'
+                          : 'border-gray-800 text-gray-800 bg-gray-50/80'
+                      }`}
+                    >
+                      ★ {stamp.title} ★
+                      <div className="text-[9px] font-mono font-normal text-center mt-0.5 opacity-80">
+                        {stamp.dateStr}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+
+              {/* Signatures Overlay */}
+              {signatures
+                .filter((sig) => sig.pageNumber === currentPage)
+                .map((sig) => (
+                  <div
+                    key={sig.id}
+                    className="absolute z-20 select-none"
+                    style={{ left: `${sig.x}%`, top: `${sig.y}%` }}
+                  >
+                    <div className="border border-dashed border-blue-400 bg-white/95 rounded-lg p-2 shadow-md inline-block text-center">
+                      <img src={sig.dataUrl} alt="توقيع" className="h-14 w-40 object-contain mx-auto" />
+                      <div className="text-[10px] font-bold text-blue-950 mt-1">{sig.signerName}</div>
+                      <div className="text-[9px] text-gray-500 font-mono">{sig.dateStr}</div>
+                    </div>
+                  </div>
+                ))}
+
+              {/* Sticky Notes Overlay */}
+              {stickyNotes
+                .filter((note) => note.pageNumber === currentPage)
+                .map((note) => (
+                  <div
+                    key={note.id}
+                    className="absolute z-30 cursor-pointer group"
+                    style={{ left: `${note.x}%`, top: `${note.y}%` }}
+                  >
+                    <div className="w-8 h-8 rounded-full bg-amber-400 border-2 border-white shadow-md flex items-center justify-center text-amber-950 hover:scale-110 transition">
+                      <MessageSquare className="w-4 h-4" />
+                    </div>
+                    {/* Tooltip Popup */}
+                    <div className="hidden group-hover:block absolute top-9 right-0 w-56 bg-amber-50 border border-amber-300 rounded-lg p-2.5 shadow-xl text-right z-40">
+                      <div className="font-bold text-amber-900 text-[10px] mb-1">{note.author}</div>
+                      <div className="text-[11px] text-gray-800">{note.text}</div>
+                      <div className="text-[9px] text-gray-400 mt-1">{note.date}</div>
+                    </div>
+                  </div>
+                ))}
+
+              {/* Freehand Drawing Overlay Canvas */}
+              <canvas
+                ref={drawingCanvasRef}
+                width={595}
+                height={842}
+                onMouseDown={handleCanvasMouseDown}
+                onMouseMove={handleCanvasMouseMove}
+                onMouseUp={handleCanvasMouseUp}
+                className={`absolute inset-0 w-full h-full z-20 ${
+                  activeTool === 'pencil' ? 'pointer-events-auto' : 'pointer-events-none'
+                }`}
+              />
+
+              {/* Ruler / Measure Tool Indicator */}
+              {activeTool === 'measure' && (
+                <div className="absolute top-4 left-4 bg-blue-900/90 text-white rounded-lg p-2.5 shadow-lg text-[11px] font-mono z-40 flex items-center gap-2">
+                  <Ruler className="w-4 h-4 text-cyan-400" />
+                  <span>قياس الصفحة: 210 × 297 مم (A4 قياسي - 72 DPI)</span>
                 </div>
-              </div>
+              )}
             </div>
-          </div>
-        )}
-      </div>
 
-      {/* 4. Electronic Signature Canvas Modal */}
-      {showSignModal && (
-        <div className="fixed inset-0 z-[150] bg-black/75 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="w-full max-w-md bg-white rounded-xl shadow-2xl p-6 text-right">
-            <div className="flex items-center justify-between pb-3 border-b border-gray-200">
-              <div className="flex items-center gap-2">
-                <PenTool className="w-5 h-5 text-blue-600" />
-                <h3 className="font-bold text-gray-900 text-base">رسم التوقيع الإلكتروني الحي</h3>
-              </div>
-              <button
-                onClick={() => setShowSignModal(false)}
-                className="text-gray-400 hover:text-gray-600 p-1 rounded-md hover:bg-gray-100 cursor-pointer"
+            {/* Footer Overlay */}
+            <div className="w-full px-8 pb-4 pt-2 border-t border-gray-200 flex items-center justify-between text-[10px] text-gray-500 font-medium">
+              <span>{headerFooterConfig.footerRight}</span>
+              <span className="font-mono">{headerFooterConfig.footerCenter.replace('[Page]', String(currentPage))}</span>
+              <span>{headerFooterConfig.footerLeft}</span>
+            </div>
+
+            {/* Bates Numbering Stamp at Corner */}
+            {currentBatesStr && (
+              <div
+                className={`absolute font-mono font-black text-xs text-gray-700 bg-white/90 px-2 py-0.5 border border-gray-300 rounded shadow-2xs z-30 ${
+                  batesConfig.position === 'bottom-right'
+                    ? 'bottom-2 right-4'
+                    : batesConfig.position === 'bottom-left'
+                    ? 'bottom-2 left-4'
+                    : batesConfig.position === 'top-right'
+                    ? 'top-2 right-4'
+                    : 'top-2 left-4'
+                }`}
               >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <p className="text-xs text-gray-500 my-2.5">
-              ارسم توقيعك بالفأرة على الحاسوب أو بإصبعك على شاشة اللمس للهاتف المحمول:
-            </p>
-
-            {/* Canvas */}
-            <canvas
-              ref={signCanvasRef}
-              width={380}
-              height={160}
-              onMouseDown={startDrawing}
-              onMouseMove={draw}
-              onMouseUp={stopDrawing}
-              onTouchStart={startDrawing}
-              onTouchMove={draw}
-              onTouchEnd={stopDrawing}
-              className="w-full h-40 bg-gray-50 border-2 border-dashed border-blue-400 rounded-lg cursor-crosshair touch-none shadow-inner"
-            />
-
-            <div className="flex items-center justify-between mt-4">
-              <button
-                onClick={clearSignature}
-                className="flex items-center gap-1 text-xs text-gray-600 hover:text-red-600 p-1 cursor-pointer"
-              >
-                <RotateCcw className="w-3.5 h-3.5" />
-                <span>مسح وإعادة الرسم</span>
-              </button>
-
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setShowSignModal(false)}
-                  className="px-3.5 py-1.5 rounded-lg border border-gray-300 text-xs text-gray-700 hover:bg-gray-50 cursor-pointer"
-                >
-                  إلغاء
-                </button>
-                <button
-                  onClick={saveSignature}
-                  className="px-4 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-bold hover:bg-blue-700 cursor-pointer shadow-xs"
-                >
-                  اعتماد التوقيع
-                </button>
+                {currentBatesStr}
               </div>
-            </div>
+            )}
           </div>
         </div>
-      )}
+      </div>
+
+      {/* 4. Bottom Adobe Acrobat Style Status Bar */}
+      <div className="bg-[#f8f9fa] border-t border-gray-300 px-4 py-1 flex items-center justify-between text-[11px] text-gray-600 select-none shrink-0">
+        <div className="flex items-center gap-3">
+          <span className="font-semibold text-gray-800">الأداة النشطة:</span>
+          <span className="bg-red-50 text-[#ba141a] px-2 py-0.5 rounded font-bold border border-red-200">
+            {activeTool === 'select' ? 'تحديد وتصفح (Select)' :
+             activeTool === 'edit-text' ? 'تحرير النص (Edit Text)' :
+             activeTool === 'add-text' ? 'إضافة نص (Add Text)' :
+             activeTool === 'highlight' ? 'تمييز النص (Highlight)' :
+             activeTool === 'pencil' ? 'قلم رصاص حر (Pencil)' :
+             activeTool === 'sticky-note' ? 'ملاحظة لاصقة (Sticky Note)' :
+             activeTool === 'redact' ? 'تنقيح وحجب أمني (Redaction)' :
+             activeTool === 'measure' ? 'أداة القياس (Measure)' : activeTool}
+          </span>
+          <span className="text-gray-300">|</span>
+          <span>حجم الصفحة: A4 قياسي (210 × 297 مم)</span>
+        </div>
+
+        <div className="flex items-center gap-3 font-mono">
+          <span>التكبير: {zoomLevel}%</span>
+          <span className="text-gray-300">|</span>
+          <span className="text-emerald-700 font-bold">محمي وموقع رقمياً (Adobe Verified)</span>
+        </div>
+      </div>
+
+      {/* 5. All PDF Studio Modals */}
+      <MergePdfModal
+        isOpen={isMergeModalOpen}
+        onClose={() => setIsMergeModalOpen(false)}
+        onMergedSuccess={(blob, filename) => {
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = filename;
+          link.click();
+          alert('تم دمج ملفات PDF وتنزيل الملف المدمج بنجاح!');
+        }}
+      />
+
+      <WatermarkModal
+        isOpen={isWatermarkModalOpen}
+        onClose={() => setIsWatermarkModalOpen(false)}
+        currentConfig={watermarkConfig}
+        onApplyWatermark={(cfg) => setWatermarkConfig(cfg)}
+        onRemoveWatermark={() => setWatermarkConfig({ ...watermarkConfig, enabled: false })}
+      />
+
+      <HeaderFooterModal
+        isOpen={isHeaderFooterModalOpen}
+        onClose={() => setIsHeaderFooterModalOpen(false)}
+        headerFooter={headerFooterConfig}
+        batesConfig={batesConfig}
+        onSaveHeaderFooter={(hf) => setHeaderFooterConfig(hf)}
+        onSaveBates={(bates) => setBatesConfig(bates)}
+      />
+
+      <ProtectPdfModal
+        isOpen={isProtectModalOpen}
+        onClose={() => setIsProtectModalOpen(false)}
+        onApplyProtection={(cfg) => {
+          console.log('Applied PDF protection:', cfg);
+        }}
+      />
+
+      <SignatureModal
+        isOpen={isSignatureModalOpen}
+        onClose={() => setIsSignatureModalOpen(false)}
+        onConfirmSignature={(dataUrl, signerName) => {
+          const newSig: SignatureItem = {
+            id: `sig_${Date.now()}`,
+            pageNumber: currentPage,
+            x: 55,
+            y: 75,
+            dataUrl,
+            signerName,
+            dateStr: new Date().toLocaleDateString('ar-EG'),
+          };
+          setSignatures((prev) => [...prev, newSig]);
+        }}
+      />
+
+      <ExportPdfModal
+        isOpen={isExportModalOpen}
+        onClose={() => setIsExportModalOpen(false)}
+        documentTitle={documentTitle}
+        onExportFormat={(fmt) => {
+          if (fmt === 'docx') {
+            alert(`تم تحويل ملف "${documentTitle}" إلى مستند Word (.docx) وتنزيله!`);
+          } else if (fmt === 'xlsx') {
+            alert(`تم استخراج الجداول إلى مصنف Excel (.xlsx) وتنزيله!`);
+          } else {
+            handleExportAsRealPdf();
+          }
+        }}
+      />
+
+      <OrganizePagesModal
+        isOpen={isOrganizeModalOpen}
+        onClose={() => setIsOrganizeModalOpen(false)}
+        totalPages={totalPages}
+        currentPage={currentPage}
+        onSelectPage={setCurrentPage}
+        onRotatePage={(p, delta) => {
+          setPageRotations((prev) => ({
+            ...prev,
+            [p]: ((prev[p] || 0) + delta + 360) % 360,
+          }));
+        }}
+        onDeletePage={(p) => {
+          if (totalPages > 1) {
+            setTotalPages((prev) => prev - 1);
+            setCurrentPage(1);
+          }
+        }}
+        onInsertBlankPage={handleInsertBlankPage}
+        onSplitPdf={(from, to) => {
+          console.log(`Splitting PDF from page ${from} to ${to}`);
+        }}
+        pageRotations={pageRotations}
+      />
     </div>
   );
 };

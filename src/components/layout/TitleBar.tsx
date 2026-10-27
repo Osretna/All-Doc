@@ -33,6 +33,9 @@ interface Props {
   documentTitle: string;
   setDocumentTitle: (title: string) => void;
   onOpenBackstage: () => void;
+  onUploadFile?: (file: File) => void;
+  onSaveToDevice?: () => void;
+  onPrintIsolated?: () => void;
 }
 
 export const TitleBar: React.FC<Props> = ({
@@ -43,6 +46,9 @@ export const TitleBar: React.FC<Props> = ({
   documentTitle,
   setDocumentTitle,
   onOpenBackstage,
+  onUploadFile,
+  onSaveToDevice,
+  onPrintIsolated,
 }) => {
   const [appMenuOpen, setAppMenuOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -257,14 +263,71 @@ export const TitleBar: React.FC<Props> = ({
             )}
           </div>
 
-          {/* Right: Quick Print / Sovereign Indicator */}
-          <div className="flex items-center gap-2 text-white/90">
+          {/* Right: Quick Upload, Save As to Device, and Isolated Print Controls */}
+          <div className="flex items-center gap-2 text-white/95">
+            {/* Upload File Button */}
+            {onUploadFile && (
+              <label 
+                className="bg-white/20 hover:bg-white/30 text-white font-bold px-2.5 py-1 rounded text-xs flex items-center gap-1.5 cursor-pointer transition shadow-2xs"
+                title={`رفع واستيراد ملف ${currentConfig.name} مع الحفاظ على كافة الخصائص`}
+              >
+                <FolderOpen className="w-3.5 h-3.5 text-white" />
+                <span>رفع ملف</span>
+                <span className="text-[10px] bg-white/20 px-1.5 py-0.2 rounded font-mono">
+                  {activeApp === 'docs' ? '.docx' : activeApp === 'sheets' ? '.xlsx' : activeApp === 'slides' ? '.pptx' : activeApp === 'base' ? '.accdb' : activeApp === 'pdf' ? '.pdf' : 'ملف'}
+                </span>
+                <input
+                  type="file"
+                  className="hidden"
+                  accept={
+                    activeApp === 'docs'
+                      ? '.docx,.doc,.txt,.html'
+                      : activeApp === 'sheets'
+                      ? '.xlsx,.xls,.csv'
+                      : activeApp === 'slides'
+                      ? '.pptx,.ppt'
+                      : activeApp === 'base'
+                      ? '.accdb,.mdb,.sql,.csv,.json'
+                      : activeApp === 'pdf'
+                      ? '.pdf'
+                      : '*/*'
+                  }
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f && onUploadFile) onUploadFile(f);
+                    e.target.value = '';
+                  }}
+                />
+              </label>
+            )}
+
+            {/* Save As Directly to Local Device */}
+            {onSaveToDevice && (
+              <button
+                onClick={onSaveToDevice}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-3 py-1 rounded text-xs flex items-center gap-1.5 cursor-pointer transition shadow-xs hover:shadow"
+                title={`حفظ على جهازك في أي مسار تريده بالامتداد الأصلي (.${activeApp === 'docs' ? 'docx' : activeApp === 'sheets' ? 'xlsx' : activeApp === 'slides' ? 'pptx' : activeApp === 'base' ? 'accdb' : activeApp === 'pdf' ? 'pdf' : 'dat'})`}
+              >
+                <span>💾 حفظ على الجهاز</span>
+                <span className="text-[10px] bg-black/20 px-1 py-0.2 rounded font-mono">
+                  .{activeApp === 'docs' ? 'docx' : activeApp === 'sheets' ? 'xlsx' : activeApp === 'slides' ? 'pptx' : activeApp === 'base' ? 'accdb' : activeApp === 'pdf' ? 'pdf' : 'dat'}
+                </span>
+              </button>
+            )}
+
+            {/* Print Content Only Button */}
             <button
-              onClick={() => window.print()}
-              className="hover:bg-white/20 p-1 rounded transition text-xs font-medium flex items-center gap-1"
-              title="طباعة سريعة"
+              onClick={() => {
+                if (onPrintIsolated) {
+                  onPrintIsolated();
+                } else {
+                  window.print();
+                }
+              }}
+              className="hover:bg-white/20 bg-white/10 px-2.5 py-1 rounded transition text-xs font-bold flex items-center gap-1 cursor-pointer"
+              title="طباعة محتوى الملف فقط مع عزل كامل لواجهة التطبيق والقوائم"
             >
-              <span>طباعة</span>
+              <span>🖨️ طباعة المحتوى فقط</span>
             </button>
           </div>
         </div>

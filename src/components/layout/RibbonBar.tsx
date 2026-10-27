@@ -135,11 +135,14 @@ export const RibbonBar: React.FC<Props> = ({
       case 'docs':
       default:
         return [
-          { id: 'home', label: 'الشريط الرئيسي' },
-          { id: 'insert', label: 'إدراج' },
-          { id: 'layout', label: 'تخطيط الصفحة' },
-          { id: 'review', label: 'مراجعة' },
-          { id: 'view', label: 'عرض' },
+          { id: 'home', label: 'الرئيسية (Home)' },
+          { id: 'insert', label: 'إدراج (Insert)' },
+          { id: 'design', label: 'تصميم (Design)' },
+          { id: 'layout', label: 'تخطيط (Layout)' },
+          { id: 'references', label: 'مراجع (References)' },
+          { id: 'mailings', label: 'مراسلات (Mailings)' },
+          { id: 'review', label: 'مراجعة (Review)' },
+          { id: 'view', label: 'عرض (View)' },
         ];
     }
   };
