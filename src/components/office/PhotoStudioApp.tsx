@@ -42,6 +42,7 @@ interface Props {
   fontFamily: string;
   initialPhotoFile?: File | null;
   onPhotoChange?: (file: File) => void;
+  newCanvasSignal?: number;
 }
 
 type PhotoshopTool = 
@@ -91,7 +92,8 @@ interface CropSelection {
 export const PhotoStudioApp: React.FC<Props> = ({ 
   fontFamily, 
   initialPhotoFile, 
-  onPhotoChange 
+  onPhotoChange,
+  newCanvasSignal
 }) => {
   // Photoshop Tools State
   const [activeTool, setActiveTool] = useState<PhotoshopTool>('brush');
@@ -275,6 +277,25 @@ export const PhotoStudioApp: React.FC<Props> = ({
       loadImageFromFile(initialPhotoFile);
     }
   }, [initialPhotoFile]);
+
+  // Handle new blank canvas signal from Backstage / File menu
+  useEffect(() => {
+    if (!newCanvasSignal) return;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    canvas.width = 820;
+    canvas.height = 540;
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    const snap = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    setHistorySteps([{ name: 'لوحة بيضاء جديدة', imageData: snap, time: new Date().toLocaleTimeString('ar-EG') }]);
+    setCurrentHistoryIndex(0);
+    setPanOffset({ x: 0, y: 0 });
+    setCropBox({ startX: 0, startY: 0, endX: 0, endY: 0, active: false });
+    setMarquee({ startX: 0, startY: 0, endX: 0, endY: 0, active: false });
+  }, [newCanvasSignal]);
 
   // Canvas Mouse Coordinates mapped to actual canvas resolution
   const getCanvasCoords = (e: React.MouseEvent<HTMLCanvasElement>) => {

@@ -88,7 +88,7 @@ export const Ribbon: React.FC<RibbonProps> = ({
   ];
 
   return (
-    <div className="bg-[#f3f4f6] border-b border-slate-300 shadow-xs z-20 shrink-0" dir="rtl">
+    <div className="bg-[#f3f4f6] border-b border-slate-300 shadow-xs z-20 shrink-0 no-print ribbon-container" data-no-print="true" dir="rtl">
       {/* 1. Ribbon Tab Headers Row */}
       <div className="flex items-center justify-between px-2 pt-1 border-b border-slate-200">
         <div className="flex items-center gap-0.5 overflow-x-auto">

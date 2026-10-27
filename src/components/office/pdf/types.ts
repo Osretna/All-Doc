@@ -121,3 +121,14 @@ export interface HeaderFooterConfig {
   footerCenter: string;
   footerRight: string;
 }
+
+export interface PdfImageItem {
+  id: string;
+  pageNumber: number;
+  x: number;
+  y: number;
+  width: number;
+  height?: number;
+  src: string;
+  name?: string;
+}

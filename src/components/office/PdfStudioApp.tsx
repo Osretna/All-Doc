@@ -31,8 +31,11 @@ import {
   Ruler,
   Highlighter,
   MessageSquare,
-  Loader2
+  Loader2,
+  Plus,
+  Image as ImageIcon
 } from 'lucide-react';
+import { printDocumentContent } from '../../utils/printHelper';
 import { PdfRibbon } from './pdf/PdfRibbon';
 import { PdfThumbnailSidebar } from './pdf/PdfThumbnailSidebar';
 import { MergePdfModal } from './pdf/modals/MergePdfModal';
@@ -54,7 +57,8 @@ import {
   FormFieldItem,
   PdfWatermarkConfig,
   BatesNumberingConfig,
-  HeaderFooterConfig
+  HeaderFooterConfig,
+  PdfImageItem
 } from './pdf/types';
 
 // PDF.js worker setup
@@ -130,6 +134,11 @@ export const PdfStudioApp: React.FC<Props> = ({
   const [drawings, setDrawings] = useState<DrawingPath[]>([]);
   const [redactions, setRedactions] = useState<RedactionBox[]>([]);
   const [textBlocks, setTextBlocks] = useState<TextBlockItem[]>([]);
+  const [images, setImages] = useState<PdfImageItem[]>([]);
+  const [blankPageContents, setBlankPageContents] = useState<Record<number, string>>({
+    1: 'صفحة رقم 1 - جاهزة للكتابة والتحرير المباشر وإدراج الصور والعلامات المائية.'
+  });
+  const imageInputRef = useRef<HTMLInputElement>(null);
 
   // Configurations
   const [watermarkConfig, setWatermarkConfig] = useState<PdfWatermarkConfig>({
@@ -294,22 +303,64 @@ export const PdfStudioApp: React.FC<Props> = ({
   const handleCreateNewPdf = () => {
     setPdfDoc(null);
     setPdfFile(null);
+    setPdfUrl(null);
     setTotalPages(1);
     setCurrentPage(1);
     setDocumentTitle('وثيقة_جديدة.pdf');
+    setBlankPageContents({
+      1: 'صفحة PDF جديدة فارغة جاهزة للكتابة والتحرير المباشر وإدراج الصور والعلامات المائية.'
+    });
     setTextBlocks([
       {
         id: `tb_${Date.now()}`,
         pageNumber: 1,
-        x: 20,
-        y: 20,
+        x: 10,
+        y: 12,
         text: 'انقر مرتين لتحرير هذا النص الجديد أو استخدم أدوات شريط Adobe Acrobat',
         fontSize: 14,
         color: '#1e293b',
         bold: false,
       },
     ]);
-    alert('تم إنشاء وثيقة PDF جديدة فارغة جاهزة للتحرير!');
+    setImages([]);
+    setDrawings([]);
+    setSignatures([]);
+    setStamps([]);
+  };
+
+  // Image Upload Handlers
+  const handleTriggerImageUpload = () => {
+    if (imageInputRef.current) {
+      imageInputRef.current.click();
+    }
+  };
+
+  const handleImageFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const src = event.target?.result as string;
+      if (src) {
+        const newImg: PdfImageItem = {
+          id: `img_${Date.now()}`,
+          pageNumber: currentPage,
+          x: 20,
+          y: 30,
+          width: 260,
+          src,
+          name: file.name,
+        };
+        setImages((prev) => [...prev, newImg]);
+      }
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';
+  };
+
+  // Dedicated isolated print handler
+  const handlePrintPdf = () => {
+    printDocumentContent('pdf-document-canvas-container', documentTitle);
   };
 
   // Rotate / Delete / Insert page
@@ -322,19 +373,20 @@ export const PdfStudioApp: React.FC<Props> = ({
 
   const handleDeleteCurrentPage = () => {
     if (totalPages <= 1) {
-      alert('لا يمكن حذف الصفحة الوحيدة المتبقية في المستند.');
       return;
     }
-    if (confirm(`هل أنت متأكد من حذف الصفحة ${currentPage}؟`)) {
-      setTotalPages((prev) => prev - 1);
-      setCurrentPage((prev) => Math.max(1, prev - 1));
-    }
+    setTotalPages((prev) => prev - 1);
+    setCurrentPage((prev) => Math.max(1, prev - 1));
   };
 
   const handleInsertBlankPage = () => {
-    setTotalPages((prev) => prev + 1);
-    setCurrentPage(totalPages + 1);
-    alert('تم إدراج صفحة بيضاء جديدة بنجاح!');
+    const newPageNum = totalPages + 1;
+    setTotalPages(newPageNum);
+    setCurrentPage(newPageNum);
+    setBlankPageContents((prev) => ({
+      ...prev,
+      [newPageNum]: `صفحة بيضاء جديدة (${newPageNum}) - انقر للكتابة أو استخدم شريط الأدوات لإدراج نصوص وصور وأختام.`
+    }));
   };
 
   // Add Stamp
@@ -535,6 +587,7 @@ export const PdfStudioApp: React.FC<Props> = ({
         onToggleTwoPageView={() => setTwoPageView(!twoPageView)}
         readingMode={readingMode}
         onToggleReadingMode={() => setReadingMode(!readingMode)}
+        onInsertImage={handleTriggerImageUpload}
       />
 
       {/* Hidden PDF File Input */}
@@ -546,19 +599,49 @@ export const PdfStudioApp: React.FC<Props> = ({
         className="hidden"
       />
 
+      {/* Hidden Image File Input */}
+      <input
+        ref={imageInputRef}
+        type="file"
+        accept="image/*"
+        onChange={handleImageFileChange}
+        className="hidden"
+      />
+
       {/* 2. Secondary Quick Toolbar (Foxit / Acrobat floating bar) */}
       {!readingMode && (
-        <div className="bg-[#f8f9fa] border-b border-gray-300 px-4 py-1.5 flex items-center justify-between text-xs text-gray-700 shrink-0 z-20 shadow-2xs">
+        <div className="bg-[#f8f9fa] border-b border-gray-300 px-4 py-1.5 flex items-center justify-between text-xs text-gray-700 shrink-0 z-20 shadow-2xs no-print quick-toolbar" data-no-print="true">
           {/* Document Title & Page Count */}
           <div className="flex items-center gap-2">
             <FileText className="w-4 h-4 text-[#ba141a]" />
-            <span className="font-bold text-gray-900 text-xs truncate max-w-[280px]" title={documentTitle}>
+            <span className="font-bold text-gray-900 text-xs truncate max-w-[240px]" title={documentTitle}>
               {documentTitle}
             </span>
             <span className="text-gray-400">|</span>
             <span className="bg-gray-200 text-gray-700 px-2 py-0.5 rounded font-mono text-[11px]">
               صفحة {currentPage} من {totalPages}
             </span>
+          </div>
+
+          {/* Direct Insert Quick Actions: Blank Page & Image */}
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={handleInsertBlankPage}
+              className="flex items-center gap-1 px-2.5 py-1 bg-white hover:bg-red-50 text-gray-800 hover:text-[#ba141a] border border-gray-300 rounded font-bold transition shadow-2xs cursor-pointer text-xs"
+              title="إدراج صفحة بيضاء جديدة فارغة للكتابة"
+            >
+              <Plus className="w-3.5 h-3.5 text-[#ba141a]" />
+              <span>صفحة بيضاء جديدة (+)</span>
+            </button>
+
+            <button
+              onClick={handleTriggerImageUpload}
+              className="flex items-center gap-1 px-2.5 py-1 bg-white hover:bg-emerald-50 text-gray-800 hover:text-emerald-700 border border-gray-300 rounded font-bold transition shadow-2xs cursor-pointer text-xs"
+              title="إدراج صورة من جهازك على هذه الصفحة"
+            >
+              <ImageIcon className="w-3.5 h-3.5 text-emerald-600" />
+              <span>إدراج صورة</span>
+            </button>
           </div>
 
           {/* Quick Page Navigator */}
@@ -595,11 +678,12 @@ export const PdfStudioApp: React.FC<Props> = ({
           {/* Quick Actions (Print, Export Real PDF, Zoom) */}
           <div className="flex items-center gap-2">
             <button
-              onClick={() => window.print()}
-              className="p-1 text-gray-600 hover:text-gray-900 hover:bg-gray-200 rounded cursor-pointer"
-              title="طباعة (Ctrl+P)"
+              onClick={handlePrintPdf}
+              className="flex items-center gap-1 px-2.5 py-1 text-gray-700 hover:text-black hover:bg-gray-200 rounded cursor-pointer font-bold border border-gray-300 bg-white"
+              title="طباعة محتوى وثيقة PDF فقط دون أشرطة التطبيق (Ctrl+P)"
             >
-              <Printer className="w-4 h-4" />
+              <Printer className="w-3.5 h-3.5 text-[#ba141a]" />
+              <span>طباعة الملف فقط</span>
             </button>
             <button
               onClick={handleExportAsRealPdf}
@@ -656,7 +740,8 @@ export const PdfStudioApp: React.FC<Props> = ({
         >
           {/* A4 Document Canvas Container */}
           <div
-            className="bg-white shadow-2xl rounded-xs transition-transform duration-200 relative overflow-hidden"
+            id="pdf-document-canvas-container"
+            className="bg-white shadow-2xl rounded-xs transition-transform duration-200 relative overflow-hidden pdf-print-page"
             style={{
               width: `${(595.28 * zoomLevel) / 100}px`,
               minHeight: `${(841.89 * zoomLevel) / 100}px`,
@@ -689,6 +774,66 @@ export const PdfStudioApp: React.FC<Props> = ({
                   </span>
                 </div>
               )}
+
+              {/* Inserted User Images */}
+              {images
+                .filter((img) => img.pageNumber === currentPage)
+                .map((img) => (
+                  <div
+                    key={img.id}
+                    className="absolute group border-2 border-dashed border-blue-400 hover:border-blue-600 rounded bg-white/40 p-1 select-none z-20 cursor-move"
+                    style={{
+                      left: `${img.x}%`,
+                      top: `${img.y}%`,
+                      width: `${img.width}px`,
+                    }}
+                  >
+                    <img
+                      src={img.src}
+                      alt={img.name || 'صورة مدرجة في المستند'}
+                      className="w-full h-auto rounded block pointer-events-none"
+                    />
+                    <div className="absolute -top-3 -left-3 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition no-print z-30">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setImages((prev) => prev.filter((i) => i.id !== img.id));
+                        }}
+                        className="bg-red-600 hover:bg-red-700 text-white rounded-full p-1 shadow cursor-pointer"
+                        title="حذف الصورة"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
+                    <div className="absolute -bottom-3 -right-3 flex items-center gap-1 bg-gray-900 text-white text-[10px] px-1.5 py-0.5 rounded shadow opacity-0 group-hover:opacity-100 transition no-print z-30">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setImages((prev) =>
+                            prev.map((i) => (i.id === img.id ? { ...i, width: Math.max(80, i.width - 30) } : i))
+                          );
+                        }}
+                        className="hover:text-amber-300 cursor-pointer px-1 font-bold"
+                        title="تصغير الصورة"
+                      >
+                        -
+                      </button>
+                      <span>{img.width}px</span>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setImages((prev) =>
+                            prev.map((i) => (i.id === img.id ? { ...i, width: Math.min(650, i.width + 30) } : i))
+                          );
+                        }}
+                        className="hover:text-amber-300 cursor-pointer px-1 font-bold"
+                        title="تكبير الصورة"
+                      >
+                        +
+                      </button>
+                    </div>
+                  </div>
+                ))}
 
               {/* Editable Text Blocks */}
               {textBlocks
@@ -734,23 +879,29 @@ export const PdfStudioApp: React.FC<Props> = ({
                   />
                 </div>
               ) : (
-                /* No file loaded yet: Interactive Dropzone & Open prompt */
-                <div className="flex flex-col items-center justify-center p-12 text-center border-2 border-dashed border-gray-300 rounded-xl bg-gray-50/50 space-y-4 my-6">
-                  <div className="w-16 h-16 rounded-2xl bg-red-100 text-[#ba141a] flex items-center justify-center shadow-xs">
-                    <FileText className="w-8 h-8" />
-                  </div>
-                  <div>
-                    <h3 className="text-base font-bold text-gray-900 mb-1">
-                      فتح ملف PDF محلي من جهازك
-                    </h3>
-                    <p className="text-xs text-gray-500 max-w-sm mx-auto">
-                      اسحب وأفلت أي ملف PDF هنا أو انقر على الزر لاختياره من القرص الصلب لاستعراضه وتعديله وإضافة التوقيع والأختام.
-                    </p>
-                  </div>
-                  <div className="flex gap-3">
-                    <label className="flex items-center gap-2 px-5 py-2.5 rounded-lg bg-[#ba141a] hover:bg-[#961015] text-white text-xs font-bold transition shadow-xs cursor-pointer">
-                      <FolderOpen className="w-4 h-4" />
-                      <span>اختيار ملف PDF من الجهاز</span>
+                /* Editable Blank Document Sheet */
+                <div className="min-h-[600px] flex flex-col justify-between py-2">
+                  <div
+                    contentEditable
+                    suppressContentEditableWarning
+                    onBlur={(e) => {
+                      const html = e.currentTarget.innerHTML;
+                      setBlankPageContents((prev) => ({ ...prev, [currentPage]: html }));
+                    }}
+                    dangerouslySetInnerHTML={{
+                      __html: blankPageContents[currentPage] || `<p>صفحة بيضاء جديدة (${currentPage}) - انقر للكتابة مباشرة...</p>`
+                    }}
+                    className="min-h-[480px] text-gray-900 leading-relaxed outline-none focus:ring-1 focus:ring-red-400 rounded-md p-4 text-sm bg-white/50 border border-dashed border-gray-200"
+                    style={{ fontFamily }}
+                    dir="rtl"
+                  />
+
+                  {/* Subtle helper to open local file if wanted */}
+                  <div className="mt-4 pt-3 border-t border-gray-200 flex items-center justify-between text-xs text-gray-500 no-print">
+                    <span className="text-[11px]">جاهز للكتابة وإدراج الصور والأختام على هذه الصفحة البيضاء</span>
+                    <label className="flex items-center gap-1.5 px-3 py-1 rounded bg-gray-100 hover:bg-gray-200 text-gray-700 cursor-pointer font-bold transition text-[11px]">
+                      <FolderOpen className="w-3.5 h-3.5 text-[#ba141a]" />
+                      <span>فتح ملف PDF من جهازك بدلاً من ذلك</span>
                       <input
                         type="file"
                         accept=".pdf"

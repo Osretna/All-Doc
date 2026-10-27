@@ -92,55 +92,100 @@
   margin: 0 auto;
 }
 
-/* Professional Print Isolation Engine */
+/* Professional Zero-Chrome Multi-Page Print Engine */
 @media print {
   @page {
     size: auto;
-    margin: 15mm;
+    margin: 0;
   }
 
-  body {
-    background: white !important;
-    color: black !important;
+  /* Force pure white background and remove all screen shadows/borders */
+  *, *::before, *::after {
+    box-shadow: none !important;
+    text-shadow: none !important;
+  }
+
+  html, body, #root {
+    background: #ffffff !important;
+    background-color: #ffffff !important;
+    color: #000000 !important;
     margin: 0 !important;
     padding: 0 !important;
+    height: auto !important;
+    min-height: 100% !important;
+    width: 100% !important;
+    overflow: visible !important;
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
   }
 
-  /* Completely hide all UI Chrome: TitleBar, Ribbons, Modals, StatusBars, Rulers, Sidebars, Buttons */
+  /* Completely suppress all UI Chrome across all apps */
   header,
   nav,
   aside,
   button,
   input,
   select,
+  textarea,
   .no-print,
+  [data-no-print="true"],
+  .title-bar-container,
+  .ribbon-container,
+  .quick-toolbar,
+  .status-bar-container,
+  .sidebar-container,
+  .ruler-container,
+  .app-navigation-bar,
   .mini-toolbar,
   .toast-container,
   [role="tablist"],
+  [role="dialog"],
   .fixed,
   .bg-black\/60 {
     display: none !important;
   }
 
-  /* Make main container transparent and full width */
-  #root, main, .h-screen, .w-screen {
+  /* Hide interactive workspace screens (e.g. gray #525659 backgrounds) */
+  .screen-only-view,
+  .workspace-screen-view {
+    display: none !important;
+  }
+
+  /* Display dedicated multi-page print containers */
+  .print-only,
+  [data-print-only="true"] {
+    display: block !important;
+  }
+
+  /* Reset outer layout wrappers to prevent overflow clipping or background bleeding */
+  #root, main, .h-screen, .w-screen, .flex-1, .h-full, .overflow-hidden, .overflow-auto {
     height: auto !important;
     width: 100% !important;
     overflow: visible !important;
     background: transparent !important;
+    background-color: transparent !important;
+    border: none !important;
   }
 
   /* Word Document page styling */
   .print-page,
-  .office-page-canvas {
+  .office-page-canvas,
+  .pdf-print-page {
     box-shadow: none !important;
     margin: 0 auto !important;
     border: none !important;
     width: 100% !important;
-    min-height: auto !important;
-    background: transparent !important;
+    max-width: 100% !important;
+    background: #ffffff !important;
+    page-break-after: always !important;
+    break-after: page !important;
+    transform: none !important;
+  }
+
+  .pdf-print-page:last-child,
+  .print-page:last-child {
+    page-break-after: avoid !important;
+    break-after: avoid !important;
   }
 
   /* Slides layout for PowerPoint */
@@ -149,7 +194,13 @@
     break-after: page !important;
     border: 1px solid #cbd5e1 !important;
     padding: 24px !important;
-    margin-bottom: 20px !important;
+    margin-bottom: 0 !important;
+    background: #ffffff !important;
+  }
+
+  .slide-page:last-child {
+    page-break-after: avoid !important;
+    break-after: avoid !important;
   }
 
   /* Table layout for Excel & Access */
@@ -169,4 +220,5 @@
     padding: 6px 10px !important;
   }
 }
+
 

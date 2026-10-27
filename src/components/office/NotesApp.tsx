@@ -20,6 +20,7 @@ import {
 
 interface Props {
   fontFamily: string;
+  newNoteSignal?: number;
 }
 
 const INITIAL_NOTES: NoteItem[] = [
@@ -66,7 +67,7 @@ const INITIAL_NOTES: NoteItem[] = [
   },
 ];
 
-export const NotesApp: React.FC<Props> = ({ fontFamily }) => {
+export const NotesApp: React.FC<Props> = ({ fontFamily, newNoteSignal }) => {
   const [notes, setNotes] = useState<NoteItem[]>(() => {
     return localVault.get<NoteItem[]>(localVault.KEYS.NOTES_DATA, INITIAL_NOTES);
   });
@@ -80,6 +81,22 @@ export const NotesApp: React.FC<Props> = ({ fontFamily }) => {
   useEffect(() => {
     localVault.set(localVault.KEYS.NOTES_DATA, notes);
   }, [notes]);
+
+  // Handle new blank note signal from Backstage / File menu
+  useEffect(() => {
+    if (!newNoteSignal) return;
+    const newNote: NoteItem = {
+      id: `note_${Date.now()}`,
+      title: 'ملاحظة جديدة فارغة',
+      notebook: 'دفتر شخصي',
+      section: 'قسم عام',
+      tags: ['جديد'],
+      content: '',
+      updatedAt: new Date().toISOString().split('T')[0],
+    };
+    setNotes((prev) => [newNote, ...prev]);
+    setActiveNoteId(newNote.id);
+  }, [newNoteSignal]);
 
   const activeNote = notes.find((n) => n.id === activeNoteId) || notes[0];
 

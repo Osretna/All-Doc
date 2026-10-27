@@ -156,6 +156,13 @@ export const SlidesApp: React.FC<Props> = ({
     );
   });
 
+  useEffect(() => {
+    if (initialSlides && initialSlides.length > 0) {
+      setSlides(initialSlides as PowerPointSlideData[]);
+      setCurrentSlideIndex(0);
+    }
+  }, [initialSlides]);
+
   const [currentSlideIndex, setCurrentSlideIndex] = useState<number>(0);
   const [sections, setSections] = useState<SlideSection[]>([
     { id: 'sec_1', title: 'مقدمة العرض والسيادة الرقمية', slideIds: ['s1', 's2'] },

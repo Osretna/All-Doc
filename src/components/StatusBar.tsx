@@ -34,7 +34,8 @@ export const StatusBar: React.FC<StatusBarProps> = ({
 }) => {
   return (
     <footer 
-      className="h-6 bg-[#2b579a] text-white flex items-center justify-between px-3 select-none text-[11px] shrink-0 border-t border-[#20447c] z-30"
+      className="h-6 bg-[#2b579a] text-white flex items-center justify-between px-3 select-none text-[11px] shrink-0 border-t border-[#20447c] z-30 no-print status-bar-container"
+      data-no-print="true"
       dir="rtl"
     >
       {/* Left side (in RTL: Right side): Document Stats & Language */}

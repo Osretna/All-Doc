@@ -400,10 +400,31 @@ export const SheetsApp: React.FC<Props> = ({
     handleFormatRange('wrapText', !currentWrap);
   };
 
-  // Merge and Center
+  // Merge and Center (Toggle Support)
   const handleMergeAndCenter = () => {
+    // If active cell is already merged or is a parent, UNMERGE it
+    if (activeCellData?.isMergeParent || activeCellData?.mergedWith) {
+      const parentId = activeCellData.mergedWith || selectedCell;
+      const nextData = { ...data };
+      Object.keys(nextData).forEach((cid) => {
+        if (cid === parentId || nextData[cid]?.mergedWith === parentId) {
+          const { isMergeParent, mergeColSpan, mergeRowSpan, mergedWith, ...rest } = nextData[cid];
+          nextData[cid] = rest;
+        }
+      });
+      const updatedSheets = {
+        ...sheets,
+        [activeSheetKey]: {
+          ...currentSheet,
+          data: nextData,
+        },
+      };
+      saveSheets(updatedSheets);
+      return;
+    }
+
     if (selectedRange.length <= 1) {
-      alert('يرجى تحديد نطاق من خليتين أو أكثر للدمج والتوسيط.');
+      alert('يرجى تحديد نطاق من خليتين أو أكثر للدمج والتوسيط (يمكنك التحديد بالسحب بالماوس أو بالضغط على Shift مع الأسهم).');
       return;
     }
 
@@ -807,6 +828,32 @@ export const SheetsApp: React.FC<Props> = ({
   const handleGridCellMouseDown = (cellId: string, e: React.MouseEvent) => {
     if (e.button !== 0) return;
 
+    // Check if user is editing a formula and clicked another cell to reference it (Excel behavior)
+    const isFormulaMode = isEditingCell && formulaInput.startsWith('=');
+    if (isFormulaMode) {
+      if (cellId !== selectedCell) {
+        e.preventDefault();
+        e.stopPropagation();
+
+        const trimmed = formulaInput.trim();
+        const lastChar = trimmed.slice(-1);
+        let updated = formulaInput;
+
+        if (['=', '(', '+', '-', '*', '/', ',', ':'].includes(lastChar)) {
+          updated = formulaInput + cellId;
+        } else if (/[A-Za-z]+[0-9]+$/.test(trimmed)) {
+          // Replace previous cell coordinate with the newly clicked one
+          updated = trimmed.replace(/[A-Za-z]+[0-9]+$/, cellId);
+        } else {
+          updated = formulaInput + '+' + cellId;
+        }
+
+        setFormulaInput(updated);
+        handleCellChange(selectedCell, updated);
+        return;
+      }
+    }
+
     // Apply Format Painter if active
     if (isFormatPainterActive && formatPainterSource) {
       const nextData = {
@@ -830,16 +877,110 @@ export const SheetsApp: React.FC<Props> = ({
       saveSheets(updatedSheets);
       setIsFormatPainterActive(false);
       setFormatPainterSource(null);
+      setIsEditingCell(false);
       setSelectedCell(cellId);
       setSelectedRange([cellId]);
       return;
     }
 
+    // Normal cell click: select cell without showing blinking cursor/input immediately!
+    setIsEditingCell(false);
     setIsDraggingRange(true);
     setDragStartCell(cellId);
     setDragCurrentCell(cellId);
     setSelectedCell(cellId);
     setSelectedRange([cellId]);
+  };
+
+  const getCellsInRange = (startCell: string, endCell: string): string[] => {
+    const c1 = parseCellCoord(startCell);
+    const c2 = parseCellCoord(endCell);
+    const minC = Math.min(c1.colIdx, c2.colIdx);
+    const maxC = Math.max(c1.colIdx, c2.colIdx);
+    const minR = Math.min(c1.row, c2.row);
+    const maxR = Math.max(c1.row, c2.row);
+    const cells: string[] = [];
+    for (let r = minR; r <= maxR; r++) {
+      for (let c = minC; c <= maxC; c++) {
+        cells.push(`${COLS[c]}${r}`);
+      }
+    }
+    return cells;
+  };
+
+  // Excel-style Keyboard Navigation & Direct Typing
+  const handleGridKeyDown = (e: React.KeyboardEvent) => {
+    if (isEditingCell) return;
+
+    const coords = parseCellCoord(selectedCell);
+    let nextColIdx = coords.colIdx;
+    let nextRow = coords.row;
+
+    if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      nextRow = Math.max(1, coords.row - 1);
+    } else if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      nextRow = Math.min(ROWS_COUNT, coords.row + 1);
+    } else if (e.key === 'ArrowLeft') {
+      e.preventDefault();
+      if (isRTL) {
+        nextColIdx = Math.min(COLS.length - 1, coords.colIdx + 1);
+      } else {
+        nextColIdx = Math.max(0, coords.colIdx - 1);
+      }
+    } else if (e.key === 'ArrowRight') {
+      e.preventDefault();
+      if (isRTL) {
+        nextColIdx = Math.max(0, coords.colIdx - 1);
+      } else {
+        nextColIdx = Math.min(COLS.length - 1, coords.colIdx + 1);
+      }
+    } else if (e.key === 'Tab') {
+      e.preventDefault();
+      nextColIdx = Math.min(COLS.length - 1, coords.colIdx + 1);
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      nextRow = Math.min(ROWS_COUNT, coords.row + 1);
+    } else if (e.key === 'F2') {
+      e.preventDefault();
+      setIsEditingCell(true);
+      return;
+    } else if (e.key === 'Delete' || e.key === 'Backspace') {
+      e.preventDefault();
+      const nextData = { ...data };
+      selectedRange.forEach((cid) => {
+        delete nextData[cid];
+      });
+      const updatedSheets = {
+        ...sheets,
+        [activeSheetKey]: { ...currentSheet, data: nextData },
+      };
+      saveSheets(updatedSheets);
+      setFormulaInput('');
+      return;
+    } else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      // Prevent browser default so character is typed exactly ONCE
+      e.preventDefault();
+      setIsEditingCell(true);
+      handleCellChange(selectedCell, e.key);
+      handleFormulaInputChange(e.key);
+      return;
+    } else {
+      return;
+    }
+
+    const nextCellId = `${COLS[nextColIdx]}${nextRow}`;
+    if (e.shiftKey) {
+      const startCell = dragStartCell || selectedCell;
+      const range = getCellsInRange(startCell, nextCellId);
+      setSelectedCell(nextCellId);
+      setSelectedRange(range);
+    } else {
+      setDragStartCell(nextCellId);
+      setSelectedCell(nextCellId);
+      setSelectedRange([nextCellId]);
+    }
   };
 
   // Apply Fill Handle (Drag to Fill / Auto-fill down)
@@ -873,8 +1014,61 @@ export const SheetsApp: React.FC<Props> = ({
         }
       }
 
-      if (allNumbers && numValues.length >= 2) {
-        // CASE 1: Arithmetic sequence for 2 or more numbers
+      // Sequence Progression for Months & Days (Arabic & English)
+      const ARABIC_DAYS = ['السبت', 'الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة'];
+      const ARABIC_DAYS_ALT = ['السبت', 'الاحد', 'الإثنين', 'الثلاثاء', 'الاربعاء', 'الخميس', 'الجمعة'];
+      const ENGLISH_DAYS = ['Saturday', 'Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
+      const ENGLISH_DAYS_SHORT = ['Sat', 'Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
+      const ARABIC_MONTHS = ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'];
+      const ARABIC_MONTHS_ALT = ['يناير', 'فبراير', 'مارس', 'ابريل', 'مايو', 'يونيو', 'يوليو', 'اغسطس', 'سبتمبر', 'اكتوبر', 'نوفمبر', 'ديسمبر'];
+      const HIJRI_MONTHS = ['محرم', 'صفر', 'ربيع الأول', 'ربيع الآخر', 'جمادى الأولى', 'جمادى الآخرة', 'رجب', 'شعبان', 'رمضان', 'شوال', 'ذو القعدة', 'ذو الحجة'];
+      const ENGLISH_MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+      const ENGLISH_MONTHS_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+      const ALL_SEQUENCES = [
+        ARABIC_DAYS, ARABIC_DAYS_ALT, ENGLISH_DAYS, ENGLISH_DAYS_SHORT,
+        ARABIC_MONTHS, ARABIC_MONTHS_ALT, HIJRI_MONTHS, ENGLISH_MONTHS, ENGLISH_MONTHS_SHORT
+      ];
+
+      // Extract raw strings from source rows
+      const rawValues: string[] = [];
+      for (let r = srcMinRow; r <= srcMaxRow; r++) {
+        rawValues.push(String(data[`${col}${r}`]?.value ?? '').trim());
+      }
+
+      // Check if source values match a known sequence
+      let matchedSeq: string[] | null = null;
+      let lastMatchIdx = -1;
+      let seqStep = 1;
+
+      for (const seq of ALL_SEQUENCES) {
+        const indices = rawValues.map(v => seq.indexOf(v));
+        if (indices.every(idx => idx !== -1)) {
+          matchedSeq = seq;
+          lastMatchIdx = indices[indices.length - 1];
+          if (indices.length >= 2) {
+            seqStep = (indices[indices.length - 1] - indices[0]) / (indices.length - 1);
+            if (seqStep <= 0) seqStep = 1;
+          }
+          break;
+        }
+      }
+
+      if (matchedSeq && lastMatchIdx !== -1) {
+        // CASE 1: Sequence progression (Months / Days)
+        const lastCell = data[`${col}${srcMaxRow}`];
+        for (let r = srcMaxRow + 1; r <= targetEndRow; r++) {
+          const offset = r - srcMaxRow;
+          const nextIdx = (lastMatchIdx + Math.round(seqStep * offset)) % matchedSeq.length;
+          const safeIdx = (nextIdx + matchedSeq.length) % matchedSeq.length;
+          nextData[`${col}${r}`] = {
+            ...(lastCell || { value: '' }),
+            value: matchedSeq[safeIdx],
+            formula: undefined,
+          };
+        }
+      } else if (allNumbers && numValues.length >= 2) {
+        // CASE 2: Arithmetic sequence for 2 or more numbers
         const step = (numValues[numValues.length - 1] - numValues[0]) / (numValues.length - 1);
         const lastCell = data[`${col}${srcMaxRow}`];
         let currentNum = numValues[numValues.length - 1];
@@ -1266,8 +1460,10 @@ export const SheetsApp: React.FC<Props> = ({
 
       {/* 3. Main Spreadsheet Grid */}
       <div 
+        tabIndex={0}
+        onKeyDown={handleGridKeyDown}
         onMouseUp={handleGridMouseUp}
-        className="flex-1 overflow-auto bg-gray-100 p-1 relative"
+        className="flex-1 overflow-auto bg-gray-100 p-1 relative outline-none focus:ring-0"
         style={{ transform: `scale(${zoom / 100})`, transformOrigin: isRTL ? 'top right' : 'top left' }}
       >
         <table className={`border-collapse bg-white shadow-xs min-w-full ${isRTL ? 'text-right' : 'text-left'}`}>
@@ -1420,44 +1616,79 @@ export const SheetsApp: React.FC<Props> = ({
                           </div>
                         ) : (
                           <div className="relative w-full h-full flex items-center">
-                            <input
-                              type="text"
-                              value={
-                                showFormulasMode && cell?.formula
-                                  ? cell.formula
-                                  : (isSelected && isEditingCell && cell?.formula ? cell.formula : formatCellValue(cell))
-                              }
-                              onFocus={() => {
-                                setSelectedCell(cellId);
-                                setIsEditingCell(true);
-                              }}
-                              onBlur={() => {
-                                setTimeout(() => setIsEditingCell(false), 200);
-                              }}
-                              onChange={(e) => {
-                                handleCellChange(cellId, e.target.value);
-                                handleFormulaInputChange(e.target.value);
-                              }}
-                              onKeyDown={(e) => {
-                                if (showAutocomplete && matchingFunctions.length > 0) {
-                                  if (e.key === 'ArrowDown') {
+                            {isSelected && isEditingCell ? (
+                              <input
+                                autoFocus
+                                type="text"
+                                value={
+                                  showFormulasMode && cell?.formula
+                                    ? cell.formula
+                                    : (cell?.formula || formatCellValue(cell))
+                                }
+                                onBlur={() => {
+                                  setTimeout(() => setIsEditingCell(false), 200);
+                                }}
+                                onChange={(e) => {
+                                  handleCellChange(cellId, e.target.value);
+                                  handleFormulaInputChange(e.target.value);
+                                }}
+                                onKeyDown={(e) => {
+                                  if (showAutocomplete && matchingFunctions.length > 0) {
+                                    if (e.key === 'ArrowDown') {
+                                      e.preventDefault();
+                                      setSelectedFunctionIndex((i) => Math.min(matchingFunctions.length - 1, i + 1));
+                                      return;
+                                    } else if (e.key === 'ArrowUp') {
+                                      e.preventDefault();
+                                      setSelectedFunctionIndex((i) => Math.max(0, i - 1));
+                                      return;
+                                    } else if (e.key === 'Enter' || e.key === 'Tab') {
+                                      e.preventDefault();
+                                      handleSelectFunction(matchingFunctions[selectedFunctionIndex]);
+                                      return;
+                                    } else if (e.key === 'Escape') {
+                                      setShowAutocomplete(false);
+                                      return;
+                                    }
+                                  }
+
+                                  if (e.key === 'Enter') {
                                     e.preventDefault();
-                                    setSelectedFunctionIndex((i) => Math.min(matchingFunctions.length - 1, i + 1));
-                                  } else if (e.key === 'ArrowUp') {
+                                    setIsEditingCell(false);
+                                    const coords = parseCellCoord(cellId);
+                                    if (coords.row < ROWS_COUNT) {
+                                      const nextId = `${COLS[coords.colIdx]}${coords.row + 1}`;
+                                      setSelectedCell(nextId);
+                                      setSelectedRange([nextId]);
+                                    }
+                                  } else if (e.key === 'Tab') {
                                     e.preventDefault();
-                                    setSelectedFunctionIndex((i) => Math.max(0, i - 1));
-                                  } else if (e.key === 'Enter' || e.key === 'Tab') {
-                                    e.preventDefault();
-                                    handleSelectFunction(matchingFunctions[selectedFunctionIndex]);
+                                    setIsEditingCell(false);
+                                    const coords = parseCellCoord(cellId);
+                                    if (coords.colIdx < COLS.length - 1) {
+                                      const nextId = `${COLS[coords.colIdx + 1]}${coords.row}`;
+                                      setSelectedCell(nextId);
+                                      setSelectedRange([nextId]);
+                                    }
                                   } else if (e.key === 'Escape') {
+                                    setIsEditingCell(false);
                                     setShowAutocomplete(false);
                                   }
-                                }
-                              }}
-                              className={`w-full bg-transparent outline-none text-xs px-1 text-inherit font-inherit ${
-                                isRTL ? 'text-right' : 'text-left'
-                              }`}
-                            />
+                                }}
+                                className={`w-full bg-white border border-[#107c41] outline-none text-xs px-1 text-gray-900 font-mono shadow-xs z-30 ${
+                                  isRTL ? 'text-right' : 'text-left'
+                                }`}
+                              />
+                            ) : (
+                              <div
+                                onDoubleClick={() => setIsEditingCell(true)}
+                                className={`w-full px-1 truncate text-xs select-none ${
+                                  isRTL ? 'text-right' : 'text-left'
+                                }`}
+                              >
+                                {showFormulasMode && cell?.formula ? cell.formula : formatCellValue(cell)}
+                              </div>
+                            )}
 
                             {/* In-Cell Floating Autocomplete Dropdown */}
                             {isSelected && isEditingCell && showAutocomplete && matchingFunctions.length > 0 && (

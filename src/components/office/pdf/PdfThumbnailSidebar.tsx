@@ -30,7 +30,7 @@ export const PdfThumbnailSidebar: React.FC<Props> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="w-56 bg-white border-l border-gray-300 flex flex-col shrink-0 text-right select-none z-20 shadow-md">
+    <div className="w-56 bg-white border-l border-gray-300 flex flex-col shrink-0 text-right select-none z-20 shadow-md no-print sidebar-container" data-no-print="true">
       {/* Sidebar Header & Tabs */}
       <div className="flex border-b border-gray-200 bg-gray-50 text-[11px] font-semibold">
         <button

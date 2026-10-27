@@ -80,6 +80,8 @@ export default function App() {
   const [slidesData, setSlidesData] = useState<SlideItem[] | undefined>(undefined);
   const [accessData, setAccessData] = useState<DbTable[] | undefined>(undefined);
   const [pdfFile, setPdfFile] = useState<File | null>(null);
+  const [notesSignal, setNotesSignal] = useState<number>(0);
+  const [photoSignal, setPhotoSignal] = useState<number>(0);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const [isDraggingFile, setIsDraggingFile] = useState<boolean>(false);
 
@@ -509,6 +511,12 @@ export default function App() {
         setTimeout(() => tempDiv.remove(), 4000);
         return;
       }
+    } else if (activeApp === 'pdf') {
+      const pdfEl = document.getElementById('pdf-document-canvas-container');
+      if (pdfEl) {
+        printDocumentContent('pdf-document-canvas-container', documentTitle);
+        return;
+      }
     }
 
     // Standard fallback print
@@ -591,10 +599,122 @@ export default function App() {
   };
 
   const handleApplyTemplate = (templateContent: string, title: string) => {
-    if (editorRef.current && activeApp === 'docs') {
-      editorRef.current.innerHTML = templateContent;
-      setDocumentTitle(title);
-      handleContentChange();
+    setDocumentTitle(title);
+
+    if (activeApp === 'docs') {
+      if (editorRef.current) {
+        editorRef.current.innerHTML = templateContent || '<p><br></p>';
+        handleContentChange();
+      }
+      addNotification(`تم إنشاء مستند Word جديد "${title}"!`, 'success');
+    } else if (activeApp === 'sheets') {
+      let newSheets: Record<string, { label: string; data: SheetData }> = {
+        sheet1: {
+          label: 'ورقة 1',
+          data: {},
+        },
+      };
+
+      if (templateContent === 'mollak_budget') {
+        newSheets = {
+          sheet1: {
+            label: 'ميزانية الملاك',
+            data: {
+              A1: { value: 'بند الصيانة / المصروف', bold: true, bg: '#f3f4f6' },
+              B1: { value: 'المبلغ التقديري', bold: true, bg: '#f3f4f6' },
+              C1: { value: 'المصروف الفعلي', bold: true, bg: '#f3f4f6' },
+              D1: { value: 'الفارق', bold: true, bg: '#f3f4f6' },
+              A2: { value: 'صيانة مصاعد' },
+              B2: { value: '2500' },
+              C2: { value: '2300' },
+              D2: { value: '200', formula: '=B2-C2' },
+              A3: { value: 'حراسة وأمن' },
+              B3: { value: '4000' },
+              C3: { value: '4000' },
+              D3: { value: '0', formula: '=B3-C3' },
+              A4: { value: 'كهرباء وإنارة عامة' },
+              B4: { value: '1800' },
+              C4: { value: '1950' },
+              D4: { value: '-150', formula: '=B4-C4' },
+              A5: { value: 'الإجمالي العام', bold: true, bg: '#dcfce7' },
+              B5: { value: '8300', formula: '=SUM(B2:B4)', bold: true },
+              C5: { value: '8250', formula: '=SUM(C2:C4)', bold: true },
+              D5: { value: '50', formula: '=SUM(D2:D4)', bold: true },
+            },
+          },
+        };
+      } else if (templateContent === 'payroll') {
+        newSheets = {
+          sheet1: {
+            label: 'مسير الرواتب',
+            data: {
+              A1: { value: 'اسم الموظف', bold: true, bg: '#f3f4f6' },
+              B1: { value: 'الراتب الأساسي', bold: true, bg: '#f3f4f6' },
+              C1: { value: 'بدل السكن', bold: true, bg: '#f3f4f6' },
+              D1: { value: 'بدل النقل', bold: true, bg: '#f3f4f6' },
+              E1: { value: 'إجمالي المستحق', bold: true, bg: '#dcfce7' },
+              A2: { value: 'محمد المنصوري' },
+              B2: { value: '8000' },
+              C2: { value: '2000' },
+              D2: { value: '1000' },
+              E2: { value: '11000', formula: '=B2+C2+D2' },
+              A3: { value: 'خالد العمري' },
+              B3: { value: '6500' },
+              C3: { value: '1625' },
+              D3: { value: '800' },
+              E3: { value: '8925', formula: '=B3+C3+D3' },
+            },
+          },
+        };
+      }
+
+      setExcelData(newSheets);
+      localVault.set(localVault.KEYS.SHEETS_DATA, newSheets);
+      addNotification(`تم إنشاء مصنف Excel جديد "${title}" بنجاح!`, 'success');
+    } else if (activeApp === 'slides') {
+      const newSlides: SlideItem[] = [
+        {
+          id: `slide_${Date.now()}`,
+          title: title || 'عرض تقديمي جديد',
+          subtitle: 'انقر لتحرير العنوان أو إضافة عناصر جديدة',
+          body: ['نقطة رئيسية أولى في العرض', 'نقطة توضيحية ثانية'],
+          notes: '',
+          theme: 'blue',
+          layout: 'content',
+        },
+      ];
+      setSlidesData(newSlides);
+      localVault.set(localVault.KEYS.SLIDES_DATA, newSlides);
+      addNotification(`تم إنشاء عرض PowerPoint جديد "${title}" بنجاح!`, 'success');
+    } else if (activeApp === 'pdf') {
+      setPdfFile(null);
+      addNotification(`تم فتح صفحة ومستند PDF جديد فارغ للكتابة والإدراج!`, 'success');
+    } else if (activeApp === 'base') {
+      const newTables: DbTable[] = [
+        {
+          id: `tbl_${Date.now()}`,
+          name: 'جدول_البيانات_1',
+          label: 'جدول البيانات الرئيسي',
+          fields: [
+            { name: 'c1', label: 'المعرف', type: 'number', primaryKey: true },
+            { name: 'c2', label: 'الاسم', type: 'text' },
+            { name: 'c3', label: 'البيان', type: 'text' },
+            { name: 'c4', label: 'التاريخ', type: 'date' },
+          ],
+          records: [
+            { id: 'rec_1', c1: 1, c2: 'سجل افتراضي', c3: 'بدء إدخال البيانات', c4: '2026-10-27' },
+          ],
+        },
+      ];
+      setAccessData(newTables);
+      localVault.set(localVault.KEYS.BASE_DATA, newTables);
+      addNotification(`تم إنشاء قاعدة بيانات Access جديدة بنجاح!`, 'success');
+    } else if (activeApp === 'notes') {
+      setNotesSignal(s => s + 1);
+      addNotification(`تم إنشاء دفتر ملاحظات جديد فارغ!`, 'success');
+    } else if (activeApp === 'photo') {
+      setPhotoSignal(s => s + 1);
+      addNotification(`تم إنشاء لوحة تصميم فارغة جديدة!`, 'success');
     }
   };
 
@@ -811,11 +931,13 @@ export default function App() {
                 {activeApp === 'notes' && (
                   <NotesApp
                     fontFamily={selectedFont}
+                    newNoteSignal={notesSignal}
                   />
                 )}
                 {activeApp === 'photo' && (
                   <PhotoStudioApp
                     fontFamily={selectedFont}
+                    newCanvasSignal={photoSignal}
                   />
                 )}
               </div>

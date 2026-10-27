@@ -12,7 +12,8 @@ export const Ruler: React.FC<RulerProps> = ({ showRuler }) => {
 
   return (
     <div 
-      className="h-5 bg-[#fafafa] border-b border-slate-300 flex items-end select-none text-[9px] font-mono text-slate-500 overflow-hidden relative shadow-2xs"
+      className="h-5 bg-[#fafafa] border-b border-slate-300 flex items-end select-none text-[9px] font-mono text-slate-500 overflow-hidden relative shadow-2xs no-print ruler-container"
+      data-no-print="true"
       dir="ltr"
     >
       {/* Centered ruler container matching A4 document width */}

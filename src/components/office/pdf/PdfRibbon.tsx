@@ -72,6 +72,7 @@ interface Props {
   onToggleTwoPageView: () => void;
   readingMode: boolean;
   onToggleReadingMode: () => void;
+  onInsertImage?: () => void;
 }
 
 export const PdfRibbon: React.FC<Props> = ({
@@ -101,6 +102,7 @@ export const PdfRibbon: React.FC<Props> = ({
   onToggleTwoPageView,
   readingMode,
   onToggleReadingMode,
+  onInsertImage,
 }) => {
   const [showStampMenu, setShowStampMenu] = useState(false);
   const [showExportMenu, setShowExportMenu] = useState(false);
@@ -117,7 +119,7 @@ export const PdfRibbon: React.FC<Props> = ({
   ];
 
   return (
-    <div className="bg-[#f3f2f1] border-b border-gray-300 select-none text-gray-800 text-xs shrink-0 z-30">
+    <div className="bg-[#f3f2f1] border-b border-gray-300 select-none text-gray-800 text-xs shrink-0 z-30 no-print ribbon-container" data-no-print="true">
       {/* 1. Ribbon Tabs Headers */}
       <div className="flex items-center gap-0.5 px-3 pt-1 border-b border-gray-300 bg-[#f3f2f1]">
         {/* File / Backstage Button */}
@@ -322,9 +324,16 @@ export const PdfRibbon: React.FC<Props> = ({
                 </button>
 
                 <button
-                  onClick={() => setActiveTool('add-image')}
-                  className="flex flex-col items-center justify-center p-2 hover:bg-gray-100 rounded text-gray-700 cursor-pointer"
-                  title="إدراج صورة داخل صفحة PDF"
+                  onClick={() => {
+                    setActiveTool('add-image');
+                    onInsertImage?.();
+                  }}
+                  className={`flex flex-col items-center justify-center p-2 rounded transition cursor-pointer ${
+                    activeTool === 'add-image'
+                      ? 'bg-emerald-100 border border-emerald-300 text-emerald-900 font-bold'
+                      : 'hover:bg-gray-100 text-gray-700'
+                  }`}
+                  title="إدراج صورة من جهازك داخل صفحة PDF"
                 >
                   <Image className="w-5 h-5 text-emerald-600" />
                   <span className="text-[10px] font-bold mt-1">إضافة صورة</span>
