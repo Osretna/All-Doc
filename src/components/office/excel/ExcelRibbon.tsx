@@ -108,6 +108,8 @@ interface Props {
   zoomLevel: number;
   onSetZoomLevel: (zoom: number) => void;
   onRecalculateAll: () => void;
+  onInsertImage?: () => void;
+  onCreateTable?: () => void;
 }
 
 export const ExcelRibbon: React.FC<Props> = ({
@@ -165,6 +167,8 @@ export const ExcelRibbon: React.FC<Props> = ({
   zoomLevel,
   onSetZoomLevel,
   onRecalculateAll,
+  onInsertImage,
+  onCreateTable,
 }) => {
   // Dropdown states
   const [showBorderMenu, setShowBorderMenu] = useState(false);
@@ -666,13 +670,16 @@ export const ExcelRibbon: React.FC<Props> = ({
 
                 <button
                   onClick={() => {
-                    onFormatRange('bg', '#107c41');
-                    onFormatRange('color', '#ffffff');
-                    onFormatRange('bold', true);
-                    alert('تم تطبيق نمط جدول احترافي مع رؤوس الأعمدة!');
+                    if (onCreateTable) {
+                      onCreateTable();
+                    } else {
+                      onFormatRange('bg', '#107c41');
+                      onFormatRange('color', '#ffffff');
+                      onFormatRange('bold', true);
+                    }
                   }}
-                  className="flex flex-col items-center justify-center p-1 hover:bg-emerald-50 rounded text-gray-700 hover:text-[#107c41]"
-                  title="تنسيق كجدول Excel أنيق"
+                  className="flex flex-col items-center justify-center p-1 hover:bg-emerald-50 rounded text-gray-700 hover:text-[#107c41] cursor-pointer"
+                  title="تنسيق كجدول Excel رسمي (Alt + T / Ctrl + T)"
                 >
                   <Table className="w-4 h-4 text-blue-600" />
                   <span className="text-[9.5px] font-semibold mt-0.5">تنسيق كجدول</span>
@@ -870,16 +877,19 @@ export const ExcelRibbon: React.FC<Props> = ({
 
                 <button
                   onClick={() => {
-                    onFormatRange('bg', '#f1f5f9');
-                    onFormatRange('bold', true);
-                    alert('تم تحويل النطاق المحدد إلى جدول بيانات رسمي مع خيارات التصفية!');
+                    if (onCreateTable) {
+                      onCreateTable();
+                    } else {
+                      onFormatRange('bg', '#f1f5f9');
+                      onFormatRange('bold', true);
+                    }
                   }}
                   className="flex flex-col items-center justify-center p-2 hover:bg-blue-50 rounded text-gray-800 hover:text-blue-700 transition cursor-pointer"
-                  title="إنشاء جدول بيانات (Ctrl+T)"
+                  title="إنشاء جدول بيانات رسمي (Alt + T / Ctrl + T)"
                 >
                   <Table className="w-5 h-5 text-blue-600" />
                   <span className="text-[10px] font-bold mt-1">جدول بيانات</span>
-                  <span className="text-[9px] text-gray-500">Table</span>
+                  <span className="text-[9px] text-gray-500">Table (Alt+T)</span>
                 </button>
               </div>
               <div className="text-[10px] text-gray-400 text-center font-medium mt-1">جداول</div>
@@ -936,8 +946,15 @@ export const ExcelRibbon: React.FC<Props> = ({
             <div className="flex flex-col justify-between border-l border-gray-200 pl-2">
               <div className="flex items-center gap-2">
                 <button
-                  onClick={() => alert('يمكنك إدراج صور وتواقيع في ورقة العمل')}
-                  className="flex flex-col items-center justify-center p-1.5 hover:bg-gray-100 rounded text-gray-700"
+                  onClick={() => {
+                    if (onInsertImage) {
+                      onInsertImage();
+                    } else {
+                      alert('إدراج صورة في الخلية النشطة');
+                    }
+                  }}
+                  className="flex flex-col items-center justify-center p-1.5 hover:bg-emerald-50 rounded text-gray-700 hover:text-[#107c41] cursor-pointer"
+                  title="إدراج صورة في الخلية المحددة أو ورقة العمل"
                 >
                   <span className="text-sm">🖼️</span>
                   <span className="text-[10px] font-semibold mt-0.5">صور</span>

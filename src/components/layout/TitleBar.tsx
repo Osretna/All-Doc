@@ -36,6 +36,9 @@ interface Props {
   onUploadFile?: (file: File) => void;
   onSaveToDevice?: () => void;
   onPrintIsolated?: () => void;
+  isSaved?: boolean;
+  autoSaveCountdown?: number;
+  onQuickSave?: () => void;
 }
 
 export const TitleBar: React.FC<Props> = ({
@@ -49,6 +52,9 @@ export const TitleBar: React.FC<Props> = ({
   onUploadFile,
   onSaveToDevice,
   onPrintIsolated,
+  isSaved = true,
+  autoSaveCountdown = 300,
+  onQuickSave,
 }) => {
   const [appMenuOpen, setAppMenuOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -245,6 +251,50 @@ export const TitleBar: React.FC<Props> = ({
 
           {/* Right: Quick Upload, Save As to Device, and Isolated Print Controls */}
           <div className="flex items-center gap-2 text-white/95">
+            {/* 1. Primary Save Button with Green/Orange Dot */}
+            {onQuickSave && (
+              <button
+                onClick={onQuickSave}
+                className={`px-3 py-1 rounded text-xs font-bold flex items-center gap-2 cursor-pointer transition shadow-xs border ${
+                  isSaved
+                    ? 'bg-emerald-700 hover:bg-emerald-600 text-white border-emerald-500'
+                    : 'bg-amber-600 hover:bg-amber-500 text-white border-amber-300 animate-pulse'
+                }`}
+                title={
+                  isSaved
+                    ? 'الملف محفوظ بالكامل (دائرة خضراء) - انقر للحفظ يدوياً في أي وقت'
+                    : 'توجد تغييرات غير محفوظة (دائرة برتقالية) - انقر للحفظ الفوري الآن'
+                }
+              >
+                {/* Visual Status Indicator: Green = Saved, Orange = Modified */}
+                <span className="relative flex h-2.5 w-2.5">
+                  {isSaved ? (
+                    <span className="inline-flex rounded-full h-2.5 w-2.5 bg-emerald-300 border border-white"></span>
+                  ) : (
+                    <>
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-300 border border-white"></span>
+                    </>
+                  )}
+                </span>
+                <span>حفظ</span>
+                <span className="text-[10px] opacity-90 hidden sm:inline">
+                  {isSaved ? '(محفوظ)' : '(غير محفوظ)'}
+                </span>
+              </button>
+            )}
+
+            {/* 2. Auto-Save 5-Minute Countdown Badge */}
+            <div
+              className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-black/20 border border-white/20 text-[10.5px] text-white/90"
+              title="يتم حفظ كافة البيانات تلقائياً كل 5 دقائق لضمان عدم فقدان أي مجهود"
+            >
+              <span className="hidden lg:inline text-white/80">حفظ تلقائي (5 د):</span>
+              <span className="font-mono font-bold text-white">
+                {Math.floor(autoSaveCountdown / 60)}:{(autoSaveCountdown % 60) < 10 ? '0' : ''}{autoSaveCountdown % 60}
+              </span>
+            </div>
+
             {/* Upload File Button */}
             {onUploadFile && (
               <label 

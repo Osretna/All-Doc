@@ -2,15 +2,24 @@ import React, { useState } from 'react';
 import { X, BarChart3, PieChart, TrendingUp, ScatterChart, BarChart2, Layers } from 'lucide-react';
 import { SheetData } from '../../../types';
 
+export type ChartType = 'column' | 'bar' | 'line' | 'pie' | 'area' | 'scatter' | 'combo';
+
+export interface ChartDefinition {
+  id: string;
+  title: string;
+  type: ChartType;
+  items: { label: string; val: number }[];
+  createdAt: number;
+}
+
 interface Props {
   isOpen: boolean;
   onClose: () => void;
   selectedRange: string[];
   data: SheetData;
   activeSheetTitle: string;
+  onInsertChart?: (chart: ChartDefinition) => void;
 }
-
-export type ChartType = 'column' | 'bar' | 'line' | 'pie' | 'area' | 'scatter' | 'combo';
 
 export const ChartModal: React.FC<Props> = ({
   isOpen,
@@ -18,6 +27,7 @@ export const ChartModal: React.FC<Props> = ({
   selectedRange,
   data,
   activeSheetTitle,
+  onInsertChart,
 }) => {
   const [chartType, setChartType] = useState<ChartType>('column');
   const [chartTitle, setChartTitle] = useState('مخطط بياني تحليلي');
@@ -283,10 +293,18 @@ export const ChartModal: React.FC<Props> = ({
             </button>
             <button
               onClick={() => {
-                alert(`تم إدراج المخطط "${chartTitle}" في ورقة العمل بنجاح!`);
+                if (onInsertChart) {
+                  onInsertChart({
+                    id: 'chart_' + Date.now(),
+                    title: chartTitle || 'مخطط بياني تحليلي',
+                    type: chartType,
+                    items: chartItems,
+                    createdAt: Date.now(),
+                  });
+                }
                 onClose();
               }}
-              className="px-4 py-1.5 rounded-lg bg-[#107c41] hover:bg-[#0e6b37] text-white text-xs font-bold transition shadow-xs"
+              className="px-4 py-1.5 rounded-lg bg-[#107c41] hover:bg-[#0e6b37] text-white text-xs font-bold transition shadow-xs cursor-pointer"
             >
               تأكيد وإدراج المخطط
             </button>

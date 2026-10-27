@@ -11,7 +11,7 @@ import { DataValidationModal } from './excel/DataValidationModal';
 import { RemoveDuplicatesModal } from './excel/RemoveDuplicatesModal';
 import { SparklinesModal } from './excel/SparklinesModal';
 import { NameManagerModal } from './excel/NameManagerModal';
-import { ChartModal } from './excel/ChartModal';
+import { ChartModal, ChartDefinition } from './excel/ChartModal';
 import { ExcelFindReplaceModal } from './excel/ExcelFindReplaceModal';
 import { TextToColumnsModal } from './excel/TextToColumnsModal';
 import { GoalSeekModal } from './excel/GoalSeekModal';
@@ -21,7 +21,9 @@ import {
   ArrowRightLeft,
   X,
   TrendingUp,
-  BarChart2
+  BarChart2,
+  Image as ImageIcon,
+  CheckCircle2
 } from 'lucide-react';
 
 interface Props {
@@ -32,8 +34,19 @@ interface Props {
   onOpenBackstage?: () => void;
 }
 
-const COLS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R'];
-const ROWS_COUNT = 50;
+const generateCols = (): string[] => {
+  const list: string[] = [];
+  for (let i = 0; i < 26; i++) {
+    list.push(String.fromCharCode(65 + i));
+  }
+  for (let i = 0; i < 26; i++) {
+    list.push('A' + String.fromCharCode(65 + i));
+  }
+  return list;
+};
+
+export const COLS = generateCols();
+export const MAX_EXCEL_ROWS = 1048576;
 
 const DEFAULT_EXCEL_PRESETS: Record<string, { label: string; data: SheetData }> = {
   sheet1: {
@@ -141,7 +154,15 @@ export const SheetsApp: React.FC<Props> = ({
   onSheetsChange,
   onOpenBackstage
 }) => {
-  const [activeSheetKey, setActiveSheetKey] = useState<string>('sheet1');
+  const [activeSheetKey, setActiveSheetKeyState] = useState<string>(() => {
+    return localVault.get('infinity_office_active_sheet_key', 'sheet1');
+  });
+
+  const setActiveSheetKey = (key: string) => {
+    setActiveSheetKeyState(key);
+    localVault.set('infinity_office_active_sheet_key', key);
+  };
+
   const [sheets, setSheets] = useState<Record<string, { label: string; data: SheetData }>>(() => {
     return initialSheets || localVault.get<Record<string, { label: string; data: SheetData }>>(
       localVault.KEYS.SHEETS_DATA,
@@ -154,7 +175,15 @@ export const SheetsApp: React.FC<Props> = ({
   const [zoom, setZoom] = useState<number>(initialZoom || 100);
 
   // Selection & cell states
-  const [selectedCell, setSelectedCell] = useState<string>('A4');
+  const [selectedCell, setSelectedCellState] = useState<string>(() => {
+    return localVault.get('infinity_office_selected_cell', 'A4');
+  });
+
+  const setSelectedCell = (cellId: string) => {
+    setSelectedCellState(cellId);
+    localVault.set('infinity_office_selected_cell', cellId);
+  };
+
   const [formulaInput, setFormulaInput] = useState<string>('');
   const [selectedRange, setSelectedRange] = useState<string[]>(['A4']);
   const [isDraggingRange, setIsDraggingRange] = useState<boolean>(false);
@@ -187,6 +216,7 @@ export const SheetsApp: React.FC<Props> = ({
   const [isEditingCell, setIsEditingCell] = useState<boolean>(false);
   const [showFxHelper, setShowFxHelper] = useState<boolean>(false);
   const formulaInputRef = useRef<HTMLInputElement>(null);
+  const gridContainerRef = useRef<HTMLDivElement>(null);
 
   // Modal dialog states
   const [isPivotTableOpen, setIsPivotTableOpen] = useState(false);
@@ -206,6 +236,18 @@ export const SheetsApp: React.FC<Props> = ({
     { name: 'إجمالي_المصروفات', refersTo: 'ورقة 1!$B$9:$E$9', scope: 'المصنف' },
     { name: 'رواتب_الموظفين', refersTo: 'ورقة 2!$B$4:$F$6', scope: 'المصنف' },
   ]);
+  const [visibleRowCount, setVisibleRowCount] = useState<number>(100);
+  const [tableNotification, setTableNotification] = useState<string | null>(null);
+  const [activeCharts, setActiveCharts] = useState<ChartDefinition[]>(() => {
+    return localVault.get('infinity_office_excel_charts_' + activeSheetKey, []);
+  });
+  const imageInputRef = useRef<HTMLInputElement>(null);
+
+  // Sync active charts when activeSheetKey changes
+  useEffect(() => {
+    const saved = localVault.get<ChartDefinition[]>('infinity_office_excel_charts_' + activeSheetKey, []);
+    setActiveCharts(saved);
+  }, [activeSheetKey]);
 
   // Active sheet & cell
   const currentSheet = sheets[activeSheetKey] || sheets[Object.keys(sheets)[0]];
@@ -630,7 +672,7 @@ export const SheetsApp: React.FC<Props> = ({
 
     // Identify rows with data in this column
     const rowsToSort: { row: number; val: any }[] = [];
-    for (let r = 4; r <= ROWS_COUNT; r++) {
+    for (let r = 4; r <= Math.min(visibleRowCount + 50, MAX_EXCEL_ROWS); r++) {
       const cid = `${targetCol}${r}`;
       if (data[cid]?.value !== undefined) {
         rowsToSort.push({ row: r, val: data[cid].value });
@@ -719,7 +761,7 @@ export const SheetsApp: React.FC<Props> = ({
       const origP = parseCellCoord(origCid);
       const newColIdx = origP.colIdx + dCol;
       const newRow = origP.row + dRow;
-      if (newColIdx >= 0 && newColIdx < COLS.length && newRow >= 1 && newRow <= ROWS_COUNT) {
+      if (newColIdx >= 0 && newColIdx < COLS.length && newRow >= 1 && newRow <= MAX_EXCEL_ROWS) {
         const newCid = `${COLS[newColIdx]}${newRow}`;
         nextData[newCid] = { ...clipboard.cells[origCid] };
       }
@@ -748,7 +790,7 @@ export const SheetsApp: React.FC<Props> = ({
       const origP = parseCellCoord(origCid);
       const newColIdx = origP.colIdx + dCol;
       const newRow = origP.row + dRow;
-      if (newColIdx >= 0 && newColIdx < COLS.length && newRow >= 1 && newRow <= ROWS_COUNT) {
+      if (newColIdx >= 0 && newColIdx < COLS.length && newRow >= 1 && newRow <= MAX_EXCEL_ROWS) {
         const newCid = `${COLS[newColIdx]}${newRow}`;
         const src = clipboard.cells[origCid];
         const current = nextData[newCid] || { value: '' };
@@ -807,6 +849,105 @@ export const SheetsApp: React.FC<Props> = ({
     alert('تمت إعادة حساب كافة المعادلات والصيغ الرياضية في المصنف بنجاح!');
   };
 
+  // Create Table (Alt + T or Ctrl + T)
+  const handleCreateTable = () => {
+    let startColIdx = rangeBounds.minColIdx;
+    let endColIdx = rangeBounds.maxColIdx;
+    let startRow = rangeBounds.minRow;
+    let endRow = rangeBounds.maxRow;
+
+    // If single cell, format a smart 4x5 table around it
+    if (startColIdx === endColIdx && startRow === endRow) {
+      endColIdx = Math.min(COLS.length - 1, startColIdx + 3);
+      endRow = Math.min(MAX_EXCEL_ROWS, startRow + 4);
+    }
+
+    const nextData = { ...data };
+    const allCells: string[] = [];
+
+    // Header row formatting
+    for (let c = startColIdx; c <= endColIdx; c++) {
+      const col = COLS[c];
+      const cellId = `${col}${startRow}`;
+      allCells.push(cellId);
+      const existing = nextData[cellId];
+      nextData[cellId] = {
+        ...(existing || { value: '' }),
+        value: existing?.value ? existing.value : `عمود ${c - startColIdx + 1}`,
+        bold: true,
+        bg: '#107c41',
+        color: '#ffffff',
+        align: 'center',
+        border: 'all',
+      };
+    }
+
+    // Body rows with zebra striping
+    for (let r = startRow + 1; r <= endRow; r++) {
+      const isZebra = (r - startRow) % 2 === 0;
+      for (let c = startColIdx; c <= endColIdx; c++) {
+        const col = COLS[c];
+        const cellId = `${col}${r}`;
+        allCells.push(cellId);
+        const existing = nextData[cellId];
+        nextData[cellId] = {
+          ...(existing || { value: '' }),
+          bg: isZebra ? '#f8fafc' : '#ffffff',
+          color: existing?.color || '#1e293b',
+          border: 'all',
+          align: existing?.align || 'center',
+        };
+      }
+    }
+
+    setShowFilterActive(true);
+    setSelectedRange(allCells);
+    saveSheets({ ...sheets, [activeSheetKey]: { ...currentSheet, data: nextData } });
+    
+    setTableNotification(`تم إنشاء وتنسيق جدول Excel القياسي بنجاح بنطاق (${COLS[startColIdx]}${startRow}:${COLS[endColIdx]}${endRow})! الاختصار المعتمد: Alt + T (أو Ctrl + T)`);
+    setTimeout(() => setTableNotification(null), 5000);
+  };
+
+  // Image Upload Handler
+  const handleImageFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const dataUrl = event.target?.result as string;
+      if (dataUrl) {
+        const nextData = {
+          ...data,
+          [selectedCell]: {
+            ...(data[selectedCell] || { value: '' }),
+            image: dataUrl,
+            value: data[selectedCell]?.value || file.name.replace(/\.[^/.]+$/, ''),
+          },
+        };
+        saveSheets({ ...sheets, [activeSheetKey]: { ...currentSheet, data: nextData } });
+        setTableNotification(`تم إدراج الصورة بنجاح في الخلية ${selectedCell}!`);
+        setTimeout(() => setTableNotification(null), 4000);
+      }
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';
+  };
+
+  // Insert Chart Handler
+  const handleInsertChart = (chart: ChartDefinition) => {
+    const updated = [...activeCharts, chart];
+    setActiveCharts(updated);
+    localVault.set('infinity_office_excel_charts_' + activeSheetKey, updated);
+    setTableNotification(`تم إدراج المخطط "${chart.title}" في ورقة العمل بنجاح!`);
+    setTimeout(() => setTableNotification(null), 4500);
+  };
+
+  const handleDeleteChart = (chartId: string) => {
+    const updated = activeCharts.filter((c) => c.id !== chartId);
+    setActiveCharts(updated);
+    localVault.set('infinity_office_excel_charts_' + activeSheetKey, updated);
+  };
+
   // Mouse Drag selection
   const calculateCellsBetween = (c1: string, c2: string): string[] => {
     const p1 = parseCellCoord(c1);
@@ -828,8 +969,21 @@ export const SheetsApp: React.FC<Props> = ({
   const handleGridCellMouseDown = (cellId: string, e: React.MouseEvent) => {
     if (e.button !== 0) return;
 
-    // Check if user is editing a formula and clicked another cell to reference it (Excel behavior)
-    const isFormulaMode = isEditingCell && formulaInput.startsWith('=');
+    // Check if user is typing or entering a formula and clicked another cell to reference it (Excel behavior)
+    // Works with single click immediately WITHOUT needing double-click!
+    const isFormulaMode = formulaInput.trim().startsWith('=') && (
+      isEditingCell ||
+      formulaInput.trim() === '=' ||
+      formulaInput.endsWith('(') ||
+      formulaInput.endsWith('+') ||
+      formulaInput.endsWith('-') ||
+      formulaInput.endsWith('*') ||
+      formulaInput.endsWith('/') ||
+      formulaInput.endsWith(',') ||
+      formulaInput.endsWith(':') ||
+      /[A-Za-z]+[0-9]+$/.test(formulaInput.trim())
+    );
+
     if (isFormulaMode) {
       if (cellId !== selectedCell) {
         e.preventDefault();
@@ -841,6 +995,8 @@ export const SheetsApp: React.FC<Props> = ({
 
         if (['=', '(', '+', '-', '*', '/', ',', ':'].includes(lastChar)) {
           updated = formulaInput + cellId;
+        } else if (trimmed.endsWith(')')) {
+          updated = formulaInput.slice(0, -1) + ',' + cellId + ')';
         } else if (/[A-Za-z]+[0-9]+$/.test(trimmed)) {
           // Replace previous cell coordinate with the newly clicked one
           updated = trimmed.replace(/[A-Za-z]+[0-9]+$/, cellId);
@@ -850,6 +1006,8 @@ export const SheetsApp: React.FC<Props> = ({
 
         setFormulaInput(updated);
         handleCellChange(selectedCell, updated);
+        setIsEditingCell(true);
+        setTimeout(() => gridContainerRef.current?.focus(), 0);
         return;
       }
     }
@@ -910,6 +1068,65 @@ export const SheetsApp: React.FC<Props> = ({
 
   // Excel-style Keyboard Navigation & Direct Typing
   const handleGridKeyDown = (e: React.KeyboardEvent) => {
+    // 0. Table Creation Shortcut: Alt + T or Ctrl + T
+    if ((e.altKey && e.key.toLowerCase() === 't') || ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 't')) {
+      e.preventDefault();
+      e.stopPropagation();
+      handleCreateTable();
+      return;
+    }
+
+    // 1. Direct formula operator & character typing without mouse
+    if (formulaInput.trim().startsWith('=')) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        // Auto-close missing parentheses if any (e.g. =SUM(G8+G7)
+        let finalFormula = formulaInput.trim();
+        const openCount = (finalFormula.match(/\(/g) || []).length;
+        const closeCount = (finalFormula.match(/\)/g) || []).length;
+        if (openCount > closeCount) {
+          finalFormula += ')'.repeat(openCount - closeCount);
+        }
+        setFormulaInput(finalFormula);
+        handleCellChange(selectedCell, finalFormula);
+        setIsEditingCell(false);
+        setShowAutocomplete(false);
+        const coords = parseCellCoord(selectedCell);
+        if (coords.row < MAX_EXCEL_ROWS) {
+          const nextRow = coords.row + 1;
+          if (nextRow >= visibleRowCount) {
+            setVisibleRowCount((v) => Math.min(MAX_EXCEL_ROWS, nextRow + 50));
+          }
+          const nextId = `${COLS[coords.colIdx]}${nextRow}`;
+          setSelectedCell(nextId);
+          setSelectedRange([nextId]);
+        }
+        setTimeout(() => gridContainerRef.current?.focus(), 0);
+        return;
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        setIsEditingCell(false);
+        setShowAutocomplete(false);
+        setFormulaInput(data[selectedCell]?.formula || data[selectedCell]?.value || '');
+        setTimeout(() => gridContainerRef.current?.focus(), 0);
+        return;
+      } else if (e.key === 'Backspace') {
+        e.preventDefault();
+        const updated = formulaInput.length > 1 ? formulaInput.slice(0, -1) : '';
+        setFormulaInput(updated);
+        handleCellChange(selectedCell, updated);
+        return;
+      } else if (['+', '-', '*', '/', '^', '%', '(', ')', ',', ':'].includes(e.key) || (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey)) {
+        // Direct typing of math operator (+, -, *, /) or characters after picking a cell
+        e.preventDefault();
+        const updated = formulaInput + e.key;
+        setFormulaInput(updated);
+        handleCellChange(selectedCell, updated);
+        setIsEditingCell(true);
+        return;
+      }
+    }
+
     if (isEditingCell) return;
 
     const coords = parseCellCoord(selectedCell);
@@ -921,7 +1138,10 @@ export const SheetsApp: React.FC<Props> = ({
       nextRow = Math.max(1, coords.row - 1);
     } else if (e.key === 'ArrowDown') {
       e.preventDefault();
-      nextRow = Math.min(ROWS_COUNT, coords.row + 1);
+      nextRow = Math.min(MAX_EXCEL_ROWS, coords.row + 1);
+      if (nextRow >= visibleRowCount) {
+        setVisibleRowCount((v) => Math.min(MAX_EXCEL_ROWS, nextRow + 50));
+      }
     } else if (e.key === 'ArrowLeft') {
       e.preventDefault();
       if (isRTL) {
@@ -941,7 +1161,10 @@ export const SheetsApp: React.FC<Props> = ({
       nextColIdx = Math.min(COLS.length - 1, coords.colIdx + 1);
     } else if (e.key === 'Enter') {
       e.preventDefault();
-      nextRow = Math.min(ROWS_COUNT, coords.row + 1);
+      nextRow = Math.min(MAX_EXCEL_ROWS, coords.row + 1);
+      if (nextRow >= visibleRowCount) {
+        setVisibleRowCount((v) => Math.min(MAX_EXCEL_ROWS, nextRow + 50));
+      }
     } else if (e.key === 'F2') {
       e.preventDefault();
       setIsEditingCell(true);
@@ -960,7 +1183,7 @@ export const SheetsApp: React.FC<Props> = ({
       setFormulaInput('');
       return;
     } else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
-      // Prevent browser default so character is typed exactly ONCE
+      // Direct typing into unselected cell starts edit mode immediately
       e.preventDefault();
       setIsEditingCell(true);
       handleCellChange(selectedCell, e.key);
@@ -981,6 +1204,7 @@ export const SheetsApp: React.FC<Props> = ({
       setSelectedCell(nextCellId);
       setSelectedRange([nextCellId]);
     }
+    setTimeout(() => gridContainerRef.current?.focus(), 0);
   };
 
   // Apply Fill Handle (Drag to Fill / Auto-fill down)
@@ -1183,6 +1407,8 @@ export const SheetsApp: React.FC<Props> = ({
   // Autocomplete typing in formula bar or cell
   const handleFormulaInputChange = (val: string) => {
     setFormulaInput(val);
+    // Real-time synchronization: typing in formula bar writes directly to active cell
+    handleCellChange(selectedCell, val);
 
     if (val.startsWith('=')) {
       // Match function name token after '=', '+', '-', '*', '/', '(', or ','
@@ -1361,6 +1587,8 @@ export const SheetsApp: React.FC<Props> = ({
         zoomLevel={zoom}
         onSetZoomLevel={setZoom}
         onRecalculateAll={handleRecalculateAll}
+        onInsertImage={() => imageInputRef.current?.click()}
+        onCreateTable={handleCreateTable}
       />
 
       {/* 2. Excel Formula Bar */}
@@ -1399,6 +1627,38 @@ export const SheetsApp: React.FC<Props> = ({
               dir="ltr"
               value={formulaInput}
               onChange={(e) => handleFormulaInputChange(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  let finalFormula = formulaInput.trim();
+                  if (finalFormula.startsWith('=')) {
+                    const openCount = (finalFormula.match(/\(/g) || []).length;
+                    const closeCount = (finalFormula.match(/\)/g) || []).length;
+                    if (openCount > closeCount) {
+                      finalFormula += ')'.repeat(openCount - closeCount);
+                    }
+                  }
+                  setFormulaInput(finalFormula);
+                  handleCellChange(selectedCell, finalFormula);
+                  setShowAutocomplete(false);
+                  const coords = parseCellCoord(selectedCell);
+                  if (coords.row < MAX_EXCEL_ROWS) {
+                    const nextRow = coords.row + 1;
+                    if (nextRow >= visibleRowCount) {
+                      setVisibleRowCount((v) => Math.min(MAX_EXCEL_ROWS, nextRow + 50));
+                    }
+                    const nextId = `${COLS[coords.colIdx]}${nextRow}`;
+                    setSelectedCell(nextId);
+                    setSelectedRange([nextId]);
+                  }
+                  setTimeout(() => gridContainerRef.current?.focus(), 0);
+                } else if (e.key === 'Escape') {
+                  e.preventDefault();
+                  setShowAutocomplete(false);
+                  setFormulaInput(data[selectedCell]?.formula || data[selectedCell]?.value || '');
+                  setTimeout(() => gridContainerRef.current?.focus(), 0);
+                }
+              }}
               placeholder="=SUM(B4:B8), =AVERAGE(C4:C8), =IF(C4>1000,'فائض','ضمن الحد')"
               className="w-full bg-white border border-gray-300 rounded px-3 py-1 font-mono text-xs text-gray-900 outline-none focus:border-[#107c41] focus:ring-1 focus:ring-[#107c41] text-left"
               style={{ direction: 'ltr', textAlign: 'left' }}
@@ -1458,11 +1718,82 @@ export const SheetsApp: React.FC<Props> = ({
         </div>
       )}
 
+      {/* Toast Notification for Table / Image / Chart actions */}
+      {tableNotification && (
+        <div className="bg-emerald-700 text-white px-4 py-2 text-xs font-bold flex items-center justify-between shadow-md transition-all animate-in fade-in slide-in-from-top-1 z-30">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-emerald-200" />
+            <span>{tableNotification}</span>
+          </div>
+          <button onClick={() => setTableNotification(null)} className="hover:bg-white/20 p-1 rounded cursor-pointer">
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
+
+      {/* Embedded Active Charts Gallery */}
+      {activeCharts.length > 0 && (
+        <div className="bg-gray-50 border-b border-gray-300 p-2.5 flex flex-wrap gap-3 items-start shrink-0 z-10 max-h-72 overflow-y-auto">
+          {activeCharts.map((ch) => {
+            const maxVal = Math.max(...ch.items.map((i) => i.val), 1);
+            return (
+              <div key={ch.id} className="bg-white border-2 border-[#107c41]/50 rounded-lg shadow-md p-2.5 w-80 sm:w-88 flex flex-col gap-1.5 relative">
+                <div className="flex items-center justify-between border-b border-gray-100 pb-1.5">
+                  <div className="flex items-center gap-1.5 font-bold text-xs text-gray-800">
+                    <BarChart2 className="w-4 h-4 text-[#107c41]" />
+                    <span className="truncate">{ch.title}</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 font-semibold">{ch.type}</span>
+                    <button
+                      onClick={() => handleDeleteChart(ch.id)}
+                      className="p-1 hover:bg-red-50 text-red-500 rounded cursor-pointer"
+                      title="حذف المخطط"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Live Mini Chart Preview */}
+                <div className="h-28 pt-1 flex items-end justify-between gap-1 border-b border-gray-200 pb-1">
+                  {ch.items.slice(0, 8).map((it, idx) => {
+                    const heightPercent = Math.max(10, Math.round((it.val / maxVal) * 90));
+                    return (
+                      <div key={idx} className="flex-1 flex flex-col items-center h-full justify-end group">
+                        <span className="text-[9px] font-mono text-gray-600 font-bold mb-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                          {it.val}
+                        </span>
+                        <div
+                          className="w-full bg-[#107c41] rounded-t-xs hover:bg-emerald-500 transition-all cursor-pointer shadow-xs"
+                          style={{ height: `${heightPercent}%` }}
+                          title={`${it.label}: ${it.val}`}
+                        />
+                        <span className="text-[8px] text-gray-500 truncate w-full text-center mt-1" title={it.label}>
+                          {it.label}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
       {/* 3. Main Spreadsheet Grid */}
       <div 
+        ref={gridContainerRef}
         tabIndex={0}
         onKeyDown={handleGridKeyDown}
         onMouseUp={handleGridMouseUp}
+        onScroll={(e) => {
+          const target = e.currentTarget;
+          if (target.scrollTop + target.clientHeight >= target.scrollHeight - 350) {
+            setVisibleRowCount((prev) => Math.min(MAX_EXCEL_ROWS, prev + 100));
+          }
+        }}
         className="flex-1 overflow-auto bg-gray-100 p-1 relative outline-none focus:ring-0"
         style={{ transform: `scale(${zoom / 100})`, transformOrigin: isRTL ? 'top right' : 'top left' }}
       >
@@ -1505,7 +1836,7 @@ export const SheetsApp: React.FC<Props> = ({
             </thead>
           )}
           <tbody>
-            {Array.from({ length: ROWS_COUNT }).map((_, rIdx) => {
+            {Array.from({ length: visibleRowCount }).map((_, rIdx) => {
               const rowNum = rIdx + 1;
               const isRowInRange = rowNum >= rangeBounds.minRow && rowNum <= rangeBounds.maxRow;
 
@@ -1618,7 +1949,13 @@ export const SheetsApp: React.FC<Props> = ({
                           <div className="relative w-full h-full flex items-center">
                             {isSelected && isEditingCell ? (
                               <input
-                                autoFocus
+                                ref={(el) => {
+                                  if (el) {
+                                    el.focus();
+                                    const len = el.value.length;
+                                    el.setSelectionRange(len, len);
+                                  }
+                                }}
                                 type="text"
                                 value={
                                   showFormulasMode && cell?.formula
@@ -1654,13 +1991,28 @@ export const SheetsApp: React.FC<Props> = ({
 
                                   if (e.key === 'Enter') {
                                     e.preventDefault();
+                                    let finalFormula = formulaInput.trim();
+                                    if (finalFormula.startsWith('=')) {
+                                      const openCount = (finalFormula.match(/\(/g) || []).length;
+                                      const closeCount = (finalFormula.match(/\)/g) || []).length;
+                                      if (openCount > closeCount) {
+                                        finalFormula += ')'.repeat(openCount - closeCount);
+                                      }
+                                    }
+                                    setFormulaInput(finalFormula);
+                                    handleCellChange(cellId, finalFormula);
                                     setIsEditingCell(false);
                                     const coords = parseCellCoord(cellId);
-                                    if (coords.row < ROWS_COUNT) {
-                                      const nextId = `${COLS[coords.colIdx]}${coords.row + 1}`;
+                                    if (coords.row < MAX_EXCEL_ROWS) {
+                                      const nextRow = coords.row + 1;
+                                      if (nextRow >= visibleRowCount) {
+                                        setVisibleRowCount((v) => Math.min(MAX_EXCEL_ROWS, nextRow + 50));
+                                      }
+                                      const nextId = `${COLS[coords.colIdx]}${nextRow}`;
                                       setSelectedCell(nextId);
                                       setSelectedRange([nextId]);
                                     }
+                                    setTimeout(() => gridContainerRef.current?.focus(), 0);
                                   } else if (e.key === 'Tab') {
                                     e.preventDefault();
                                     setIsEditingCell(false);
@@ -1670,9 +2022,11 @@ export const SheetsApp: React.FC<Props> = ({
                                       setSelectedCell(nextId);
                                       setSelectedRange([nextId]);
                                     }
+                                    setTimeout(() => gridContainerRef.current?.focus(), 0);
                                   } else if (e.key === 'Escape') {
                                     setIsEditingCell(false);
                                     setShowAutocomplete(false);
+                                    setTimeout(() => gridContainerRef.current?.focus(), 0);
                                   }
                                 }}
                                 className={`w-full bg-white border border-[#107c41] outline-none text-xs px-1 text-gray-900 font-mono shadow-xs z-30 ${
@@ -1682,11 +2036,19 @@ export const SheetsApp: React.FC<Props> = ({
                             ) : (
                               <div
                                 onDoubleClick={() => setIsEditingCell(true)}
-                                className={`w-full px-1 truncate text-xs select-none ${
+                                className={`w-full px-1 truncate text-xs select-none flex items-center gap-1.5 ${
                                   isRTL ? 'text-right' : 'text-left'
                                 }`}
                               >
-                                {showFormulasMode && cell?.formula ? cell.formula : formatCellValue(cell)}
+                                {cell?.image && (
+                                  <img
+                                    src={cell.image}
+                                    alt="خلية"
+                                    className="w-5 h-5 rounded object-cover border border-emerald-600 shrink-0 shadow-2xs"
+                                    title="صورة مدرجة في الخلية"
+                                  />
+                                )}
+                                <span className="truncate">{showFormulasMode && cell?.formula ? cell.formula : formatCellValue(cell)}</span>
                               </div>
                             )}
 
@@ -1817,12 +2179,25 @@ export const SheetsApp: React.FC<Props> = ({
               ) : null}
             </div>
           ) : (
-            <div className="text-[10px] text-gray-500 font-mono hidden sm:inline">
-              جاهز (Ready) | محرك Excel السيادي 100% Offline
+            <div className="text-[10px] text-gray-500 font-mono hidden sm:flex items-center gap-2">
+              <span className="text-[#107c41] font-bold">● جاهز (Ready)</span>
+              <span>|</span>
+              <span>الصفوف: {visibleRowCount.toLocaleString('ar-EG')} من 1,048,576 (Excel 365)</span>
+              <span>|</span>
+              <span>الأعمدة: A إلى AZ (52 عمود)</span>
             </div>
           )}
         </div>
       </div>
+
+      {/* Hidden File Input for Image Insertion */}
+      <input
+        ref={imageInputRef}
+        type="file"
+        accept="image/*"
+        onChange={handleImageFileUpload}
+        className="hidden"
+      />
 
       {/* 5. All Excel Modals */}
       <PivotTableModal
@@ -1907,7 +2282,7 @@ export const SheetsApp: React.FC<Props> = ({
           const nextData = { ...data };
           let removedCount = 0;
 
-          for (let r = 4; r <= ROWS_COUNT; r++) {
+          for (let r = 4; r <= Math.min(visibleRowCount + 50, MAX_EXCEL_ROWS); r++) {
             const key = selectedCols.map((c) => nextData[`${c}${r}`]?.value || '').join('|');
             if (key.trim()) {
               if (seen.has(key)) {
@@ -1959,6 +2334,7 @@ export const SheetsApp: React.FC<Props> = ({
         selectedRange={selectedRange}
         data={data}
         activeSheetTitle={currentSheet.label}
+        onInsertChart={handleInsertChart}
       />
 
       <ExcelFindReplaceModal
