@@ -384,6 +384,11 @@ export const DocsApp: React.FC<Props> = ({
     const file = e.target.files?.[0];
     if (!file) return;
 
+    if (file.name.toLowerCase().endsWith('.pdf')) {
+      alert('هذا الملف بصيغة PDF. يرجى التبديل إلى تطبيق PDF Studio (Acrobat) من الشريط العلوي لاستعراضه وتوقيعه واعتماده رسمياً.');
+      return;
+    }
+
     try {
       let parsedHtml = '';
       if (file.name.endsWith('.docx') || file.name.endsWith('.doc')) {

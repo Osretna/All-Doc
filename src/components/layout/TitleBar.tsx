@@ -95,8 +95,8 @@ export const TitleBar: React.FC<Props> = ({
                 ∞
               </div>
               <div className="flex flex-col leading-none">
-                <span className="font-black text-[12px] tracking-tight text-gray-900">INFINITY</span>
-                <span className="text-[8px] text-[#0078d4] font-bold">OFFICE 365</span>
+                <span className="font-black text-[13px] tracking-tight text-gray-900">MY-DOC</span>
+                <span className="text-[8px] text-[#0078d4] font-bold">SOVEREIGN SUITE</span>
               </div>
             </div>
           </div>

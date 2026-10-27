@@ -94,7 +94,7 @@ export const BackstageModal: React.FC<Props> = ({
             <h2 className="text-lg font-bold flex items-center gap-2">
               <span>{currentConfig.name}</span>
             </h2>
-            <p className="text-[11px] text-white/80">جناح إنفينيتي أوفيس المكتبي السيادي</p>
+            <p className="text-[11px] text-white/80">جناح MY-DOC المكتبي السيادي</p>
           </div>
 
           {/* Navigation Items */}
@@ -386,7 +386,7 @@ export const BackstageModal: React.FC<Props> = ({
                 <div>
                   <h1 className="text-2xl font-black text-gray-900 mb-1">فتح ملف محلي من جهازك</h1>
                   <p className="text-sm text-gray-500">
-                    افتح ملفات Word و Excel و PowerPoint الحقيقية من جهازك دون تشويه الخطوط أو عكس النصوص وبدون إرسال أي بايت لسيرفرات خارجية.
+                    افتح ملفات Word و Excel و PowerPoint و Access و PDF (Acrobat) و Photoshop وتصاميم الصور الحقيقية من جهازك دون تشويه الخطوط أو عكس النصوص وبدون إرسال أي بايت لسيرفرات خارجية.
                   </p>
                 </div>
               </div>

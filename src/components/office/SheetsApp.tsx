@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { SheetData, SheetCell } from '../../types';
 import { localVault } from '../../utils/storage';
 import { evaluateExcelFormula, parseRange, EXCEL_FUNCTIONS, ExcelFunctionDef } from '../../utils/excelEngine';
@@ -20,7 +20,8 @@ import {
   ArrowRightLeft,
   FunctionSquare,
   HelpCircle,
-  FileUp
+  FileUp,
+  TableProperties
 } from 'lucide-react';
 
 interface Props {
@@ -123,6 +124,16 @@ const DEFAULT_EXCEL_PRESETS: Record<string, { label: string; data: SheetData }> 
   },
 };
 
+// Helper: parse cell like "B4" into { col: 'B', colIdx: 1, row: 4 }
+function parseCellCoord(cellId: string): { col: string; colIdx: number; row: number } {
+  const match = cellId.match(/([A-Z]+)(\d+)/);
+  if (!match) return { col: 'A', colIdx: 0, row: 1 };
+  const col = match[1];
+  const row = parseInt(match[2], 10);
+  const colIdx = COLS.indexOf(col);
+  return { col, colIdx: colIdx !== -1 ? colIdx : 0, row };
+}
+
 export const SheetsApp: React.FC<Props> = ({ 
   fontFamily, 
   zoomLevel,
@@ -155,6 +166,12 @@ export const SheetsApp: React.FC<Props> = ({
   const [showFormulasMode, setShowFormulasMode] = useState<boolean>(false);
   const [showFilterActive, setShowFilterActive] = useState<boolean>(false);
 
+  // Range selection & mouse drag states
+  const [isDraggingRange, setIsDraggingRange] = useState<boolean>(false);
+  const [dragStartCell, setDragStartCell] = useState<string | null>(null);
+  const [dragCurrentCell, setDragCurrentCell] = useState<string | null>(null);
+  const [selectedRange, setSelectedRange] = useState<string[]>(['A4']);
+
   // Excel Formula Autocomplete state
   const [matchingFunctions, setMatchingFunctions] = useState<ExcelFunctionDef[]>([]);
   const [selectedFunctionIndex, setSelectedFunctionIndex] = useState<number>(0);
@@ -163,14 +180,74 @@ export const SheetsApp: React.FC<Props> = ({
   const [isEditingCell, setIsEditingCell] = useState<boolean>(false);
   const formulaInputRef = useRef<HTMLInputElement>(null);
 
-  // Cell reference selection & dragging states for Excel formulas
+  // Formula origin tracking
   const [formulaOriginCell, setFormulaOriginCell] = useState<string>('A4');
   const [formulaOriginSheet, setFormulaOriginSheet] = useState<string>('sheet1');
-  const [isDraggingRange, setIsDraggingRange] = useState<boolean>(false);
-  const [dragStartCell, setDragStartCell] = useState<string | null>(null);
 
   const currentSheet = sheets[activeSheetKey] || sheets[Object.keys(sheets)[0]];
   const data = currentSheet ? currentSheet.data : {};
+
+  // Compute rectangular bounds of selectedRange
+  const rangeBounds = useMemo(() => {
+    if (!selectedRange || selectedRange.length === 0) {
+      const p = parseCellCoord(selectedCell);
+      return { minColIdx: p.colIdx, maxColIdx: p.colIdx, minRow: p.row, maxRow: p.row, rangeStr: selectedCell };
+    }
+
+    let minC = 999;
+    let maxC = -1;
+    let minR = 999;
+    let maxR = -1;
+
+    selectedRange.forEach((c) => {
+      const p = parseCellCoord(c);
+      if (p.colIdx < minC) minC = p.colIdx;
+      if (p.colIdx > maxC) maxC = p.colIdx;
+      if (p.row < minR) minR = p.row;
+      if (p.row > maxR) maxR = p.row;
+    });
+
+    const start = `${COLS[minC]}${minR}`;
+    const end = `${COLS[maxC]}${maxR}`;
+    const rangeStr = start === end ? start : `${start}:${end}`;
+
+    return { minColIdx: minC, maxColIdx: maxC, minRow: minR, maxRow: maxR, rangeStr };
+  }, [selectedRange, selectedCell]);
+
+  // Live Statistics for Selected Cells (AVERAGE, COUNT, SUM, MIN, MAX)
+  const rangeStats = useMemo(() => {
+    if (selectedRange.length <= 1) return null;
+
+    const nums: number[] = [];
+    let filledCount = 0;
+
+    selectedRange.forEach((cid) => {
+      const c = data[cid];
+      if (c && c.value !== undefined && c.value !== '') {
+        filledCount++;
+        const num = parseFloat(String(c.value).replace(/[^0-9.-]+/g, ''));
+        if (!isNaN(num)) {
+          nums.push(num);
+        }
+      }
+    });
+
+    if (nums.length === 0) return { count: filledCount, numsCount: 0, sum: 0, avg: 0, min: 0, max: 0 };
+
+    const sum = nums.reduce((a, b) => a + b, 0);
+    const avg = sum / nums.length;
+    const min = Math.min(...nums);
+    const max = Math.max(...nums);
+
+    return {
+      count: filledCount,
+      numsCount: nums.length,
+      sum: Math.round(sum * 100) / 100,
+      avg: Math.round(avg * 100) / 100,
+      min,
+      max,
+    };
+  }, [selectedRange, data]);
 
   // Auto-recalculate formula cells on load or sheet change
   useEffect(() => {
@@ -187,7 +264,6 @@ export const SheetsApp: React.FC<Props> = ({
     const colors = ['#2563eb', '#16a34a', '#9333ea', '#ea580c', '#0891b2', '#e11d48'];
     const cellMap: Record<string, string> = {};
 
-    // Match ranges like B4:B8 or Sheet1!B4:B8 or individual cells like B4
     const tokenRegex = /(?:'([^']+)'|([A-Za-z0-9_]+))!([A-Z]+[0-9]+(?::[A-Z]+[0-9]+)?)|([A-Z]+[0-9]+(?::[A-Z]+[0-9]+)?)/gi;
     let match: RegExpExecArray | null;
     let colorIdx = 0;
@@ -198,7 +274,6 @@ export const SheetsApp: React.FC<Props> = ({
       const color = colors[colorIdx % colors.length];
       colorIdx++;
 
-      // If formula references another sheet, only highlight if active sheet matches
       if (sheetName) {
         const isCurrent = currentSheet.label.toLowerCase() === sheetName.toLowerCase() ||
                           activeSheetKey.toLowerCase() === sheetName.toLowerCase();
@@ -220,13 +295,31 @@ export const SheetsApp: React.FC<Props> = ({
 
   const referencedCellsMap = getReferencedCellsMap();
 
+  // Helper: calculate rectangular cells between two cell coordinates
+  const calculateCellsBetween = (c1: string, c2: string): string[] => {
+    const p1 = parseCellCoord(c1);
+    const p2 = parseCellCoord(c2);
+
+    const minC = Math.min(p1.colIdx, p2.colIdx);
+    const maxC = Math.max(p1.colIdx, p2.colIdx);
+    const minR = Math.min(p1.row, p2.row);
+    const maxR = Math.max(p1.row, p2.row);
+
+    const cells: string[] = [];
+    for (let r = minR; r <= maxR; r++) {
+      for (let c = minC; c <= maxC; c++) {
+        cells.push(`${COLS[c]}${r}`);
+      }
+    }
+    return cells;
+  };
+
   // Handle formula typing and autocomplete suggestions
   const handleFormulaInputChange = (val: string) => {
     setFormulaInput(val);
     handleCellChange(formulaOriginCell || selectedCell, val);
 
     if (val.startsWith('=')) {
-      // Find trailing function prefix: e.g. "=S" or "=SUM(" or "=A1+AV"
       const match = val.match(/([A-Za-z]+)$/);
       if (match) {
         const prefix = match[1].toUpperCase();
@@ -240,7 +333,6 @@ export const SheetsApp: React.FC<Props> = ({
         }
       }
 
-      // Check if inside a function call for parameter syntax tooltip
       const funcCallMatch = val.match(/([A-Z]+)\s*\([^)]*$/i);
       if (funcCallMatch) {
         const fnName = funcCallMatch[1].toUpperCase();
@@ -338,7 +430,6 @@ export const SheetsApp: React.FC<Props> = ({
       },
     };
 
-    // Cascade recalculation across other formula cells
     const fullyComputed = recalculateSheet(nextData);
 
     const updatedSheets = {
@@ -346,6 +437,28 @@ export const SheetsApp: React.FC<Props> = ({
       [activeSheetKey]: {
         ...currentSheet,
         data: fullyComputed,
+      },
+    };
+    saveSheets(updatedSheets);
+  };
+
+  // Bulk format application across entire selected range (e.g. bold, currency, background)
+  const handleFormatRange = (key: keyof SheetCell, value: any) => {
+    const targets = selectedRange.length > 0 ? selectedRange : [selectedCell];
+    const nextData = { ...data };
+
+    targets.forEach((cid) => {
+      nextData[cid] = {
+        ...(nextData[cid] || { value: '' }),
+        [key]: value,
+      };
+    });
+
+    const updatedSheets = {
+      ...sheets,
+      [activeSheetKey]: {
+        ...currentSheet,
+        data: nextData,
       },
     };
     saveSheets(updatedSheets);
@@ -359,12 +472,10 @@ export const SheetsApp: React.FC<Props> = ({
       const prefix = isOtherSheet ? `'${targetSheet.label}'!` : '';
       const ref = `${prefix}${cellId}`;
 
-      // Check if formula ends with an operator, opening paren, or comma
       if (/[=+\-*/(,;><&]$/.test(formulaInput.trim())) {
         const nextFormula = formulaInput + ref;
         handleFormulaInputChange(nextFormula);
       } else {
-        // If user already had a reference and clicks a different cell without typing an operator, replace it
         const replaced = formulaInput.replace(/(?:'[^']+'!)?[A-Z]+[0-9]+(?::[A-Z]+[0-9]+)?$/i, ref);
         handleFormulaInputChange(replaced);
       }
@@ -373,20 +484,38 @@ export const SheetsApp: React.FC<Props> = ({
     }
 
     setSelectedCell(cellId);
+    setSelectedRange([cellId]);
     setFormulaOriginCell(cellId);
     setFormulaOriginSheet(activeSheetKey);
   };
 
-  const handleGridCellMouseDown = (cellId: string) => {
+  // MOUSE DOWN on grid cell: starts dragging selection
+  const handleGridCellMouseDown = (cellId: string, e: React.MouseEvent) => {
+    if (e.button !== 0) return; // only left click
+    setIsDraggingRange(true);
+    setDragStartCell(cellId);
+    setDragCurrentCell(cellId);
+
     if (formulaInput.startsWith('=')) {
-      setIsDraggingRange(true);
-      setDragStartCell(cellId);
       handleGridCellClickOrSelect(cellId);
+    } else {
+      setSelectedCell(cellId);
+      setSelectedRange([cellId]);
+      setFormulaOriginCell(cellId);
+      setFormulaOriginSheet(activeSheetKey);
     }
   };
 
+  // MOUSE ENTER during drag: expands bounding box
   const handleGridCellMouseEnter = (cellId: string) => {
-    if (isDraggingRange && dragStartCell && formulaInput.startsWith('=')) {
+    if (!isDraggingRange || !dragStartCell) return;
+    setDragCurrentCell(cellId);
+
+    const cells = calculateCellsBetween(dragStartCell, cellId);
+    setSelectedRange(cells);
+
+    // If writing a formula, update the range string in the formula
+    if (formulaInput.startsWith('=')) {
       const targetSheet = sheets[activeSheetKey];
       const isOtherSheet = formulaOriginSheet && formulaOriginSheet !== activeSheetKey;
       const prefix = isOtherSheet ? `'${targetSheet.label}'!` : '';
@@ -397,10 +526,21 @@ export const SheetsApp: React.FC<Props> = ({
     }
   };
 
+  // MOUSE UP: ends dragging
   const handleGridMouseUp = () => {
     setIsDraggingRange(false);
-    setDragStartCell(null);
   };
+
+  // Global Mouse Up Listener to prevent stuck drag
+  useEffect(() => {
+    const onWindowMouseUp = () => {
+      if (isDraggingRange) {
+        setIsDraggingRange(false);
+      }
+    };
+    window.addEventListener('mouseup', onWindowMouseUp);
+    return () => window.removeEventListener('mouseup', onWindowMouseUp);
+  }, [isDraggingRange]);
 
   // Microsoft Excel Keyboard Shortcuts
   useEffect(() => {
@@ -421,7 +561,7 @@ export const SheetsApp: React.FC<Props> = ({
         return;
       }
 
-      // 3. Ctrl + D : Fill Down (Copy from cell above)
+      // 3. Ctrl + D : Fill Down
       if ((e.ctrlKey || e.metaKey) && (e.key === 'd' || e.key === 'D')) {
         e.preventDefault();
         const m = selectedCell.match(/([A-Z]+)(\d+)/);
@@ -440,7 +580,7 @@ export const SheetsApp: React.FC<Props> = ({
         return;
       }
 
-      // 4. Ctrl + R : Fill Right (Copy from cell to left)
+      // 4. Ctrl + R : Fill Right
       if ((e.ctrlKey || e.metaKey) && (e.key === 'r' || e.key === 'R')) {
         e.preventDefault();
         const m = selectedCell.match(/([A-Z]+)(\d+)/);
@@ -461,17 +601,26 @@ export const SheetsApp: React.FC<Props> = ({
         return;
       }
 
-      // 5. Alt + = : AutoSum
+      // 5. Alt + = : AutoSum (Smart for selected range or cell above)
       if (e.altKey && (e.key === '=' || e.key === '+')) {
         e.preventDefault();
-        const m = selectedCell.match(/([A-Z]+)(\d+)/);
-        if (m) {
-          const col = m[1];
-          const row = parseInt(m[2], 10);
-          if (row > 1) {
-            const formula = `=SUM(${col}4:${col}${row - 1})`;
-            handleCellChange(selectedCell, formula);
-            setFormulaInput(formula);
+        if (selectedRange.length > 1) {
+          // Put SUM in row right after maxRow
+          const col = COLS[rangeBounds.minColIdx];
+          const targetCell = `${col}${rangeBounds.maxRow + 1}`;
+          const formula = `=SUM(${rangeBounds.rangeStr})`;
+          handleCellChange(targetCell, formula);
+          setSelectedCell(targetCell);
+        } else {
+          const m = selectedCell.match(/([A-Z]+)(\d+)/);
+          if (m) {
+            const col = m[1];
+            const row = parseInt(m[2], 10);
+            if (row > 1) {
+              const formula = `=SUM(${col}4:${col}${row - 1})`;
+              handleCellChange(selectedCell, formula);
+              setFormulaInput(formula);
+            }
           }
         }
         return;
@@ -487,8 +636,8 @@ export const SheetsApp: React.FC<Props> = ({
       // 7. Ctrl + T : Convert to Table format
       if ((e.ctrlKey || e.metaKey) && (e.key === 't' || e.key === 'T')) {
         e.preventDefault();
-        handleFormat('bg', '#e2e8f0');
-        handleFormat('bold', true);
+        handleFormatRange('bg', '#e2e8f0');
+        handleFormatRange('bold', true);
         alert('تم تطبيق تنسيق جدول Excel (Ctrl+T) على النطاق المحدد!');
         return;
       }
@@ -496,20 +645,14 @@ export const SheetsApp: React.FC<Props> = ({
       // 8. Ctrl + Shift + $ : Currency Format
       if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === '$' || e.key === '4')) {
         e.preventDefault();
-        const currentVal = data[selectedCell]?.value || '';
-        if (currentVal && !currentVal.includes('ر.س')) {
-          handleCellChange(selectedCell, `${currentVal} ر.س`);
-        }
+        handleFormatRange('format', 'currency-sar');
         return;
       }
 
       // 9. Ctrl + Shift + % : Percentage Format
       if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === '%' || e.key === '5')) {
         e.preventDefault();
-        const currentVal = data[selectedCell]?.value || '';
-        if (currentVal && !currentVal.includes('%')) {
-          handleCellChange(selectedCell, `${currentVal}%`);
-        }
+        handleFormatRange('format', 'percent');
         return;
       }
 
@@ -520,25 +663,18 @@ export const SheetsApp: React.FC<Props> = ({
         return;
       }
 
-      // 11. F4 : Cycle absolute references ($A$1)
+      // 11. F4 : Cycle Absolute References ($A$1 -> A$1 -> $A1 -> A1)
       if (e.key === 'F4') {
         e.preventDefault();
         if (formulaInput.startsWith('=')) {
-          const lastRefMatch = formulaInput.match(/(\$?)([A-Z]+)(\$?)(\d+)$/);
-          if (lastRefMatch) {
-            const hasColDollar = !!lastRefMatch[1];
-            const col = lastRefMatch[2];
-            const hasRowDollar = !!lastRefMatch[3];
-            const row = lastRefMatch[4];
-            let nextRef = '';
-            if (!hasColDollar && !hasRowDollar) nextRef = `$${col}$${row}`;
-            else if (hasColDollar && hasRowDollar) nextRef = `${col}$${row}`;
-            else if (!hasColDollar && hasRowDollar) nextRef = `$${col}${row}`;
-            else nextRef = `${col}${row}`;
-
-            const replaced = formulaInput.replace(/(\$?)([A-Z]+)(\$?)(\d+)$/, nextRef);
-            handleFormulaInputChange(replaced);
-          }
+          const refRegex = /(\$?)([A-Z]+)(\$?)(\d+)/g;
+          const updated = formulaInput.replace(refRegex, (match, d1, col, d2, row) => {
+            if (!d1 && !d2) return `$${col}$${row}`;
+            if (d1 && d2) return `${col}$${row}`;
+            if (!d1 && d2) return `$${col}${row}`;
+            return `${col}${row}`;
+          });
+          handleFormulaInputChange(updated);
         }
         return;
       }
@@ -546,27 +682,9 @@ export const SheetsApp: React.FC<Props> = ({
 
     window.addEventListener('keydown', handleExcelGlobalKeys);
     return () => window.removeEventListener('keydown', handleExcelGlobalKeys);
-  }, [selectedCell, data, formulaInput, activeSheetKey]);
+  }, [selectedCell, selectedRange, rangeBounds, data, formulaInput]);
 
-  const handleFormat = (prop: keyof SheetCell, value: any) => {
-    const cell = data[selectedCell] || { value: '' };
-    const nextData = {
-      ...data,
-      [selectedCell]: {
-        ...cell,
-        [prop]: value,
-      },
-    };
-    saveSheets({
-      ...sheets,
-      [activeSheetKey]: {
-        ...currentSheet,
-        data: nextData,
-      },
-    });
-  };
-
-  // Real Excel .xlsx / .csv file opener
+  // Open Real Excel File from Local Device (.xlsx, .xls, .csv)
   const handleOpenExcelFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -576,77 +694,102 @@ export const SheetsApp: React.FC<Props> = ({
       if (Object.keys(parsedSheets).length > 0) {
         saveSheets(parsedSheets);
         setActiveSheetKey(Object.keys(parsedSheets)[0]);
-        alert(`تم فتح ملف إكسيل "${file.name}" بنجاح وتضمين ${Object.keys(parsedSheets).length} ورقة عمل!`);
+        setSelectedCell('A1');
+        setSelectedRange(['A1']);
+        alert(`تم فتح ملف Excel "${file.name}" واستيراد ${Object.keys(parsedSheets).length} أوراق عمل بنجاح!`);
       } else {
         alert('لم يتم العثور على أوراق عمل داخل الملف.');
       }
     } catch (err) {
       console.error(err);
-      alert('حدث خطأ أثناء قراءة ملف Excel. تأكد من سلامة الملف.');
+      alert('حدث خطأ أثناء فتح ملف Excel.');
     }
   };
 
   const handleAddSheet = () => {
-    const newKey = `sheet_${Date.now()}`;
-    const newSheet = {
-      label: `ورقة ${Object.keys(sheets).length + 1}`,
-      data: {
-        'A1': { value: 'ورقة عمل جديدة', bold: true, bg: '#107c41', color: '#ffffff' },
+    const sheetCount = Object.keys(sheets).length + 1;
+    const newKey = `sheet${sheetCount}`;
+    const newSheets = {
+      ...sheets,
+      [newKey]: {
+        label: `ورقة ${sheetCount}`,
+        data: {},
       },
     };
-    const updated = { ...sheets, [newKey]: newSheet };
-    saveSheets(updated);
+    saveSheets(newSheets);
     setActiveSheetKey(newKey);
   };
 
   const exportCSV = () => {
     let csv = '';
-    for (let r = 1; r <= 30; r++) {
-      const rowVals = COLS.map((c) => `"${data[`${c}${r}`]?.value || ''}"`);
+    for (let r = 1; r <= ROWS_COUNT; r++) {
+      const rowVals = COLS.map((c) => {
+        const val = data[`${c}${r}`]?.value || '';
+        return `"${String(val).replace(/"/g, '""')}"`;
+      });
       csv += rowVals.join(',') + '\n';
     }
-    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `${currentSheet.label.replace(/\s+/g, '_')}.csv`;
+    link.download = `${currentSheet.label}.csv`;
     link.click();
   };
 
-  // Chart data extraction
-  const chartItems = [
-    { label: data['A4']?.value || 'بند 1', val: parseFloat(data['C4']?.value || data['B4']?.value || '0') },
-    { label: data['A5']?.value || 'بند 2', val: parseFloat(data['C5']?.value || data['B5']?.value || '0') },
-    { label: data['A6']?.value || 'بند 3', val: parseFloat(data['C6']?.value || data['B6']?.value || '0') },
-    { label: data['A7']?.value || 'بند 4', val: parseFloat(data['C7']?.value || data['B7']?.value || '0') },
-    { label: data['A8']?.value || 'بند 5', val: parseFloat(data['C8']?.value || data['B8']?.value || '0') },
-  ].filter((i) => i.val > 0);
+  // Extract numeric data for instant charts
+  const chartItems = Object.keys(data)
+    .filter((k) => k.startsWith('B') || k.startsWith('C'))
+    .map((k) => {
+      const val = parseFloat(String(data[k]?.value || '').replace(/[^0-9.-]+/g, ''));
+      const row = k.substring(1);
+      const label = data[`A${row}`]?.value || `بند ${row}`;
+      return { label, val: isNaN(val) ? 0 : val };
+    })
+    .filter((item) => item.val > 0)
+    .slice(0, 7);
 
-  const maxChartVal = Math.max(...chartItems.map((i) => i.val), 100);
+  const maxChartVal = Math.max(...chartItems.map((i) => i.val), 1);
 
   return (
-    <div className="flex-1 flex flex-col bg-white overflow-hidden text-xs select-none">
-      {/* 1. Authentic Excel Formula Bar */}
-      <div className="flex items-center gap-2 px-3 py-1.5 bg-[#f3f2f1] border-b border-gray-300 relative z-30">
-        {/* Active Cell Reference box */}
-        <div className="w-16 px-2 py-1 bg-white border border-gray-300 rounded font-mono font-bold text-center text-gray-900 shadow-2xs">
-          {selectedCell}
+    <div className="flex-1 flex flex-col bg-[#f3f2f1] overflow-hidden text-xs select-none">
+      {/* 1. Excel Formula Bar & Tool Header */}
+      <div className="bg-[#f3f2f1] px-3 py-1.5 flex flex-wrap items-center gap-2 border-b border-gray-300 shrink-0 z-20">
+        {/* Name Box (Shows Active Cell or Drag Dimensions like 5R x 3C) */}
+        <div 
+          className="w-24 px-2 py-1 bg-white border border-gray-300 rounded font-mono text-center font-bold text-gray-800 text-xs shadow-2xs"
+          title="مربع اسم الخلية أو أبعاد النطاق المحدد"
+        >
+          {isDraggingRange && dragStartCell && dragCurrentCell ? (
+            <span className="text-emerald-700">
+              {rangeBounds.maxRow - rangeBounds.minRow + 1}R x {rangeBounds.maxColIdx - rangeBounds.minColIdx + 1}C
+            </span>
+          ) : selectedRange.length > 1 ? (
+            <span className="text-emerald-700">{rangeBounds.rangeStr}</span>
+          ) : (
+            selectedCell
+          )}
         </div>
 
-        {/* fx symbol button with popup helper */}
+        {/* fx Quick Helper Button */}
         <button
           onClick={() => setShowFxHelper(!showFxHelper)}
-          className="font-serif italic font-bold text-emerald-800 text-sm px-2 py-0.5 rounded hover:bg-emerald-100 transition cursor-pointer"
-          title="معالج الدوال الرياضية (fx Function Builder)"
+          className={`px-2 py-1 flex items-center gap-1 font-bold rounded cursor-pointer transition select-none ${
+            showFxHelper
+              ? 'bg-emerald-700 text-white shadow-xs'
+              : 'bg-white border border-gray-300 text-emerald-800 hover:bg-emerald-50'
+          }`}
+          title="مساعد الدوال والصيغ الرياضية (fx)"
         >
-          fx
+          <span className="italic font-serif font-black text-sm">fx</span>
+          <span className="text-[11px] font-semibold hidden sm:inline">دوال</span>
         </button>
 
-        {/* Equal Sign Indicator Button (Pin/Toggle '=' at the beginning) */}
+        {/* Quick Equal button */}
         <button
           onClick={() => {
             if (!formulaInput.startsWith('=')) {
-              const newVal = '=' + formulaInput;
+              const newVal = `=${formulaInput}`;
               handleFormulaInputChange(newVal);
             }
             formulaInputRef.current?.focus();
@@ -730,18 +873,18 @@ export const SheetsApp: React.FC<Props> = ({
           </label>
 
           <button
-            onClick={() => handleFormat('bold', !data[selectedCell]?.bold)}
+            onClick={() => handleFormatRange('bold', !data[selectedCell]?.bold)}
             className={`px-2 py-1 rounded border cursor-pointer font-bold ${
               data[selectedCell]?.bold ? 'bg-emerald-100 border-emerald-400 text-emerald-800' : 'bg-white border-gray-300'
             }`}
-            title="تغميق الخط (Ctrl+B)"
+            title="تغميق الخط للنطاق المحدد (Ctrl+B)"
           >
             B
           </button>
           <button
-            onClick={() => handleFormat('format', 'currency-sar')}
+            onClick={() => handleFormatRange('format', 'currency-sar')}
             className="px-2 py-1 rounded border border-gray-300 bg-white hover:bg-gray-100 cursor-pointer text-emerald-700 font-bold"
-            title="تنسيق العملة (ر.س)"
+            title="تنسيق العملة (ر.س) للنطاق المحدد"
           >
             ر.س
           </button>
@@ -799,7 +942,7 @@ export const SheetsApp: React.FC<Props> = ({
         </div>
       )}
 
-      {/* 2. Main Spreadsheet Grid */}
+      {/* 2. Main Spreadsheet Grid with Mouse Drag Range Selection */}
       <div 
         onMouseUp={handleGridMouseUp}
         className="flex-1 overflow-auto bg-gray-100 p-1"
@@ -809,55 +952,82 @@ export const SheetsApp: React.FC<Props> = ({
           <thead>
             <tr className="bg-[#f3f2f1] text-gray-600 font-semibold text-[11px]">
               <th className="w-10 p-1 border border-gray-300 text-center bg-[#eae8e6]">#</th>
-              {COLS.map((col) => (
-                <th key={col} className="p-1 border border-gray-300 text-center min-w-[110px] w-28">
-                  <span>{col}</span>
-                  {showFilterActive && (
-                    <span className="inline-block text-[9px] text-emerald-800 bg-white border border-gray-300 rounded px-1 ml-1 cursor-pointer hover:bg-emerald-50">
-                      ▼
-                    </span>
-                  )}
-                </th>
-              ))}
+              {COLS.map((col, cIdx) => {
+                const isColInRange = cIdx >= rangeBounds.minColIdx && cIdx <= rangeBounds.maxColIdx;
+                return (
+                  <th 
+                    key={col} 
+                    className={`p-1 border border-gray-300 text-center min-w-[110px] w-28 transition-colors ${
+                      isColInRange ? 'bg-emerald-100 text-emerald-900 font-bold border-b-2 border-b-emerald-600' : ''
+                    }`}
+                  >
+                    <span>{col}</span>
+                    {showFilterActive && (
+                      <span className="inline-block text-[9px] text-emerald-800 bg-white border border-gray-300 rounded px-1 ml-1 cursor-pointer hover:bg-emerald-50">
+                        ▼
+                      </span>
+                    )}
+                  </th>
+                );
+              })}
             </tr>
           </thead>
           <tbody>
             {Array.from({ length: ROWS_COUNT }).map((_, rIdx) => {
               const rowNum = rIdx + 1;
+              const isRowInRange = rowNum >= rangeBounds.minRow && rowNum <= rangeBounds.maxRow;
+
               return (
                 <tr key={rowNum} className="hover:bg-emerald-50/20">
-                  {/* Row Number */}
-                  <td className="p-1 border border-gray-300 text-center bg-[#f3f2f1] text-gray-500 font-mono text-[10px]">
+                  {/* Row Number Header */}
+                  <td 
+                    className={`p-1 border border-gray-300 text-center text-gray-500 font-mono text-[10px] transition-colors ${
+                      isRowInRange ? 'bg-emerald-100 text-emerald-900 font-bold border-r-2 border-r-emerald-600' : 'bg-[#f3f2f1]'
+                    }`}
+                  >
                     {rowNum}
                   </td>
 
                   {/* Columns */}
-                  {COLS.map((col) => {
+                  {COLS.map((col, cIdx) => {
                     const cellId = `${col}${rowNum}`;
                     const cell = data[cellId];
                     const isSelected = selectedCell === cellId;
+                    const inRange = cIdx >= rangeBounds.minColIdx && cIdx <= rangeBounds.maxColIdx &&
+                                    rowNum >= rangeBounds.minRow && rowNum <= rangeBounds.maxRow;
+
                     const refColor = referencedCellsMap[cellId];
+
+                    // Determine outer boundary borders for authentic Excel box
+                    const isTopBorder = inRange && rowNum === rangeBounds.minRow;
+                    const isBottomBorder = inRange && rowNum === rangeBounds.maxRow;
+                    const isRightBorder = inRange && (isRTL ? cIdx === rangeBounds.minColIdx : cIdx === rangeBounds.maxColIdx);
+                    const isLeftBorder = inRange && (isRTL ? cIdx === rangeBounds.maxColIdx : cIdx === rangeBounds.minColIdx);
+                    const isBottomRightCorner = inRange && rowNum === rangeBounds.maxRow && (isRTL ? cIdx === rangeBounds.minColIdx : cIdx === rangeBounds.maxColIdx);
 
                     return (
                       <td
                         key={cellId}
-                        onMouseDown={() => handleGridCellMouseDown(cellId)}
+                        onMouseDown={(e) => handleGridCellMouseDown(cellId, e)}
                         onMouseEnter={() => handleGridCellMouseEnter(cellId)}
                         onClick={() => handleGridCellClickOrSelect(cellId)}
                         className={`p-1 relative transition-all select-none ${
                           showGridlines ? 'border border-gray-300' : 'border border-transparent'
-                        } ${
-                          isSelected ? 'outline-2 outline-[#107c41] z-10 bg-emerald-50/60 shadow-xs' : ''
                         }`}
                         style={{
-                          backgroundColor: cell?.bg,
+                          backgroundColor: inRange && !isSelected
+                            ? 'rgba(16, 124, 65, 0.12)'
+                            : (cell?.bg || (isSelected ? '#ffffff' : undefined)),
                           color: cell?.color,
                           fontWeight: cell?.bold ? 'bold' : 'normal',
                           textAlign: cell?.align || (isRTL ? 'right' : 'left'),
                           fontFamily: fontFamily,
-                          boxShadow: refColor ? `inset 0 0 0 2px ${refColor}` : undefined,
-                          outline: refColor ? `2px dashed ${refColor}` : undefined,
-                          zIndex: refColor ? 20 : (isSelected ? 10 : 1),
+                          borderTop: isTopBorder ? '2px solid #107c41' : undefined,
+                          borderBottom: isBottomBorder ? '2px solid #107c41' : undefined,
+                          borderRight: isRightBorder ? '2px solid #107c41' : undefined,
+                          borderLeft: isLeftBorder ? '2px solid #107c41' : undefined,
+                          outline: refColor ? `2px dashed ${refColor}` : (isSelected && selectedRange.length <= 1 ? '2px solid #107c41' : undefined),
+                          zIndex: isSelected ? 15 : (refColor ? 20 : (inRange ? 5 : 1)),
                         }}
                       >
                         <input
@@ -879,6 +1049,16 @@ export const SheetsApp: React.FC<Props> = ({
                             isRTL ? 'text-right' : 'text-left'
                           }`}
                         />
+
+                        {/* Excel Selection Box Fill Handle (Small square in bottom corner) */}
+                        {isBottomRightCorner && (
+                          <div 
+                            className={`absolute w-2 h-2 bg-[#107c41] z-30 cursor-crosshair ${
+                              isRTL ? 'bottom-[-3px] right-[-3px]' : 'bottom-[-3px] right-[-3px]'
+                            }`}
+                            title="مقبض التعبئة التلقائية (Fill Handle)"
+                          />
+                        )}
                       </td>
                     );
                   })}
@@ -964,8 +1144,9 @@ export const SheetsApp: React.FC<Props> = ({
         </div>
       )}
 
-      {/* 4. Multi-Sheet Tabs Bar (Real Microsoft Excel Sheet Switcher) */}
-      <div className="flex items-center justify-between px-3 py-1 bg-[#f3f2f1] border-t border-gray-300 text-[11px] text-gray-600">
+      {/* 4. Multi-Sheet Tabs Bar & Live Range Stats (Real Microsoft Excel Experience) */}
+      <div className="flex items-center justify-between px-3 py-1 bg-[#f3f2f1] border-t border-gray-300 text-[11px] text-gray-700 select-none">
+        {/* Sheet Tabs */}
         <div className="flex items-center gap-1 overflow-x-auto">
           {Object.entries(sheets).map(([key, s]) => {
             const isActive = key === activeSheetKey;
@@ -993,8 +1174,35 @@ export const SheetsApp: React.FC<Props> = ({
           </button>
         </div>
 
-        <div className="text-[10px] text-gray-500 font-mono hidden sm:inline">
-          Excel Sovereign Formula Engine | Ready | 100% Offline
+        {/* Live Selection Stats (SUM, AVERAGE, COUNT) like real Microsoft Excel */}
+        <div className="flex items-center gap-3 font-medium text-gray-700">
+          {rangeStats && rangeStats.count > 1 ? (
+            <div className="flex items-center gap-2.5 bg-white border border-gray-300 px-3 py-0.5 rounded shadow-2xs text-[11px] font-mono text-emerald-900">
+              {rangeStats.numsCount > 0 ? (
+                <>
+                  <span>
+                    <strong>المتوسط:</strong> {rangeStats.avg.toLocaleString('ar-EG')}
+                  </span>
+                  <span className="text-gray-300">|</span>
+                </>
+              ) : null}
+              <span>
+                <strong>العدد:</strong> {rangeStats.count}
+              </span>
+              {rangeStats.numsCount > 0 ? (
+                <>
+                  <span className="text-gray-300">|</span>
+                  <span className="font-bold text-emerald-700">
+                    <strong>المجموع:</strong> {rangeStats.sum.toLocaleString('ar-EG')}
+                  </span>
+                </>
+              ) : null}
+            </div>
+          ) : (
+            <div className="text-[10px] text-gray-500 font-mono hidden sm:inline">
+              جاهز (Ready) | محرك Excel السيادي 100% Offline
+            </div>
+          )}
         </div>
       </div>
     </div>

@@ -12,6 +12,13 @@ export async function parseDocxFile(file: File): Promise<string> {
     const docXmlFile = zip.file('word/document.xml');
 
     if (!docXmlFile) {
+      if (file.name.toLowerCase().endsWith('.pdf')) {
+        return `<div class="p-6 bg-red-50 border border-red-300 rounded-xl text-center text-red-900 font-bold font-cairo">هذا الملف بصيغة PDF. يرجى فتحه عبر تطبيق <strong>PDF Studio (Acrobat)</strong> المخصص في الشريط العلوي لتصفحه وتوقيعه واعتماده.</div>`;
+      }
+      const isBinary = file.name.match(/\.(xlsx|pptx|accdb|pdf|png|jpg|exe|bin|zip)$/i);
+      if (isBinary) {
+        return `<p class="text-red-600 font-bold">الملف المحدد ليس مستند Word صالحاً.</p>`;
+      }
       const text = await file.text();
       return `<p>${escapeHtml(text)}</p>`;
     }
@@ -144,8 +151,14 @@ export async function parseDocxFile(file: File): Promise<string> {
     return html || '<p>مستند فارغ</p>';
   } catch (err) {
     console.error('Error parsing .docx:', err);
+    if (file.name.toLowerCase().endsWith('.pdf')) {
+      return `<div class="p-6 bg-red-50 border border-red-300 rounded-xl text-center text-red-900 font-bold font-cairo">هذا الملف بصيغة PDF. يرجى فتحه عبر تطبيق <strong>PDF Studio (Acrobat)</strong> المخصص في الشريط العلوي لتصفحه وتوقيعه واعتماده.</div>`;
+    }
     const raw = await file.text();
     if (raw.includes('<html') || raw.includes('<p')) return raw;
+    if (raw.includes('PK\x03\x04') || raw.includes('%PDF')) {
+      return `<p class="text-red-600 font-bold">تعذر فك ترميز الملف كمستند نصي. يرجى التأكد من اختيار ملف Word (.docx).</p>`;
+    }
     return `<p style="white-space: pre-wrap;">${escapeHtml(raw)}</p>`;
   }
 }
