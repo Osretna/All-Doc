@@ -1,9 +1,8 @@
 import React, { useState } from 'react';
-import { OfficeAppId } from '../../types';
+import { OfficeAppId, SheetData, SlideItem, DbTable } from '../../types';
 import { APP_CONFIGS } from '../../utils/appConfigs';
 import { localVault } from '../../utils/storage';
-import { SheetData, SlideItem } from '../../types';
-import { parseDocxFile, parseExcelFile, parsePptxFile } from '../../utils/fileImport';
+import { parseDocxFile, parseExcelFile, parsePptxFile, parseAccessFile } from '../../utils/fileImport';
 import {
   FileText,
   Plus,
@@ -25,7 +24,10 @@ import {
   FileSpreadsheet,
   FileCheck,
   Loader2,
-  Sparkles
+  Sparkles,
+  Database,
+  Image as ImageIcon,
+  FileCheck2
 } from 'lucide-react';
 
 interface Props {
@@ -38,6 +40,9 @@ interface Props {
   onSwitchApp?: (app: OfficeAppId) => void;
   onLoadExcelData?: (sheets: Record<string, { label: string; data: SheetData }>, title: string) => void;
   onLoadSlidesData?: (slides: SlideItem[], title: string) => void;
+  onLoadAccessData?: (tables: DbTable[], title: string) => void;
+  onLoadPdfFile?: (file: File) => void;
+  onLoadPhotoFile?: (file: File) => void;
 }
 
 export const BackstageModal: React.FC<Props> = ({
@@ -50,6 +55,9 @@ export const BackstageModal: React.FC<Props> = ({
   onSwitchApp,
   onLoadExcelData,
   onLoadSlidesData,
+  onLoadAccessData,
+  onLoadPdfFile,
+  onLoadPhotoFile,
 }) => {
   if (!isOpen) return null;
 
@@ -390,8 +398,8 @@ export const BackstageModal: React.FC<Props> = ({
                 </div>
               )}
 
-              {/* Grid of File Type Openers */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+              {/* Grid of File Type Openers: Word, Excel, PowerPoint, Access, PDF, Photoshop */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
                 {/* 1. Open Word .docx */}
                 <label className="p-4 rounded-xl border border-blue-200 bg-blue-50/40 hover:bg-blue-50 hover:border-blue-500 cursor-pointer transition flex flex-col justify-between group">
                   <div className="flex items-center gap-3 mb-2">
@@ -404,7 +412,7 @@ export const BackstageModal: React.FC<Props> = ({
                     </div>
                   </div>
                   <p className="text-[11.5px] text-gray-600 mb-3">
-                    قراءة الفقرات والجداول وتنسيقات الخطوط العربية والإنجليزية بدون تشفير أو رموز تالفة.
+                    قراءة الفقرات والجداول وتنسيقات الخطوط العربية والإنجليزية دون تشفير أو رموز تالفة.
                   </p>
                   <span className="text-xs font-bold text-[#0078d4] group-hover:underline">فتح مستند Word ➔</span>
                   <input
@@ -490,17 +498,17 @@ export const BackstageModal: React.FC<Props> = ({
                     </div>
                     <div>
                       <h4 className="font-bold text-gray-900 text-sm">عرض PowerPoint</h4>
-                      <span className="text-[11px] text-orange-700 font-mono font-medium">.pptx</span>
+                      <span className="text-[11px] text-orange-700 font-mono font-medium">.pptx, .ppt</span>
                     </div>
                   </div>
                   <p className="text-[11.5px] text-gray-600 mb-3">
-                    استيراد الشرائح والعناوين والنقاط وعرضها بدقة 16:9 مع وضع مقدم العروض والأدوات التفاعلية.
+                    استيراد الشرائح والعناوين والنقاط والخلفيات المصورة وعرضها بدقة 16:9 مع وضع مقدم العروض.
                   </p>
                   <span className="text-xs font-bold text-[#d83b01] group-hover:underline">فتح عرض PowerPoint ➔</span>
                   <input
                     type="file"
                     className="hidden"
-                    accept=".pptx"
+                    accept=".pptx,.ppt"
                     onChange={async (e) => {
                       const file = e.target.files?.[0];
                       if (!file) return;
@@ -526,6 +534,109 @@ export const BackstageModal: React.FC<Props> = ({
                     }}
                   />
                 </label>
+
+                {/* 4. Open Access Database .accdb */}
+                <label className="p-4 rounded-xl border border-rose-200 bg-rose-50/40 hover:bg-rose-50 hover:border-rose-500 cursor-pointer transition flex flex-col justify-between group">
+                  <div className="flex items-center gap-3 mb-2">
+                    <div className="w-9 h-9 rounded-lg bg-[#a4373a] text-white flex items-center justify-center font-bold text-sm shadow-xs">
+                      A
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-gray-900 text-sm">قاعدة بيانات Access</h4>
+                      <span className="text-[11px] text-rose-700 font-mono font-medium">.accdb, .sql, .csv</span>
+                    </div>
+                  </div>
+                  <p className="text-[11.5px] text-gray-600 mb-3">
+                    فتح قواعد بيانات Access وسجلات الجداول ونظام ملاك واستيراد ملفات SQL و CSV.
+                  </p>
+                  <span className="text-xs font-bold text-[#a4373a] group-hover:underline">فتح قاعدة بيانات Access ➔</span>
+                  <input
+                    type="file"
+                    className="hidden"
+                    accept=".accdb,.mdb,.sql,.csv,.json"
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      setLoadingFileMessage(`جاري قراءة واستيراد قاعدة بيانات Access "${file.name}"...`);
+                      try {
+                        const tables = await parseAccessFile(file);
+                        if (tables.length > 0) {
+                          const cleanTitle = file.name.replace(/\.[^/.]+$/, '');
+                          localVault.set(localVault.KEYS.BASE_DATA, tables);
+                          onLoadAccessData?.(tables, cleanTitle);
+                          onSwitchApp?.('base');
+                          setLoadingFileMessage(null);
+                          onClose();
+                        } else {
+                          setLoadingFileMessage(null);
+                          alert('لم يتم العثور على جداول داخل الملف.');
+                        }
+                      } catch (err) {
+                        console.error(err);
+                        setLoadingFileMessage(null);
+                        alert('حدث خطأ أثناء فتح ملف Access.');
+                      }
+                    }}
+                  />
+                </label>
+
+                {/* 5. Open PDF Document .pdf */}
+                <label className="p-4 rounded-xl border border-red-200 bg-red-50/40 hover:bg-red-50 hover:border-red-500 cursor-pointer transition flex flex-col justify-between group">
+                  <div className="flex items-center gap-3 mb-2">
+                    <div className="w-9 h-9 rounded-lg bg-[#e11d48] text-white flex items-center justify-center font-bold text-xs shadow-xs">
+                      PDF
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-gray-900 text-sm">مستند PDF (Acrobat)</h4>
+                      <span className="text-[11px] text-red-700 font-mono font-medium">.pdf</span>
+                    </div>
+                  </div>
+                  <p className="text-[11.5px] text-gray-600 mb-3">
+                    فتح مستندات PDF من جهازك واستعراض الصفحات وإضافة التوقيع الرقمي والأختام الرسمية.
+                  </p>
+                  <span className="text-xs font-bold text-[#e11d48] group-hover:underline">فتح مستند PDF ➔</span>
+                  <input
+                    type="file"
+                    className="hidden"
+                    accept=".pdf"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      onLoadPdfFile?.(file);
+                      onSwitchApp?.('pdf');
+                      onClose();
+                    }}
+                  />
+                </label>
+
+                {/* 6. Open Photoshop / Image .psd, .png */}
+                <label className="p-4 rounded-xl border border-sky-200 bg-sky-50/40 hover:bg-sky-50 hover:border-sky-500 cursor-pointer transition flex flex-col justify-between group">
+                  <div className="flex items-center gap-3 mb-2">
+                    <div className="w-9 h-9 rounded-lg bg-[#001e36] border border-[#31a8ff] text-[#31a8ff] flex items-center justify-center font-black text-xs shadow-xs">
+                      Ps
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-gray-900 text-sm">تصميم Photoshop / صورة</h4>
+                      <span className="text-[11px] text-sky-700 font-mono font-medium">.psd, .png, .jpg</span>
+                    </div>
+                  </div>
+                  <p className="text-[11.5px] text-gray-600 mb-3">
+                    فتح الصور وملفات التصميم وتعديل الطبقات والألوان والفلاتر والفرشاة بدقة فوتوشوب الكاملة.
+                  </p>
+                  <span className="text-xs font-bold text-[#0078d4] group-hover:underline">فتح تصميم Photoshop ➔</span>
+                  <input
+                    type="file"
+                    className="hidden"
+                    accept=".png,.jpg,.jpeg,.webp,.psd,.svg"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      onLoadPhotoFile?.(file);
+                      onSwitchApp?.('photo');
+                      onClose();
+                    }}
+                  />
+                </label>
               </div>
 
               {/* Universal Drag & Drop / File Browser */}
@@ -533,7 +644,7 @@ export const BackstageModal: React.FC<Props> = ({
                 <FolderOpen className="w-12 h-12 text-[#0078d4] mb-3" />
                 <h3 className="font-bold text-base text-gray-800">أو استعرض أي ملف من حاسوبك أو هاتفك</h3>
                 <p className="text-xs text-gray-500 mt-1 mb-4">
-                  يدعم التعرف التلقائي على .docx, .xlsx, .pptx, .csv, .json, .txt
+                  يدعم التعرف التلقائي على .docx, .xlsx, .pptx, .accdb, .pdf, .png, .jpg, .csv, .json, .txt
                 </p>
                 <label className="bg-[#0078d4] hover:bg-[#006abc] text-white px-6 py-2.5 rounded-lg text-xs font-bold cursor-pointer transition shadow flex items-center gap-2">
                   <FolderOpen className="w-4 h-4" />
@@ -541,7 +652,7 @@ export const BackstageModal: React.FC<Props> = ({
                   <input
                     type="file"
                     className="hidden"
-                    accept=".docx,.doc,.xlsx,.xls,.pptx,.csv,.json,.txt,.html"
+                    accept=".docx,.doc,.xlsx,.xls,.pptx,.ppt,.accdb,.mdb,.sql,.pdf,.png,.jpg,.jpeg,.webp,.csv,.json,.txt,.html"
                     onChange={async (e) => {
                       const file = e.target.files?.[0];
                       if (!file) return;
@@ -560,11 +671,22 @@ export const BackstageModal: React.FC<Props> = ({
                           localVault.set(localVault.KEYS.SHEETS_DATA, parsedSheets);
                           onLoadExcelData?.(parsedSheets, cleanTitle);
                           onSwitchApp?.('sheets');
-                        } else if (ext === 'pptx') {
+                        } else if (ext === 'pptx' || ext === 'ppt') {
                           const parsedSlides = await parsePptxFile(file);
                           localVault.set(localVault.KEYS.SLIDES_DATA, parsedSlides);
                           onLoadSlidesData?.(parsedSlides, cleanTitle);
                           onSwitchApp?.('slides');
+                        } else if (ext === 'accdb' || ext === 'mdb' || ext === 'sql') {
+                          const tables = await parseAccessFile(file);
+                          localVault.set(localVault.KEYS.BASE_DATA, tables);
+                          onLoadAccessData?.(tables, cleanTitle);
+                          onSwitchApp?.('base');
+                        } else if (ext === 'pdf') {
+                          onLoadPdfFile?.(file);
+                          onSwitchApp?.('pdf');
+                        } else if (ext === 'png' || ext === 'jpg' || ext === 'jpeg' || ext === 'webp' || ext === 'psd') {
+                          onLoadPhotoFile?.(file);
+                          onSwitchApp?.('photo');
                         } else if (ext === 'json') {
                           const text = await file.text();
                           const success = localVault.importSovereignBackup(text);

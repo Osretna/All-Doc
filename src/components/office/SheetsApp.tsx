@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { SheetData, SheetCell } from '../../types';
 import { localVault } from '../../utils/storage';
-import { evaluateExcelFormula, EXCEL_FUNCTIONS, ExcelFunctionDef } from '../../utils/excelEngine';
+import { evaluateExcelFormula, parseRange, EXCEL_FUNCTIONS, ExcelFunctionDef } from '../../utils/excelEngine';
 import { parseExcelFile } from '../../utils/fileImport';
 import { 
   Sigma, 
@@ -161,6 +161,12 @@ export const SheetsApp: React.FC<Props> = ({
   const [isEditingCell, setIsEditingCell] = useState<boolean>(false);
   const formulaInputRef = useRef<HTMLInputElement>(null);
 
+  // Cell reference selection & dragging states for Excel formulas
+  const [formulaOriginCell, setFormulaOriginCell] = useState<string>('A4');
+  const [formulaOriginSheet, setFormulaOriginSheet] = useState<string>('sheet1');
+  const [isDraggingRange, setIsDraggingRange] = useState<boolean>(false);
+  const [dragStartCell, setDragStartCell] = useState<string | null>(null);
+
   const currentSheet = sheets[activeSheetKey] || sheets[Object.keys(sheets)[0]];
   const data = currentSheet ? currentSheet.data : {};
 
@@ -173,10 +179,49 @@ export const SheetsApp: React.FC<Props> = ({
     setCurrentFunctionSyntax(null);
   }, [selectedCell, activeSheetKey]);
 
+  // Extract referenced cells for visual border highlighting (colored dashed borders like real Excel)
+  const getReferencedCellsMap = (): Record<string, string> => {
+    if (!formulaInput.startsWith('=')) return {};
+    const colors = ['#2563eb', '#16a34a', '#9333ea', '#ea580c', '#0891b2', '#e11d48'];
+    const cellMap: Record<string, string> = {};
+
+    // Match ranges like B4:B8 or Sheet1!B4:B8 or individual cells like B4
+    const tokenRegex = /(?:'([^']+)'|([A-Za-z0-9_]+))!([A-Z]+[0-9]+(?::[A-Z]+[0-9]+)?)|([A-Z]+[0-9]+(?::[A-Z]+[0-9]+)?)/gi;
+    let match: RegExpExecArray | null;
+    let colorIdx = 0;
+
+    while ((match = tokenRegex.exec(formulaInput)) !== null) {
+      const sheetName = match[1] || match[2];
+      const rangeOrCell = match[3] || match[4];
+      const color = colors[colorIdx % colors.length];
+      colorIdx++;
+
+      // If formula references another sheet, only highlight if active sheet matches
+      if (sheetName) {
+        const isCurrent = currentSheet.label.toLowerCase() === sheetName.toLowerCase() ||
+                          activeSheetKey.toLowerCase() === sheetName.toLowerCase();
+        if (!isCurrent) continue;
+      }
+
+      if (rangeOrCell.includes(':')) {
+        const expanded = parseRange(rangeOrCell.toUpperCase());
+        expanded.forEach((c) => {
+          cellMap[c] = color;
+        });
+      } else {
+        cellMap[rangeOrCell.toUpperCase()] = color;
+      }
+    }
+
+    return cellMap;
+  };
+
+  const referencedCellsMap = getReferencedCellsMap();
+
   // Handle formula typing and autocomplete suggestions
   const handleFormulaInputChange = (val: string) => {
     setFormulaInput(val);
-    handleCellChange(selectedCell, val);
+    handleCellChange(formulaOriginCell || selectedCell, val);
 
     if (val.startsWith('=')) {
       // Find trailing function prefix: e.g. "=S" or "=SUM(" or "=A1+AV"
@@ -215,13 +260,12 @@ export const SheetsApp: React.FC<Props> = ({
   const handleSelectFunction = (fn: ExcelFunctionDef) => {
     let newVal = '';
     if (formulaInput.includes('(')) {
-      // Replace last incomplete function name
       newVal = formulaInput.replace(/([A-Za-z]+)$/, `${fn.name}(`);
     } else {
       newVal = `=${fn.name}(`;
     }
     setFormulaInput(newVal);
-    handleCellChange(selectedCell, newVal);
+    handleCellChange(formulaOriginCell || selectedCell, newVal);
     setShowAutocomplete(false);
     setCurrentFunctionSyntax(`${fn.syntax} — ${fn.desc}`);
     if (formulaInputRef.current) {
@@ -251,6 +295,10 @@ export const SheetsApp: React.FC<Props> = ({
         return;
       }
     }
+    if (e.key === 'Enter') {
+      setIsEditingCell(false);
+      setShowAutocomplete(false);
+    }
   };
 
   const saveSheets = (newSheets: Record<string, { label: string; data: SheetData }>) => {
@@ -259,13 +307,13 @@ export const SheetsApp: React.FC<Props> = ({
     onSheetsChange?.(newSheets);
   };
 
-  // Recalculates all formulas across the current sheet
+  // Recalculates all formulas across the current sheet with cross-sheet access
   const recalculateSheet = (sourceData: SheetData): SheetData => {
     const updated = { ...sourceData };
     Object.keys(updated).forEach((cellId) => {
       const cell = updated[cellId];
       if (cell && cell.formula) {
-        const computed = evaluateExcelFormula(cell.formula, updated);
+        const computed = evaluateExcelFormula(cell.formula, updated, sheets);
         updated[cellId] = {
           ...cell,
           value: computed,
@@ -277,7 +325,7 @@ export const SheetsApp: React.FC<Props> = ({
 
   const handleCellChange = (cellId: string, rawVal: string) => {
     const isFormula = rawVal.startsWith('=');
-    const computedVal = isFormula ? evaluateExcelFormula(rawVal, data) : rawVal;
+    const computedVal = isFormula ? evaluateExcelFormula(rawVal, data, sheets) : rawVal;
 
     const nextData = {
       ...data,
@@ -299,6 +347,57 @@ export const SheetsApp: React.FC<Props> = ({
       },
     };
     saveSheets(updatedSheets);
+  };
+
+  // Excel Cell Reference Insertion on Click / Drag
+  const handleGridCellClickOrSelect = (cellId: string) => {
+    if (formulaInput.startsWith('=')) {
+      const targetSheet = sheets[activeSheetKey];
+      const isOtherSheet = formulaOriginSheet && formulaOriginSheet !== activeSheetKey;
+      const prefix = isOtherSheet ? `'${targetSheet.label}'!` : '';
+      const ref = `${prefix}${cellId}`;
+
+      // Check if formula ends with an operator, opening paren, or comma
+      if (/[=+\-*/(,;><&]$/.test(formulaInput.trim())) {
+        const nextFormula = formulaInput + ref;
+        handleFormulaInputChange(nextFormula);
+      } else {
+        // If user already had a reference and clicks a different cell without typing an operator, replace it
+        const replaced = formulaInput.replace(/(?:'[^']+'!)?[A-Z]+[0-9]+(?::[A-Z]+[0-9]+)?$/i, ref);
+        handleFormulaInputChange(replaced);
+      }
+      formulaInputRef.current?.focus();
+      return;
+    }
+
+    setSelectedCell(cellId);
+    setFormulaOriginCell(cellId);
+    setFormulaOriginSheet(activeSheetKey);
+  };
+
+  const handleGridCellMouseDown = (cellId: string) => {
+    if (formulaInput.startsWith('=')) {
+      setIsDraggingRange(true);
+      setDragStartCell(cellId);
+      handleGridCellClickOrSelect(cellId);
+    }
+  };
+
+  const handleGridCellMouseEnter = (cellId: string) => {
+    if (isDraggingRange && dragStartCell && formulaInput.startsWith('=')) {
+      const targetSheet = sheets[activeSheetKey];
+      const isOtherSheet = formulaOriginSheet && formulaOriginSheet !== activeSheetKey;
+      const prefix = isOtherSheet ? `'${targetSheet.label}'!` : '';
+      const rangeRef = `${prefix}${dragStartCell}:${cellId}`;
+
+      const replaced = formulaInput.replace(/(?:'[^']+'!)?[A-Z]+[0-9]+(?::[A-Z]+[0-9]+)?$/i, rangeRef);
+      handleFormulaInputChange(replaced);
+    }
+  };
+
+  const handleGridMouseUp = () => {
+    setIsDraggingRange(false);
+    setDragStartCell(null);
   };
 
   const handleFormat = (prop: keyof SheetCell, value: any) => {
@@ -554,6 +653,7 @@ export const SheetsApp: React.FC<Props> = ({
 
       {/* 2. Main Spreadsheet Grid */}
       <div 
+        onMouseUp={handleGridMouseUp}
         className="flex-1 overflow-auto bg-gray-100 p-1"
         style={{ transform: `scale(${zoomLevel / 100})`, transformOrigin: isRTL ? 'top right' : 'top left' }}
       >
@@ -583,30 +683,15 @@ export const SheetsApp: React.FC<Props> = ({
                     const cellId = `${col}${rowNum}`;
                     const cell = data[cellId];
                     const isSelected = selectedCell === cellId;
+                    const refColor = referencedCellsMap[cellId];
 
                     return (
                       <td
                         key={cellId}
-                        onClick={() => {
-                          // If writing a formula in formula bar and ended with operator/paren, clicking a cell appends coordinate
-                          if (
-                            formulaInput.startsWith('=') &&
-                            (formulaInput.endsWith('(') ||
-                              formulaInput.endsWith(',') ||
-                              formulaInput.endsWith('+') ||
-                              formulaInput.endsWith('-') ||
-                              formulaInput.endsWith('*') ||
-                              formulaInput.endsWith('/') ||
-                              formulaInput.endsWith('='))
-                          ) {
-                            const appended = formulaInput + cellId;
-                            handleFormulaInputChange(appended);
-                            formulaInputRef.current?.focus();
-                            return;
-                          }
-                          setSelectedCell(cellId);
-                        }}
-                        className={`p-1 relative transition-all ${
+                        onMouseDown={() => handleGridCellMouseDown(cellId)}
+                        onMouseEnter={() => handleGridCellMouseEnter(cellId)}
+                        onClick={() => handleGridCellClickOrSelect(cellId)}
+                        className={`p-1 relative transition-all select-none ${
                           showGridlines ? 'border border-gray-300' : 'border border-transparent'
                         } ${
                           isSelected ? 'outline-2 outline-[#107c41] z-10 bg-emerald-50/60 shadow-xs' : ''
@@ -617,6 +702,9 @@ export const SheetsApp: React.FC<Props> = ({
                           fontWeight: cell?.bold ? 'bold' : 'normal',
                           textAlign: cell?.align || (isRTL ? 'right' : 'left'),
                           fontFamily: fontFamily,
+                          boxShadow: refColor ? `inset 0 0 0 2px ${refColor}` : undefined,
+                          outline: refColor ? `2px dashed ${refColor}` : undefined,
+                          zIndex: refColor ? 20 : (isSelected ? 10 : 1),
                         }}
                       >
                         <input
@@ -624,6 +712,8 @@ export const SheetsApp: React.FC<Props> = ({
                           value={isSelected && isEditingCell && cell?.formula ? cell.formula : (cell?.value || '')}
                           onFocus={() => {
                             setSelectedCell(cellId);
+                            setFormulaOriginCell(cellId);
+                            setFormulaOriginSheet(activeSheetKey);
                             setIsEditingCell(true);
                           }}
                           onBlur={() => setIsEditingCell(false)}

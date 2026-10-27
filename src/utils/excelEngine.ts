@@ -78,7 +78,11 @@ export function parseRange(rangeStr: string): string[] {
   return cells;
 }
 
-export function evaluateExcelFormula(expr: string, sheetData: SheetData): string {
+export function evaluateExcelFormula(
+  expr: string, 
+  sheetData: SheetData, 
+  allSheets?: Record<string, { label: string; data: SheetData }>
+): string {
   if (!expr.startsWith('=')) return expr;
 
   const raw = expr.substring(1).trim();
@@ -90,11 +94,11 @@ export function evaluateExcelFormula(expr: string, sheetData: SheetData): string
     if (ifMatch) {
       const args = splitFormulaArgs(ifMatch[1]);
       if (args.length >= 2) {
-        const cond = evaluateCondition(args[0], sheetData);
+        const cond = evaluateCondition(args[0], sheetData, allSheets);
         if (cond) {
-          return resolveArgValue(args[1], sheetData);
+          return resolveArgValue(args[1], sheetData, allSheets);
         } else {
-          return args[2] ? resolveArgValue(args[2], sheetData) : '';
+          return args[2] ? resolveArgValue(args[2], sheetData, allSheets) : '';
         }
       }
     }
@@ -104,8 +108,10 @@ export function evaluateExcelFormula(expr: string, sheetData: SheetData): string
     if (vlookupMatch) {
       const args = splitFormulaArgs(vlookupMatch[1]);
       if (args.length >= 3) {
-        const lookupVal = resolveArgValue(args[0], sheetData).toLowerCase();
-        const rangeCells = parseRange(args[1].toUpperCase());
+        const lookupVal = resolveArgValue(args[0], sheetData, allSheets).toLowerCase();
+        const targetData = resolveTargetSheetData(args[1], sheetData, allSheets);
+        const cleanRange = stripSheetPrefix(args[1].toUpperCase());
+        const rangeCells = parseRange(cleanRange);
         const colIndex = parseInt(args[2], 10);
 
         // Group range cells by rows
@@ -122,11 +128,11 @@ export function evaluateExcelFormula(expr: string, sheetData: SheetData): string
         for (const rowNum of Object.keys(rowMap)) {
           const rowCells = rowMap[Number(rowNum)];
           const firstCell = rowCells[0];
-          const valInFirst = String(sheetData[firstCell]?.value || '').toLowerCase();
+          const valInFirst = String(targetData[firstCell]?.value || '').toLowerCase();
           if (valInFirst === lookupVal || valInFirst.includes(lookupVal)) {
             const targetCell = rowCells[colIndex - 1];
             if (targetCell) {
-              return String(sheetData[targetCell]?.value || '');
+              return String(targetData[targetCell]?.value || '');
             }
           }
         }
@@ -137,7 +143,7 @@ export function evaluateExcelFormula(expr: string, sheetData: SheetData): string
     // 3. SUM(...)
     const sumMatch = raw.match(/^SUM\s*\((.+)\)$/i);
     if (sumMatch) {
-      const vals = collectNumericValues(sumMatch[1], sheetData);
+      const vals = collectNumericValues(sumMatch[1], sheetData, allSheets);
       const total = vals.reduce((a, b) => a + b, 0);
       return formatResult(total);
     }
@@ -147,13 +153,16 @@ export function evaluateExcelFormula(expr: string, sheetData: SheetData): string
     if (sumifMatch) {
       const args = splitFormulaArgs(sumifMatch[1]);
       if (args.length >= 2) {
-        const critCells = parseRange(args[0].toUpperCase());
+        const targetData = resolveTargetSheetData(args[0], sheetData, allSheets);
+        const cleanCritRange = stripSheetPrefix(args[0].toUpperCase());
+        const critCells = parseRange(cleanCritRange);
         const rawCrit = args[1].replace(/['"]/g, '').trim();
-        const sumCells = args[2] ? parseRange(args[2].toUpperCase()) : critCells;
+        const sumTargetData = args[2] ? resolveTargetSheetData(args[2], sheetData, allSheets) : targetData;
+        const sumCells = args[2] ? parseRange(stripSheetPrefix(args[2].toUpperCase())) : critCells;
 
         let total = 0;
         critCells.forEach((cId, idx) => {
-          const val = parseFloat(sheetData[cId]?.value || '0');
+          const val = parseFloat(targetData[cId]?.value || '0');
           let matches = false;
           if (rawCrit.startsWith('>=')) matches = val >= parseFloat(rawCrit.substring(2));
           else if (rawCrit.startsWith('<=')) matches = val <= parseFloat(rawCrit.substring(2));
@@ -235,17 +244,27 @@ export function evaluateExcelFormula(expr: string, sheetData: SheetData): string
 
     // Replace nested SUM, AVERAGE
     mathStr = mathStr.replace(/SUM\s*\(([^)]+)\)/gi, (_, inner) => {
-      const vals = collectNumericValues(inner, sheetData);
+      const vals = collectNumericValues(inner, sheetData, allSheets);
       return vals.reduce((a, b) => a + b, 0).toString();
     });
 
     mathStr = mathStr.replace(/AVERAGE\s*\(([^)]+)\)/gi, (_, inner) => {
-      const vals = collectNumericValues(inner, sheetData);
+      const vals = collectNumericValues(inner, sheetData, allSheets);
       if (vals.length === 0) return '0';
       return (vals.reduce((a, b) => a + b, 0) / vals.length).toString();
     });
 
-    // Replace cell references A1, B4 with their numeric values
+    // Replace cross-sheet references e.g. 'Sheet1'!A1 or Sheet1!A1
+    mathStr = mathStr.replace(/(?:'([^']+)'|([A-Za-z0-9_]+))!([A-Z]+[0-9]+)/gi, (_, quotedSheet, unquotedSheet, cellAddr) => {
+      const sheetName = quotedSheet || unquotedSheet;
+      const targetData = resolveTargetSheetData(sheetName, sheetData, allSheets);
+      const cellVal = targetData[cellAddr.toUpperCase()]?.value;
+      if (cellVal === undefined || cellVal === '') return '0';
+      const cleanNum = parseFloat(String(cellVal).replace(/[^\d.-]/g, ''));
+      return isNaN(cleanNum) ? '0' : cleanNum.toString();
+    });
+
+    // Replace local cell references A1, B4 with their numeric values
     mathStr = mathStr.replace(/\b([A-Z]+[0-9]+)\b/g, (match) => {
       const cellVal = sheetData[match]?.value;
       if (cellVal === undefined || cellVal === '') return '0';
@@ -271,23 +290,68 @@ export function evaluateExcelFormula(expr: string, sheetData: SheetData): string
   }
 }
 
-function collectNumericValues(argsStr: string, sheetData: SheetData): number[] {
+export function stripSheetPrefix(ref: string): string {
+  if (ref.includes('!')) {
+    return ref.split('!').pop() || ref;
+  }
+  return ref;
+}
+
+export function resolveTargetSheetData(
+  refOrSheetName: string, 
+  currentSheetData: SheetData, 
+  allSheets?: Record<string, { label: string; data: SheetData }>
+): SheetData {
+  if (!allSheets) return currentSheetData;
+
+  let sheetIdentifier = refOrSheetName;
+  if (refOrSheetName.includes('!')) {
+    sheetIdentifier = refOrSheetName.split('!')[0].replace(/^['"]|['"]$/g, '').trim();
+  } else {
+    sheetIdentifier = refOrSheetName.replace(/^['"]|['"]$/g, '').trim();
+  }
+
+  // Look up by sheet key e.g. sheet1, sheet2
+  if (allSheets[sheetIdentifier]) {
+    return allSheets[sheetIdentifier].data;
+  }
+
+  // Look up by sheet label or name
+  for (const key of Object.keys(allSheets)) {
+    const s = allSheets[key];
+    if (s.label.toLowerCase() === sheetIdentifier.toLowerCase() || 
+        s.label.toLowerCase().includes(sheetIdentifier.toLowerCase()) ||
+        key.toLowerCase() === sheetIdentifier.toLowerCase()) {
+      return s.data;
+    }
+  }
+
+  return currentSheetData;
+}
+
+function collectNumericValues(
+  argsStr: string, 
+  sheetData: SheetData, 
+  allSheets?: Record<string, { label: string; data: SheetData }>
+): number[] {
   const args = splitFormulaArgs(argsStr);
   const values: number[] = [];
 
   for (const arg of args) {
     const trimmed = arg.trim();
     if (trimmed.includes(':')) {
-      const rangeCells = parseRange(trimmed.toUpperCase());
+      const targetData = resolveTargetSheetData(trimmed, sheetData, allSheets);
+      const cleanRange = stripSheetPrefix(trimmed.toUpperCase());
+      const rangeCells = parseRange(cleanRange);
       for (const c of rangeCells) {
-        const val = sheetData[c]?.value;
+        const val = targetData[c]?.value;
         if (val !== undefined && val !== '') {
           const num = parseFloat(String(val).replace(/[^\d.-]/g, ''));
           if (!isNaN(num)) values.push(num);
         }
       }
     } else {
-      const val = resolveArgValue(trimmed, sheetData);
+      const val = resolveArgValue(trimmed, sheetData, allSheets);
       const num = parseFloat(String(val).replace(/[^\d.-]/g, ''));
       if (!isNaN(num)) values.push(num);
     }
@@ -296,12 +360,24 @@ function collectNumericValues(argsStr: string, sheetData: SheetData): number[] {
   return values;
 }
 
-function resolveArgValue(arg: string, sheetData: SheetData): string {
+function resolveArgValue(
+  arg: string, 
+  sheetData: SheetData, 
+  allSheets?: Record<string, { label: string; data: SheetData }>
+): string {
   const trimmed = arg.trim();
   // Strip quotes
   if ((trimmed.startsWith('"') && trimmed.endsWith('"')) || (trimmed.startsWith("'") && trimmed.endsWith("'"))) {
     return trimmed.slice(1, -1);
   }
+  
+  // Cross-sheet reference e.g. 'Sheet1'!A1 or Sheet1!A1
+  if (trimmed.includes('!')) {
+    const targetData = resolveTargetSheetData(trimmed, sheetData, allSheets);
+    const cellAddr = stripSheetPrefix(trimmed).toUpperCase();
+    return String(targetData[cellAddr]?.value || '');
+  }
+
   // Check if cell reference e.g. A1, B4
   if (/^[A-Z]+[0-9]+$/i.test(trimmed)) {
     return String(sheetData[trimmed.toUpperCase()]?.value || '');
@@ -333,13 +409,17 @@ function splitFormulaArgs(str: string): string[] {
   return args;
 }
 
-function evaluateCondition(condStr: string, sheetData: SheetData): boolean {
+function evaluateCondition(
+  condStr: string, 
+  sheetData: SheetData, 
+  allSheets?: Record<string, { label: string; data: SheetData }>
+): boolean {
   const ops = ['>=', '<=', '!=', '<>', '=', '>', '<'];
   for (const op of ops) {
     if (condStr.includes(op)) {
       const [left, right] = condStr.split(op);
-      const leftVal = parseFloat(resolveArgValue(left, sheetData));
-      const rightVal = parseFloat(resolveArgValue(right, sheetData));
+      const leftVal = parseFloat(resolveArgValue(left, sheetData, allSheets));
+      const rightVal = parseFloat(resolveArgValue(right, sheetData, allSheets));
 
       if (!isNaN(leftVal) && !isNaN(rightVal)) {
         switch (op) {
@@ -352,8 +432,8 @@ function evaluateCondition(condStr: string, sheetData: SheetData): boolean {
           case '<>': return leftVal !== rightVal;
         }
       } else {
-        const leftStr = resolveArgValue(left, sheetData).toLowerCase();
-        const rightStr = resolveArgValue(right, sheetData).toLowerCase();
+        const leftStr = resolveArgValue(left, sheetData, allSheets).toLowerCase();
+        const rightStr = resolveArgValue(right, sheetData, allSheets).toLowerCase();
         if (op === '=' || op === '==') return leftStr === rightStr;
         if (op === '!=' || op === '<>') return leftStr !== rightStr;
       }

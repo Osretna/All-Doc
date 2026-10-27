@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { DbTable, DbField } from '../../types';
 import { localVault } from '../../utils/storage';
+import { parseAccessFile } from '../../utils/fileImport';
 import {
   Database,
   Table as TableIcon,
@@ -25,11 +26,16 @@ import {
   RotateCcw,
   Save,
   Check,
-  ExternalLink
+  ExternalLink,
+  FolderOpen,
+  FileUp,
+  Loader2
 } from 'lucide-react';
 
 interface Props {
   fontFamily: string;
+  initialTables?: DbTable[];
+  onTablesChange?: (tables: DbTable[]) => void;
 }
 
 const INITIAL_ACCESS_TABLES: DbTable[] = [
@@ -92,14 +98,24 @@ const INITIAL_ACCESS_TABLES: DbTable[] = [
   },
 ];
 
-export const BaseApp: React.FC<Props> = ({ fontFamily }) => {
+export const BaseApp: React.FC<Props> = ({ fontFamily, initialTables, onTablesChange }) => {
   const [tables, setTables] = useState<DbTable[]>(() => {
-    return localVault.get<DbTable[]>(localVault.KEYS.BASE_DATA, INITIAL_ACCESS_TABLES);
+    return initialTables || localVault.get<DbTable[]>(localVault.KEYS.BASE_DATA, INITIAL_ACCESS_TABLES);
   });
+
+  // Sync when initialTables is provided externally
+  useEffect(() => {
+    if (initialTables && initialTables.length > 0) {
+      setTables(initialTables);
+      setActiveTableId(initialTables[0].id);
+    }
+  }, [initialTables]);
+
   const [activeTableId, setActiveTableId] = useState<string>('tbl_mollak');
   const [viewMode, setViewMode] = useState<'records' | 'design' | 'form' | 'sql' | 'report'>('records');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [formRecordIndex, setFormRecordIndex] = useState<number>(0);
+  const [isLoadingFile, setIsLoadingFile] = useState<boolean>(false);
 
   // SQL Query state
   const [sqlQuery, setSqlQuery] = useState<string>("SELECT * FROM وحدات_نظام_ملاك WHERE status = 'مسدد'");
@@ -107,6 +123,33 @@ export const BaseApp: React.FC<Props> = ({ fontFamily }) => {
 
   // New Record Inline row
   const [newRowData, setNewRowData] = useState<Record<string, any>>({});
+
+  useEffect(() => {
+    localVault.set(localVault.KEYS.BASE_DATA, tables);
+    onTablesChange?.(tables);
+  }, [tables]);
+
+  const handleImportAccessFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsLoadingFile(true);
+    try {
+      const parsedTables = await parseAccessFile(file);
+      if (parsedTables.length > 0) {
+        setTables(parsedTables);
+        setActiveTableId(parsedTables[0].id);
+        alert(`تم فتح واستيراد قاعدة بيانات Access "${file.name}" بنجاح! تم تضمين ${parsedTables.length} جدول.`);
+      } else {
+        alert('لم يتم العثور على جداول صالحة داخل الملف.');
+      }
+    } catch (err) {
+      console.error(err);
+      alert('حدث خطأ أثناء قراءة ملف Access / SQL. تأكد من صيغة الملف.');
+    } finally {
+      setIsLoadingFile(false);
+    }
+  };
 
   useEffect(() => {
     localVault.set(localVault.KEYS.BASE_DATA, tables);
@@ -335,6 +378,22 @@ export const BaseApp: React.FC<Props> = ({ fontFamily }) => {
                 className="bg-white border border-gray-300 rounded pr-7 pl-2 py-0.5 text-xs outline-none focus:border-[#a4373a] w-44"
               />
             </div>
+
+            <label className="flex items-center gap-1.5 px-3 py-1 rounded bg-[#a4373a] hover:bg-[#8e2e31] text-white font-bold transition cursor-pointer shadow-xs">
+              {isLoadingFile ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <FolderOpen className="w-3.5 h-3.5" />
+              )}
+              <span className="hidden md:inline">فتح ملف Access (.accdb / .sql / .csv)</span>
+              <span className="md:hidden">فتح</span>
+              <input
+                type="file"
+                accept=".accdb,.mdb,.sql,.csv,.json"
+                className="hidden"
+                onChange={handleImportAccessFile}
+              />
+            </label>
 
             <button
               onClick={exportTableCSV}

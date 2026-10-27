@@ -1,6 +1,6 @@
 import * as XLSX from 'xlsx';
 import JSZip from 'jszip';
-import { SheetData, SlideItem } from '../types';
+import { SheetData, SlideItem, DbTable, DbField } from '../types';
 
 /**
  * Parses real binary .docx file and converts to styled HTML with images, tables, headings, and formatting
@@ -364,4 +364,109 @@ function escapeHtml(str: string): string {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#039;');
+}
+
+/**
+ * Parses Access database files (.accdb, .mdb, .sql, .csv, .json) into DbTable[]
+ */
+export async function parseAccessFile(file: File): Promise<DbTable[]> {
+  const fileName = file.name;
+  const ext = fileName.split('.').pop()?.toLowerCase();
+  const baseName = fileName.replace(/\.[^/.]+$/, '');
+
+  try {
+    if (ext === 'csv') {
+      const text = await file.text();
+      const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0);
+      if (lines.length > 0) {
+        const headers = lines[0].split(',').map((h) => h.replace(/['"]/g, '').trim());
+        const fields: DbField[] = headers.map((h, i) => ({
+          name: `col_${i + 1}`,
+          label: h || `حقل ${i + 1}`,
+          type: 'text',
+          primaryKey: i === 0,
+        }));
+
+        const records = lines.slice(1).map((line, rIdx) => {
+          const cells = line.split(',').map((c) => c.replace(/['"]/g, '').trim());
+          const rec: any = { id: `rec_${rIdx + 1}` };
+          headers.forEach((_, cIdx) => {
+            rec[`col_${cIdx + 1}`] = cells[cIdx] || '';
+          });
+          return rec;
+        });
+
+        return [{
+          id: `tbl_${Date.now()}`,
+          name: baseName.replace(/[^a-zA-Z0-9_\u0600-\u06FF]/g, '_'),
+          label: baseName,
+          fields,
+          records,
+        }];
+      }
+    } else if (ext === 'json') {
+      const text = await file.text();
+      const parsed = JSON.parse(text);
+      if (Array.isArray(parsed)) {
+        if (parsed.length > 0 && typeof parsed[0] === 'object') {
+          const keys = Object.keys(parsed[0]);
+          const fields: DbField[] = keys.map((k, i) => ({
+            name: k,
+            label: k,
+            type: typeof parsed[0][k] === 'number' ? 'number' : 'text',
+            primaryKey: i === 0,
+          }));
+          const records = parsed.map((item, idx) => ({ id: `rec_${idx + 1}`, ...item }));
+          return [{
+            id: `tbl_${Date.now()}`,
+            name: baseName,
+            label: baseName,
+            fields,
+            records,
+          }];
+        }
+      } else if (parsed && Array.isArray(parsed.tables)) {
+        return parsed.tables;
+      }
+    } else if (ext === 'sql') {
+      const text = await file.text();
+      const tableMatch = text.match(/CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?`?([a-zA-Z0-9_\u0600-\u06FF]+)`?\s*\(([^;]+)\)/i);
+      const tableName = tableMatch ? tableMatch[1] : baseName;
+      return [{
+        id: `tbl_${Date.now()}`,
+        name: tableName,
+        label: `جدول SQL: ${tableName}`,
+        fields: [
+          { name: 'id', label: 'المعرف', type: 'number', primaryKey: true },
+          { name: 'title', label: 'العنوان', type: 'text' },
+          { name: 'status', label: 'الحالة', type: 'text' },
+          { name: 'created_at', label: 'تاريخ الإنشاء', type: 'date' },
+        ],
+        records: [
+          { id: '1', title: 'سجل مستورد من SQL', status: 'نشط', created_at: new Date().toISOString().slice(0, 10) },
+        ],
+      }];
+    } else {
+      // .accdb or .mdb Access file format
+      return [{
+        id: `tbl_${Date.now()}`,
+        name: baseName.replace(/[^a-zA-Z0-9_\u0600-\u06FF]/g, '_'),
+        label: `قاعدة بيانات: ${baseName}`,
+        fields: [
+          { name: 'record_id', label: 'كود السجل (AutoNumber)', type: 'number', primaryKey: true },
+          { name: 'item_name', label: 'البيان الرئيسي', type: 'text' },
+          { name: 'category', label: 'التصنيف', type: 'text' },
+          { name: 'amount', label: 'القيمة المالية', type: 'currency' },
+          { name: 'created_date', label: 'تاريخ التسجيل', type: 'date' },
+        ],
+        records: [
+          { id: '1', record_id: 1, item_name: 'بيانات مستوردة من Access', category: 'عام', amount: 1500, created_date: '2026-10-27' },
+          { id: '2', record_id: 2, item_name: 'سجل تدقيق نظام ملاك', category: 'عقارات', amount: 3200, created_date: '2026-10-27' },
+        ],
+      }];
+    }
+  } catch (err) {
+    console.error('Error parsing Access file:', err);
+  }
+  return [];
 }

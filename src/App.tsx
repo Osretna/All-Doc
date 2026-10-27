@@ -4,7 +4,8 @@ import {
   MainNavSection, 
   RibbonTab,
   SheetData,
-  SlideItem
+  SlideItem,
+  DbTable
 } from './types';
 import { APP_CONFIGS } from './utils/appConfigs';
 import { TitleBar } from './components/layout/TitleBar';
@@ -46,10 +47,13 @@ export default function App() {
   const [wordCount, setWordCount] = useState<number>(342);
   const [charCount, setCharCount] = useState<number>(2410);
 
-  // Document Content State for DocsApp, SheetsApp, and SlidesApp
+  // Document Content State for DocsApp, SheetsApp, SlidesApp, BaseApp, PdfStudioApp, PhotoStudioApp
   const [docContent, setDocContent] = useState<string | undefined>(undefined);
   const [excelSheets, setExcelSheets] = useState<Record<string, { label: string; data: SheetData }> | undefined>(undefined);
   const [slidesList, setSlidesList] = useState<SlideItem[] | undefined>(undefined);
+  const [accessTables, setAccessTables] = useState<DbTable[] | undefined>(undefined);
+  const [pdfFile, setPdfFile] = useState<File | null>(null);
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
 
   // Automatically reset tab to home when switching applications
   const handleSwitchApp = (app: OfficeAppId) => {
@@ -270,13 +274,25 @@ export default function App() {
               <NotesApp fontFamily={selectedFont} />
             )}
             {activeApp === 'base' && (
-              <BaseApp fontFamily={selectedFont} />
+              <BaseApp 
+                fontFamily={selectedFont} 
+                initialTables={accessTables}
+                onTablesChange={setAccessTables}
+              />
             )}
             {activeApp === 'pdf' && (
-              <PdfStudioApp fontFamily={selectedFont} />
+              <PdfStudioApp 
+                fontFamily={selectedFont} 
+                initialPdfFile={pdfFile}
+                onPdfChange={setPdfFile}
+              />
             )}
             {activeApp === 'photo' && (
-              <PhotoStudioApp fontFamily={selectedFont} />
+              <PhotoStudioApp 
+                fontFamily={selectedFont} 
+                initialPhotoFile={photoFile}
+                onPhotoChange={setPhotoFile}
+              />
             )}
           </>
         ) : (
@@ -325,6 +341,18 @@ export default function App() {
         onLoadSlidesData={(slides, title) => {
           setSlidesList(slides);
           setDocumentTitle(title);
+        }}
+        onLoadAccessData={(tables, title) => {
+          setAccessTables(tables);
+          setDocumentTitle(title);
+        }}
+        onLoadPdfFile={(file) => {
+          setPdfFile(file);
+          setDocumentTitle(file.name.replace(/\.[^/.]+$/, ''));
+        }}
+        onLoadPhotoFile={(file) => {
+          setPhotoFile(file);
+          setDocumentTitle(file.name.replace(/\.[^/.]+$/, ''));
         }}
       />
 
