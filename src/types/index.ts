@@ -30,6 +30,8 @@ export type RibbonTab =
   | 'create' 
   | 'external-data' 
   | 'database-tools' 
+  | 'references'
+  | 'mailings'
   | 'review' 
   | 'view';
 
@@ -57,13 +59,28 @@ export interface DocTemplate {
 export interface SheetCell {
   value: string;
   formula?: string;
-  format?: 'text' | 'currency-sar' | 'currency-egp' | 'currency-usd' | 'percent' | 'number';
+  format?: 'text' | 'currency-sar' | 'currency-egp' | 'currency-usd' | 'percent' | 'number' | 'accounting' | 'date' | 'fraction' | 'scientific';
   bold?: boolean;
   italic?: boolean;
+  underline?: boolean;
+  strikethrough?: boolean;
   align?: 'right' | 'center' | 'left';
+  verticalAlign?: 'top' | 'middle' | 'bottom';
+  wrapText?: boolean;
   bg?: string;
   color?: string;
-  border?: 'all' | 'bottom' | 'none';
+  fontSize?: number;
+  fontFamily?: string;
+  border?: 'all' | 'bottom' | 'top' | 'thick-bottom' | 'double-bottom' | 'outside' | 'none' | 'left' | 'right';
+  textRotation?: number;
+  comment?: string;
+  sparkline?: { type: 'line' | 'column' | 'winloss'; range: string };
+  validation?: { type: 'list' | 'number'; values: string[] };
+  isMergeParent?: boolean;
+  mergeColSpan?: number;
+  mergeRowSpan?: number;
+  mergedWith?: string;
+  decimalPlaces?: number;
 }
 
 export type SheetData = { [cellId: string]: SheetCell };
@@ -76,7 +93,7 @@ export interface SlideItem {
   layout: 'title' | 'content' | 'split' | 'highlight' | 'quote' | 'comparison' | 'custom';
   notes: string;
   theme: 'blue' | 'emerald' | 'amber' | 'dark' | 'purple' | 'crimson' | 'custom';
-  transition?: 'none' | 'fade' | 'push' | 'wipe' | 'zoom';
+  transition?: string;
   backgroundImage?: string;
   backgroundColor?: string;
   textColor?: string;
