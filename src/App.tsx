@@ -78,16 +78,28 @@ export default function App() {
     }
   };
 
-  // Keyboard shortcuts (Ctrl+S, F5, Ctrl+P)
+  // Global Keyboard shortcuts (Ctrl+S, Ctrl+Shift+S, Ctrl+P)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+      // 1. Ctrl + S: Quick Sovereign Save
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && (e.key === 's' || e.key === 'S')) {
         e.preventDefault();
-        alert('تم حفظ الملف والخزنة السيادية محلياً بنجاح!');
+        alert('تم حفظ الملف والخزنة السيادية محلياً بنجاح (100% Offline Sovereign Save)!');
+        return;
       }
-      if (e.key === 'F5' && activeApp === 'slides') {
+
+      // 2. Ctrl + Shift + S: Save As / Export Backstage Modal
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 's' || e.key === 'S')) {
         e.preventDefault();
-        // Slides will listen to F5 via its presenter mode
+        setIsBackstageOpen(true);
+        return;
+      }
+
+      // 3. Ctrl + P: Print Document
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'p' || e.key === 'P')) {
+        e.preventDefault();
+        window.print();
+        return;
       }
     };
     window.addEventListener('keydown', handleKeyDown);

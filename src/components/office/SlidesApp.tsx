@@ -115,12 +115,15 @@ export const SlidesApp: React.FC<Props> = ({
 
   const [currentSlideIndex, setCurrentSlideIndex] = useState<number>(0);
   const [isPresenterMode, setIsPresenterMode] = useState<boolean>(false);
+  const [isBlackScreen, setIsBlackScreen] = useState<boolean>(false);
+  const [isWhiteScreen, setIsWhiteScreen] = useState<boolean>(false);
   const [presentationTime, setPresentationTime] = useState<number>(0);
   const [laserPointer, setLaserPointer] = useState<{ x: number; y: number } | null>(null);
   const [isDrawing, setIsDrawing] = useState<boolean>(false);
   const [showLayoutMenu, setShowLayoutMenu] = useState<boolean>(false);
 
   const presenterCanvasRef = useRef<HTMLCanvasElement>(null);
+  const copiedSlideFormatRef = useRef<Partial<SlideItem> | null>(null);
 
   const handleOpenPptx = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -144,6 +147,120 @@ export const SlidesApp: React.FC<Props> = ({
     localVault.set(localVault.KEYS.SLIDES_DATA, slides);
     onSlidesChange?.(slides);
   }, [slides]);
+
+  // PowerPoint Keyboard Shortcuts (F5, Shift+F5, B, W, Ctrl+M, Ctrl+D, Ctrl+Shift+C/V)
+  useEffect(() => {
+    const handlePowerPointShortcuts = (e: KeyboardEvent) => {
+      // 1. F5: Start Presentation from beginning
+      if (e.key === 'F5' && !e.shiftKey) {
+        e.preventDefault();
+        setCurrentSlideIndex(0);
+        setIsPresenterMode(true);
+        setIsBlackScreen(false);
+        setIsWhiteScreen(false);
+        return;
+      }
+
+      // 2. Shift + F5: Start Presentation from current slide
+      if (e.key === 'F5' && e.shiftKey) {
+        e.preventDefault();
+        setIsPresenterMode(true);
+        setIsBlackScreen(false);
+        setIsWhiteScreen(false);
+        return;
+      }
+
+      // Presenter Mode controls
+      if (isPresenterMode) {
+        if (e.key === 'b' || e.key === 'B' || e.key === '.') {
+          e.preventDefault();
+          setIsBlackScreen((prev) => !prev);
+          setIsWhiteScreen(false);
+          return;
+        }
+        if (e.key === 'w' || e.key === 'W' || e.key === ',') {
+          e.preventDefault();
+          setIsWhiteScreen((prev) => !prev);
+          setIsBlackScreen(false);
+          return;
+        }
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          setIsPresenterMode(false);
+          setIsBlackScreen(false);
+          setIsWhiteScreen(false);
+          return;
+        }
+        if (e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' ') {
+          e.preventDefault();
+          setIsBlackScreen(false);
+          setIsWhiteScreen(false);
+          setCurrentSlideIndex((prev) => Math.min(slides.length - 1, prev + 1));
+          return;
+        }
+        if (e.key === 'ArrowLeft' || e.key === 'PageUp') {
+          e.preventDefault();
+          setIsBlackScreen(false);
+          setIsWhiteScreen(false);
+          setCurrentSlideIndex((prev) => Math.max(0, prev - 1));
+          return;
+        }
+      }
+
+      // 3. Ctrl + M: New Slide
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'm' || e.key === 'M')) {
+        e.preventDefault();
+        handleAddSlide();
+        return;
+      }
+
+      // 4. Ctrl + D: Duplicate Slide
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'd' || e.key === 'D')) {
+        e.preventDefault();
+        handleDuplicateSlide(currentSlideIndex);
+        return;
+      }
+
+      // 5. Ctrl + Shift + C: Copy slide formatting
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'c' || e.key === 'C')) {
+        e.preventDefault();
+        const s = slides[currentSlideIndex];
+        copiedSlideFormatRef.current = {
+          theme: s.theme,
+          layout: s.layout,
+          transition: s.transition,
+          fontFamily: s.fontFamily,
+          backgroundColor: s.backgroundColor,
+          textColor: s.textColor,
+          titleColor: s.titleColor,
+          cardBg: s.cardBg,
+          cardBorder: s.cardBorder,
+        };
+        alert('تم نسخ تنسيق الشريحة (PowerPoint Format)! حدد شريحة أخرى واضغط Ctrl+Shift+V للصق التنسيق.');
+        return;
+      }
+
+      // 6. Ctrl + Shift + V: Paste slide formatting
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'v' || e.key === 'V')) {
+        if (copiedSlideFormatRef.current) {
+          e.preventDefault();
+          setSlides((prev) => {
+            const copy = [...prev];
+            copy[currentSlideIndex] = {
+              ...copy[currentSlideIndex],
+              ...copiedSlideFormatRef.current,
+            };
+            return copy;
+          });
+          alert('تم تطبيق التنسيق على الشريحة الحالية بنجاح.');
+        }
+        return;
+      }
+    };
+
+    window.addEventListener('keydown', handlePowerPointShortcuts);
+    return () => window.removeEventListener('keydown', handlePowerPointShortcuts);
+  }, [isPresenterMode, currentSlideIndex, slides]);
 
   // Timer in presenter mode
   useEffect(() => {
@@ -597,6 +714,18 @@ export const SlidesApp: React.FC<Props> = ({
               className="pointer-events-none fixed w-4 h-4 rounded-full bg-red-500 shadow-[0_0_12px_4px_rgba(239,68,68,0.8)] z-[250] -translate-x-1/2 -translate-y-1/2"
               style={{ left: laserPointer.x, top: laserPointer.y }}
             />
+          )}
+
+          {/* Black & White Screen Overlays (B / W shortcuts) */}
+          {isBlackScreen && (
+            <div className="fixed inset-0 z-[260] bg-black flex items-center justify-center text-gray-600 font-mono text-xs select-none">
+              شاشة سوداء مؤقتة (اضغط B أو . للرجوع للعرض)
+            </div>
+          )}
+          {isWhiteScreen && (
+            <div className="fixed inset-0 z-[260] bg-white flex items-center justify-center text-gray-400 font-mono text-xs select-none">
+              شاشة بيضاء مؤقتة (اضغط W أو , للرجوع للعرض)
+            </div>
           )}
 
           {/* Top Bar with Timer and Close */}

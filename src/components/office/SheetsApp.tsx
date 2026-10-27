@@ -152,6 +152,8 @@ export const SheetsApp: React.FC<Props> = ({
   const [showChart, setShowChart] = useState<boolean>(false);
   const [chartType, setChartType] = useState<'bar' | 'pie'>('bar');
   const [showFxHelper, setShowFxHelper] = useState<boolean>(false);
+  const [showFormulasMode, setShowFormulasMode] = useState<boolean>(false);
+  const [showFilterActive, setShowFilterActive] = useState<boolean>(false);
 
   // Excel Formula Autocomplete state
   const [matchingFunctions, setMatchingFunctions] = useState<ExcelFunctionDef[]>([]);
@@ -399,6 +401,152 @@ export const SheetsApp: React.FC<Props> = ({
     setIsDraggingRange(false);
     setDragStartCell(null);
   };
+
+  // Microsoft Excel Keyboard Shortcuts
+  useEffect(() => {
+    const handleExcelGlobalKeys = (e: KeyboardEvent) => {
+      // 1. Ctrl + ; : Today's Date
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key === ';') {
+        e.preventDefault();
+        const today = new Date().toISOString().split('T')[0];
+        handleCellChange(selectedCell, today);
+        return;
+      }
+
+      // 2. Ctrl + Shift + ; or Ctrl + : : Current Time
+      if ((e.ctrlKey || e.metaKey) && (e.shiftKey && (e.key === ';' || e.key === ':'))) {
+        e.preventDefault();
+        const now = new Date().toLocaleTimeString('ar-EG');
+        handleCellChange(selectedCell, now);
+        return;
+      }
+
+      // 3. Ctrl + D : Fill Down (Copy from cell above)
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'd' || e.key === 'D')) {
+        e.preventDefault();
+        const m = selectedCell.match(/([A-Z]+)(\d+)/);
+        if (m) {
+          const col = m[1];
+          const row = parseInt(m[2], 10);
+          if (row > 1) {
+            const aboveCellId = `${col}${row - 1}`;
+            const aboveCell = data[aboveCellId];
+            if (aboveCell) {
+              const val = aboveCell.formula || aboveCell.value;
+              handleCellChange(selectedCell, val);
+            }
+          }
+        }
+        return;
+      }
+
+      // 4. Ctrl + R : Fill Right (Copy from cell to left)
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'r' || e.key === 'R')) {
+        e.preventDefault();
+        const m = selectedCell.match(/([A-Z]+)(\d+)/);
+        if (m) {
+          const col = m[1];
+          const row = parseInt(m[2], 10);
+          const colIdx = COLS.indexOf(col);
+          if (colIdx > 0) {
+            const leftCol = COLS[colIdx - 1];
+            const leftCellId = `${leftCol}${row}`;
+            const leftCell = data[leftCellId];
+            if (leftCell) {
+              const val = leftCell.formula || leftCell.value;
+              handleCellChange(selectedCell, val);
+            }
+          }
+        }
+        return;
+      }
+
+      // 5. Alt + = : AutoSum
+      if (e.altKey && (e.key === '=' || e.key === '+')) {
+        e.preventDefault();
+        const m = selectedCell.match(/([A-Z]+)(\d+)/);
+        if (m) {
+          const col = m[1];
+          const row = parseInt(m[2], 10);
+          if (row > 1) {
+            const formula = `=SUM(${col}4:${col}${row - 1})`;
+            handleCellChange(selectedCell, formula);
+            setFormulaInput(formula);
+          }
+        }
+        return;
+      }
+
+      // 6. Ctrl + Shift + L : Toggle AutoFilter
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'l' || e.key === 'L')) {
+        e.preventDefault();
+        setShowFilterActive((prev) => !prev);
+        return;
+      }
+
+      // 7. Ctrl + T : Convert to Table format
+      if ((e.ctrlKey || e.metaKey) && (e.key === 't' || e.key === 'T')) {
+        e.preventDefault();
+        handleFormat('bg', '#e2e8f0');
+        handleFormat('bold', true);
+        alert('تم تطبيق تنسيق جدول Excel (Ctrl+T) على النطاق المحدد!');
+        return;
+      }
+
+      // 8. Ctrl + Shift + $ : Currency Format
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === '$' || e.key === '4')) {
+        e.preventDefault();
+        const currentVal = data[selectedCell]?.value || '';
+        if (currentVal && !currentVal.includes('ر.س')) {
+          handleCellChange(selectedCell, `${currentVal} ر.س`);
+        }
+        return;
+      }
+
+      // 9. Ctrl + Shift + % : Percentage Format
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === '%' || e.key === '5')) {
+        e.preventDefault();
+        const currentVal = data[selectedCell]?.value || '';
+        if (currentVal && !currentVal.includes('%')) {
+          handleCellChange(selectedCell, `${currentVal}%`);
+        }
+        return;
+      }
+
+      // 10. Ctrl + ` : Toggle Show Formulas Mode
+      if ((e.ctrlKey || e.metaKey) && (e.key === '`' || e.key === '~')) {
+        e.preventDefault();
+        setShowFormulasMode((prev) => !prev);
+        return;
+      }
+
+      // 11. F4 : Cycle absolute references ($A$1)
+      if (e.key === 'F4') {
+        e.preventDefault();
+        if (formulaInput.startsWith('=')) {
+          const lastRefMatch = formulaInput.match(/(\$?)([A-Z]+)(\$?)(\d+)$/);
+          if (lastRefMatch) {
+            const hasColDollar = !!lastRefMatch[1];
+            const col = lastRefMatch[2];
+            const hasRowDollar = !!lastRefMatch[3];
+            const row = lastRefMatch[4];
+            let nextRef = '';
+            if (!hasColDollar && !hasRowDollar) nextRef = `$${col}$${row}`;
+            else if (hasColDollar && hasRowDollar) nextRef = `${col}$${row}`;
+            else if (!hasColDollar && hasRowDollar) nextRef = `$${col}${row}`;
+            else nextRef = `${col}${row}`;
+
+            const replaced = formulaInput.replace(/(\$?)([A-Z]+)(\$?)(\d+)$/, nextRef);
+            handleFormulaInputChange(replaced);
+          }
+        }
+        return;
+      }
+    };
+
+    window.addEventListener('keydown', handleExcelGlobalKeys);
+    return () => window.removeEventListener('keydown', handleExcelGlobalKeys);
+  }, [selectedCell, data, formulaInput, activeSheetKey]);
 
   const handleFormat = (prop: keyof SheetCell, value: any) => {
     const cell = data[selectedCell] || { value: '' };
@@ -663,7 +811,12 @@ export const SheetsApp: React.FC<Props> = ({
               <th className="w-10 p-1 border border-gray-300 text-center bg-[#eae8e6]">#</th>
               {COLS.map((col) => (
                 <th key={col} className="p-1 border border-gray-300 text-center min-w-[110px] w-28">
-                  {col}
+                  <span>{col}</span>
+                  {showFilterActive && (
+                    <span className="inline-block text-[9px] text-emerald-800 bg-white border border-gray-300 rounded px-1 ml-1 cursor-pointer hover:bg-emerald-50">
+                      ▼
+                    </span>
+                  )}
                 </th>
               ))}
             </tr>
@@ -709,7 +862,11 @@ export const SheetsApp: React.FC<Props> = ({
                       >
                         <input
                           type="text"
-                          value={isSelected && isEditingCell && cell?.formula ? cell.formula : (cell?.value || '')}
+                          value={
+                            showFormulasMode && cell?.formula
+                              ? cell.formula
+                              : (isSelected && isEditingCell && cell?.formula ? cell.formula : (cell?.value || ''))
+                          }
                           onFocus={() => {
                             setSelectedCell(cellId);
                             setFormulaOriginCell(cellId);

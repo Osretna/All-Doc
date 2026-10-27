@@ -125,9 +125,66 @@ export const DocsApp: React.FC<Props> = ({
     onContentChange?.(html);
   };
 
-  // Keyboard navigation & Ctrl+Backspace full word delete handler
+  // Format Painter cache
+  const copiedStyleRef = useRef<{ color?: string; fontSize?: string; fontWeight?: string; fontStyle?: string } | null>(null);
+
+  // Find & Replace state
+  const [showFindBar, setShowFindBar] = useState<boolean>(false);
+  const [findText, setFindText] = useState<string>('');
+  const [replaceText, setReplaceText] = useState<string>('');
+  const [isReplaceMode, setIsReplaceMode] = useState<boolean>(false);
+
+  const handleFindNext = () => {
+    if (!findText) return;
+    // @ts-ignore
+    if (window.find) {
+      // @ts-ignore
+      window.find(findText, false, false, true, false, true, false);
+    }
+  };
+
+  const handleReplaceCurrent = () => {
+    if (!findText) return;
+    const sel = window.getSelection();
+    if (sel && sel.toString() && sel.toString().toLowerCase() === findText.toLowerCase()) {
+      document.execCommand('insertText', false, replaceText);
+      handleInput();
+      handleFindNext();
+    } else {
+      handleFindNext();
+    }
+  };
+
+  const handleReplaceAll = () => {
+    if (!editorRef.current || !findText) return;
+    const currentHtml = editorRef.current.innerHTML;
+    const regex = new RegExp(findText, 'gi');
+    const newHtml = currentHtml.replace(regex, replaceText);
+    editorRef.current.innerHTML = newHtml;
+    handleInput();
+    alert(`تم استبدال كافة تكرارات "${findText}" بـ "${replaceText}" بنجاح.`);
+  };
+
+  // Keyboard navigation & all Word Shortcuts
   const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
-    // Ctrl + Backspace: Delete full word backwards cleanly
+    // 1. Shift + Enter: Direct soft line break without paragraph margin
+    if (e.key === 'Enter' && e.shiftKey) {
+      e.preventDefault();
+      document.execCommand('insertLineBreak');
+      handleInput();
+      return;
+    }
+
+    // 2. Ctrl + Enter: Page Break
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+      e.preventDefault();
+      const pageBreakHtml = `<div class="page-break" style="page-break-after: always; border-bottom: 2px dashed #0078d4; margin: 24px 0 16px 0; padding-bottom: 4px; text-align: center; color: #0078d4; font-size: 11px; font-weight: bold; user-select: none;">--- فاصل صفحات (Page Break) ---</div><p><br></p>`;
+      document.execCommand('insertHTML', false, pageBreakHtml);
+      handleInput();
+      return;
+    }
+
+    // 3. Ctrl + Backspace: Delete full word backwards cleanly
     if ((e.ctrlKey || e.altKey) && e.key === 'Backspace') {
       e.preventDefault();
       const sel = window.getSelection();
@@ -145,23 +202,45 @@ export const DocsApp: React.FC<Props> = ({
       return;
     }
 
-    // Ctrl + B: Bold
+    // 4. Alignments: Ctrl + E (Center), Ctrl + L (Left), Ctrl + R (Right), Ctrl + J (Justify)
+    if ((e.ctrlKey || e.metaKey) && (e.key === 'e' || e.key === 'E')) {
+      e.preventDefault();
+      document.execCommand('justifyCenter', false);
+      handleInput();
+      return;
+    }
+    if ((e.ctrlKey || e.metaKey) && (e.key === 'l' || e.key === 'L')) {
+      e.preventDefault();
+      document.execCommand('justifyLeft', false);
+      handleInput();
+      return;
+    }
+    if ((e.ctrlKey || e.metaKey) && (e.key === 'r' || e.key === 'R')) {
+      e.preventDefault();
+      document.execCommand('justifyRight', false);
+      handleInput();
+      return;
+    }
+    if ((e.ctrlKey || e.metaKey) && (e.key === 'j' || e.key === 'J')) {
+      e.preventDefault();
+      document.execCommand('justifyFull', false);
+      handleInput();
+      return;
+    }
+
+    // 5. Basic Typography: Ctrl+B, Ctrl+I, Ctrl+U
     if ((e.ctrlKey || e.metaKey) && (e.key === 'b' || e.key === 'B')) {
       e.preventDefault();
       document.execCommand('bold', false);
       handleInput();
       return;
     }
-
-    // Ctrl + I: Italic
     if ((e.ctrlKey || e.metaKey) && (e.key === 'i' || e.key === 'I')) {
       e.preventDefault();
       document.execCommand('italic', false);
       handleInput();
       return;
     }
-
-    // Ctrl + U: Underline
     if ((e.ctrlKey || e.metaKey) && (e.key === 'u' || e.key === 'U')) {
       e.preventDefault();
       document.execCommand('underline', false);
@@ -169,25 +248,133 @@ export const DocsApp: React.FC<Props> = ({
       return;
     }
 
-    // Ctrl + Z: Undo
+    // 6. Font Sizing: Ctrl+Shift+> and Ctrl+Shift+<
+    if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === '>' || e.key === '.')) {
+      e.preventDefault();
+      document.execCommand('fontSize', false, '5');
+      handleInput();
+      return;
+    }
+    if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === '<' || e.key === ',')) {
+      e.preventDefault();
+      document.execCommand('fontSize', false, '3');
+      handleInput();
+      return;
+    }
+
+    // 7. Styles: Ctrl+Shift+N (Normal), Ctrl+Alt+1 (Heading 1), Ctrl+Alt+2 (Heading 2)
+    if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'n' || e.key === 'N')) {
+      e.preventDefault();
+      document.execCommand('formatBlock', false, '<p>');
+      document.execCommand('removeFormat', false);
+      handleInput();
+      return;
+    }
+    if ((e.ctrlKey || e.metaKey) && e.altKey && e.key === '1') {
+      e.preventDefault();
+      document.execCommand('formatBlock', false, '<h1>');
+      handleInput();
+      return;
+    }
+    if ((e.ctrlKey || e.metaKey) && e.altKey && e.key === '2') {
+      e.preventDefault();
+      document.execCommand('formatBlock', false, '<h2>');
+      handleInput();
+      return;
+    }
+
+    // 8. Format Painter: Ctrl+Shift+C (Copy format) and Ctrl+Shift+V (Paste format)
+    if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'c' || e.key === 'C')) {
+      e.preventDefault();
+      const sel = window.getSelection();
+      if (sel && sel.anchorNode && sel.anchorNode.parentElement) {
+        const computed = window.getComputedStyle(sel.anchorNode.parentElement);
+        copiedStyleRef.current = {
+          color: computed.color,
+          fontSize: computed.fontSize,
+          fontWeight: computed.fontWeight,
+          fontStyle: computed.fontStyle,
+        };
+        alert('تم نسخ التنسيق (Format Painter)! حدد نصاً آخر واضغط Ctrl+Shift+V لتطبيقه.');
+      }
+      return;
+    }
+    if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'v' || e.key === 'V')) {
+      if (copiedStyleRef.current) {
+        e.preventDefault();
+        const style = copiedStyleRef.current;
+        if (style.fontWeight === 'bold' || parseInt(style.fontWeight || '400') >= 700) {
+          document.execCommand('bold', false);
+        }
+        if (style.fontStyle === 'italic') {
+          document.execCommand('italic', false);
+        }
+        if (style.color) {
+          document.execCommand('foreColor', false, style.color);
+        }
+        handleInput();
+      }
+      return;
+    }
+
+    // 9. Hyperlink: Ctrl+K
+    if ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K')) {
+      e.preventDefault();
+      const url = prompt('أدخل رابط الويب (URL):', 'https://');
+      if (url) {
+        document.execCommand('createLink', false, url);
+        handleInput();
+      }
+      return;
+    }
+
+    // 10. Toggle Case: Shift+F3
+    if (e.shiftKey && e.key === 'F3') {
+      e.preventDefault();
+      const sel = window.getSelection();
+      if (sel && sel.toString()) {
+        const text = sel.toString();
+        const isUpper = text === text.toUpperCase();
+        const isLower = text === text.toLowerCase();
+        let nextText = '';
+        if (isUpper) {
+          nextText = text.toLowerCase();
+        } else if (isLower) {
+          nextText = text.replace(/\b\w/g, (c) => c.toUpperCase());
+        } else {
+          nextText = text.toUpperCase();
+        }
+        document.execCommand('insertText', false, nextText);
+        handleInput();
+      }
+      return;
+    }
+
+    // 11. Find (Ctrl+F) and Replace (Ctrl+H)
+    if ((e.ctrlKey || e.metaKey) && (e.key === 'f' || e.key === 'F')) {
+      e.preventDefault();
+      setShowFindBar(true);
+      setIsReplaceMode(false);
+      return;
+    }
+    if ((e.ctrlKey || e.metaKey) && (e.key === 'h' || e.key === 'H')) {
+      e.preventDefault();
+      setShowFindBar(true);
+      setIsReplaceMode(true);
+      return;
+    }
+
+    // 12. Undo (Ctrl+Z) & Redo (Ctrl+Y)
     if ((e.ctrlKey || e.metaKey) && (e.key === 'z' || e.key === 'Z') && !e.shiftKey) {
       e.preventDefault();
       document.execCommand('undo', false);
       handleInput();
       return;
     }
-
-    // Ctrl + Y: Redo
     if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || e.key === 'Y' || (e.shiftKey && (e.key === 'z' || e.key === 'Z')))) {
       e.preventDefault();
       document.execCommand('redo', false);
       handleInput();
-      return;
-    }
-
-    // Ctrl + A: Select All
-    if ((e.ctrlKey || e.metaKey) && (e.key === 'a' || e.key === 'A')) {
-      // Allow browser native select all
       return;
     }
   };
@@ -244,6 +431,75 @@ export const DocsApp: React.FC<Props> = ({
           دعم كامل لكتابة العربية (RTL) واختصارات Word
         </div>
       </div>
+
+      {/* Floating Word Find & Replace Dialog */}
+      {showFindBar && (
+        <div className="w-full max-w-[210mm] mb-3 p-3 bg-white border border-blue-400 rounded-xl shadow-lg flex flex-col gap-2 text-xs animate-in fade-in z-30">
+          <div className="flex items-center justify-between border-b border-gray-100 pb-2">
+            <div className="flex items-center gap-2 font-bold text-blue-900">
+              <span className="text-sm font-black text-blue-600">Word</span>
+              <span>{isReplaceMode ? 'البحث والاستبدال (Ctrl+H)' : 'البحث في المستند (Ctrl+F)'}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setIsReplaceMode(!isReplaceMode)}
+                className="text-[11px] text-blue-700 hover:underline cursor-pointer font-medium"
+              >
+                {isReplaceMode ? 'تبديل لوضع البحث فقط' : 'تفعيل الاستبدال'}
+              </button>
+              <button
+                onClick={() => setShowFindBar(false)}
+                className="text-gray-400 hover:text-gray-700 p-0.5 rounded cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              type="text"
+              placeholder="الكلمة أو الجملة المراد البحث عنها..."
+              value={findText}
+              onChange={(e) => setFindText(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleFindNext();
+              }}
+              className="flex-1 min-w-[180px] bg-gray-50 border border-gray-300 rounded px-2.5 py-1 text-xs outline-none focus:border-blue-500"
+            />
+            <button
+              onClick={handleFindNext}
+              className="px-3 py-1 rounded bg-blue-600 hover:bg-blue-700 text-white font-bold cursor-pointer transition shadow-2xs"
+            >
+              بحث عن التالي
+            </button>
+          </div>
+
+          {isReplaceMode && (
+            <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-gray-100">
+              <input
+                type="text"
+                placeholder="استبدال بـ..."
+                value={replaceText}
+                onChange={(e) => setReplaceText(e.target.value)}
+                className="flex-1 min-w-[180px] bg-gray-50 border border-gray-300 rounded px-2.5 py-1 text-xs outline-none focus:border-blue-500"
+              />
+              <button
+                onClick={handleReplaceCurrent}
+                className="px-3 py-1 rounded bg-gray-700 hover:bg-gray-800 text-white font-semibold cursor-pointer transition"
+              >
+                استبدال الحالي
+              </button>
+              <button
+                onClick={handleReplaceAll}
+                className="px-3 py-1 rounded bg-emerald-600 hover:bg-emerald-700 text-white font-bold cursor-pointer transition"
+              >
+                استبدال الكل
+              </button>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Container with Zoom Scaler */}
       <div 

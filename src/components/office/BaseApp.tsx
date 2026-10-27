@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { DbTable, DbField } from '../../types';
 import { localVault } from '../../utils/storage';
 import { parseAccessFile } from '../../utils/fileImport';
@@ -124,6 +124,12 @@ export const BaseApp: React.FC<Props> = ({ fontFamily, initialTables, onTablesCh
   // New Record Inline row
   const [newRowData, setNewRowData] = useState<Record<string, any>>({});
 
+  // Active focused cell in Access datasheet view
+  const [selectedCellInfo, setSelectedCellInfo] = useState<{ recId: string; fieldName: string; rowIndex: number } | null>(null);
+  const [showZoomModal, setShowZoomModal] = useState<boolean>(false);
+  const [zoomModalValue, setZoomModalValue] = useState<string>('');
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
   useEffect(() => {
     localVault.set(localVault.KEYS.BASE_DATA, tables);
     onTablesChange?.(tables);
@@ -151,12 +157,87 @@ export const BaseApp: React.FC<Props> = ({ fontFamily, initialTables, onTablesCh
     }
   };
 
-  useEffect(() => {
-    localVault.set(localVault.KEYS.BASE_DATA, tables);
-  }, [tables]);
-
   const activeTable = tables.find((t) => t.id === activeTableId) || tables[0];
   const records = activeTable.records;
+
+  // Microsoft Access Keyboard Shortcuts
+  useEffect(() => {
+    const handleAccessShortcuts = (e: KeyboardEvent) => {
+      // 1. Ctrl + ; : Today's date
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key === ';') {
+        if (selectedCellInfo) {
+          e.preventDefault();
+          const today = new Date().toISOString().split('T')[0];
+          handleUpdateRecord(selectedCellInfo.recId, selectedCellInfo.fieldName, today);
+          return;
+        }
+      }
+
+      // 2. Ctrl + Shift + ; or Ctrl + : : Current time
+      if ((e.ctrlKey || e.metaKey) && (e.shiftKey && (e.key === ';' || e.key === ':'))) {
+        if (selectedCellInfo) {
+          e.preventDefault();
+          const now = new Date().toLocaleTimeString('ar-EG');
+          handleUpdateRecord(selectedCellInfo.recId, selectedCellInfo.fieldName, now);
+          return;
+        }
+      }
+
+      // 3. Ctrl + ' : Copy value from previous record in same field
+      if ((e.ctrlKey || e.metaKey) && (e.key === "'" || e.key === '"')) {
+        if (selectedCellInfo && selectedCellInfo.rowIndex > 0) {
+          e.preventDefault();
+          const prevRec = records[selectedCellInfo.rowIndex - 1];
+          if (prevRec && prevRec[selectedCellInfo.fieldName] !== undefined) {
+            handleUpdateRecord(selectedCellInfo.recId, selectedCellInfo.fieldName, prevRec[selectedCellInfo.fieldName]);
+          }
+          return;
+        }
+      }
+
+      // 4. Ctrl + + : New record
+      if ((e.ctrlKey || e.metaKey) && (e.key === '+' || e.key === '=')) {
+        e.preventDefault();
+        const emptyRec = { id: Date.now().toString() };
+        setTables((prev) =>
+          prev.map((t) => (t.id === activeTableId ? { ...t, records: [...t.records, emptyRec] } : t))
+        );
+        alert('تمت إضافة سجل فارغ جديد (Ctrl++)!');
+        return;
+      }
+
+      // 5. Ctrl + - : Delete current record
+      if ((e.ctrlKey || e.metaKey) && (e.key === '-' || e.key === '_')) {
+        if (selectedCellInfo) {
+          e.preventDefault();
+          handleDeleteRecord(selectedCellInfo.recId);
+          alert('تم حذف السجل الحالي (Ctrl+-)!');
+          return;
+        }
+      }
+
+      // 6. Shift + F2 : Zoom Box (expanded text modal)
+      if (e.shiftKey && e.key === 'F2') {
+        if (selectedCellInfo) {
+          e.preventDefault();
+          const currRec = records.find((r) => r.id === selectedCellInfo.recId);
+          setZoomModalValue(currRec ? String(currRec[selectedCellInfo.fieldName] || '') : '');
+          setShowZoomModal(true);
+          return;
+        }
+      }
+
+      // 7. Ctrl + F : Focus search
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'f' || e.key === 'F')) {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+        return;
+      }
+    };
+
+    window.addEventListener('keydown', handleAccessShortcuts);
+    return () => window.removeEventListener('keydown', handleAccessShortcuts);
+  }, [selectedCellInfo, records, activeTableId]);
 
   const handleUpdateRecord = (recId: string, field: string, val: any) => {
     setTables((prev) =>
@@ -371,8 +452,9 @@ export const BaseApp: React.FC<Props> = ({ fontFamily, initialTables, onTablesCh
             <div className="relative">
               <Search className="w-3.5 h-3.5 absolute right-2 top-2 text-gray-400" />
               <input
+                ref={searchInputRef}
                 type="text"
-                placeholder="بحث وتصفية في السجلات..."
+                placeholder="بحث وتصفية في السجلات (Ctrl+F)..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="bg-white border border-gray-300 rounded pr-7 pl-2 py-0.5 text-xs outline-none focus:border-[#a4373a] w-44"
@@ -439,6 +521,7 @@ export const BaseApp: React.FC<Props> = ({ fontFamily, initialTables, onTablesCh
                           {f.type === 'select' ? (
                             <select
                               value={val || ''}
+                              onFocus={() => setSelectedCellInfo({ recId: rec.id, fieldName: f.name, rowIndex: idx })}
                               onChange={(e) => handleUpdateRecord(rec.id, f.name, e.target.value)}
                               className="w-full bg-transparent outline-none cursor-pointer font-bold text-[11px]"
                             >
@@ -452,6 +535,7 @@ export const BaseApp: React.FC<Props> = ({ fontFamily, initialTables, onTablesCh
                             <input
                               type={f.type === 'number' || f.type === 'currency' ? 'number' : 'text'}
                               value={val ?? ''}
+                              onFocus={() => setSelectedCellInfo({ recId: rec.id, fieldName: f.name, rowIndex: idx })}
                               onChange={(e) => handleUpdateRecord(rec.id, f.name, e.target.value)}
                               className="w-full bg-transparent outline-none px-1 text-xs text-right"
                             />
@@ -814,6 +898,57 @@ export const BaseApp: React.FC<Props> = ({ fontFamily, initialTables, onTablesCh
             Access Sovereign Studio 2026
           </div>
         </div>
+
+        {/* 4. Shift + F2: Microsoft Access Zoom Box Modal */}
+        {showZoomModal && selectedCellInfo && (
+          <div className="fixed inset-0 z-[160] bg-black/60 backdrop-blur-2xs flex items-center justify-center p-4">
+            <div className="w-full max-w-lg bg-white rounded-xl shadow-2xl border border-gray-300 p-5 text-right animate-in fade-in">
+              <div className="flex items-center justify-between pb-2 border-b border-gray-200">
+                <div className="font-bold text-gray-900 text-sm flex items-center gap-2">
+                  <Database className="w-4 h-4 text-[#a4373a]" />
+                  <span>مربع تكبير الحقل (Access Zoom Box - Shift+F2)</span>
+                </div>
+                <button
+                  onClick={() => setShowZoomModal(false)}
+                  className="text-gray-400 hover:text-gray-600 p-1"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div className="my-3">
+                <label className="block text-[11px] text-gray-500 mb-1">
+                  محتوى الحقل: <strong>{selectedCellInfo.fieldName}</strong>
+                </label>
+                <textarea
+                  value={zoomModalValue}
+                  onChange={(e) => setZoomModalValue(e.target.value)}
+                  rows={6}
+                  className="w-full bg-gray-50 border border-gray-300 rounded-lg p-2.5 text-xs text-gray-900 outline-none focus:border-[#a4373a]"
+                  placeholder="أدخل النص أو الملاحظات الموسعة..."
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-gray-200">
+                <button
+                  onClick={() => setShowZoomModal(false)}
+                  className="px-3 py-1.5 rounded-lg border border-gray-300 text-xs text-gray-700 hover:bg-gray-50 cursor-pointer"
+                >
+                  إلغاء
+                </button>
+                <button
+                  onClick={() => {
+                    handleUpdateRecord(selectedCellInfo.recId, selectedCellInfo.fieldName, zoomModalValue);
+                    setShowZoomModal(false);
+                  }}
+                  className="px-4 py-1.5 rounded-lg bg-[#a4373a] hover:bg-[#8e2e31] text-white text-xs font-bold cursor-pointer transition shadow-xs"
+                >
+                  حفظ في الحقل (OK)
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -356,6 +356,132 @@ export const PhotoStudioApp: React.FC<Props> = ({
     setZoomLevel(100);
   };
 
+  // Adobe Photoshop Keyboard Shortcuts
+  useEffect(() => {
+    const handlePhotoshopKeys = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      const isInput = target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA');
+
+      // 1. Ctrl + J : Duplicate active layer
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && (e.key === 'j' || e.key === 'J')) {
+        e.preventDefault();
+        const active = layers.find((l) => l.id === activeLayerId) || layers[0];
+        const newLayer: LayerItem = {
+          ...active,
+          id: `layer-${Date.now()}`,
+          name: `${active.name} (نسخة)`,
+        };
+        setLayers([newLayer, ...layers]);
+        setActiveLayerId(newLayer.id);
+        alert(`تم تكرار الطبقة "${active.name}" بنجاح (Ctrl+J)!`);
+        return;
+      }
+
+      // 2. Ctrl + Shift + J : Cut / New Layer
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'j' || e.key === 'J')) {
+        e.preventDefault();
+        const newLayer: LayerItem = {
+          id: `layer-${Date.now()}`,
+          name: `طبقة مستقلة ${layers.length + 1}`,
+          visible: true,
+          opacity: 100,
+          blendMode: 'normal',
+        };
+        setLayers([newLayer, ...layers]);
+        setActiveLayerId(newLayer.id);
+        return;
+      }
+
+      // 3. Ctrl + Alt + Shift + E : Stamp Visible
+      if ((e.ctrlKey || e.metaKey) && e.altKey && e.shiftKey && (e.key === 'e' || e.key === 'E')) {
+        e.preventDefault();
+        const stampLayer: LayerItem = {
+          id: `layer-${Date.now()}`,
+          name: 'دمج الطبقات المرئية (Merged Visible)',
+          visible: true,
+          opacity: 100,
+          blendMode: 'normal',
+        };
+        setLayers([stampLayer, ...layers]);
+        setActiveLayerId(stampLayer.id);
+        alert('تم دمج كافة الطبقات المرئية في طبقة جديدة (Stamp Visible)!');
+        return;
+      }
+
+      // 4. Alt + Backspace : Fill with Foreground Color
+      if (e.altKey && e.key === 'Backspace') {
+        e.preventDefault();
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+        ctx.fillStyle = primaryColor;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        saveCanvasState();
+        return;
+      }
+
+      // 5. Ctrl + Backspace : Fill with Background Color
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Backspace') {
+        e.preventDefault();
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+        ctx.fillStyle = secondaryColor;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        saveCanvasState();
+        return;
+      }
+
+      // 6. [ and ] : Brush size adjustment
+      if (e.key === '[') {
+        e.preventDefault();
+        setBrushSize((s) => Math.max(2, s - 4));
+        return;
+      }
+      if (e.key === ']') {
+        e.preventDefault();
+        setBrushSize((s) => Math.min(80, s + 4));
+        return;
+      }
+
+      // 7. Ctrl + Shift + I : Invert Colors
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'i' || e.key === 'I')) {
+        e.preventDefault();
+        setInvert((inv) => (inv === 0 ? 100 : 0));
+        return;
+      }
+
+      // If user is typing in a text input, do not intercept single letter tool switches
+      if (isInput) return;
+
+      // 8. Tool Shortcuts: B, E, G, I, V, M, T, S, C, H
+      if (!e.ctrlKey && !e.metaKey && !e.altKey) {
+        const key = e.key.toLowerCase();
+        if (key === 'b') setActiveTool('brush');
+        else if (key === 'e') setActiveTool('eraser');
+        else if (key === 'g') setActiveTool('bucket');
+        else if (key === 'i') setActiveTool('eyedropper');
+        else if (key === 'v') setActiveTool('move');
+        else if (key === 'm') setActiveTool('marquee');
+        else if (key === 't') setActiveTool('text');
+        else if (key === 's') setActiveTool('stamp');
+        else if (key === 'c') setActiveTool('crop');
+        else if (key === 'h') setActiveTool('hand');
+        else if (key === 'x') {
+          // Swap Colors
+          const temp = primaryColor;
+          setPrimaryColor(secondaryColor);
+          setSecondaryColor(temp);
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handlePhotoshopKeys);
+    return () => window.removeEventListener('keydown', handlePhotoshopKeys);
+  }, [layers, activeLayerId, primaryColor, secondaryColor, brushSize]);
+
   return (
     <div className="flex-1 flex flex-col bg-[#1e1e1e] text-gray-200 overflow-hidden text-xs select-none font-cairo">
       {/* 1. Adobe Photoshop Top Menu Bar */}
