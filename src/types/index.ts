@@ -73,10 +73,18 @@ export interface SlideItem {
   title: string;
   subtitle: string;
   body: string[];
-  layout: 'title' | 'content' | 'split' | 'highlight' | 'quote' | 'comparison';
+  layout: 'title' | 'content' | 'split' | 'highlight' | 'quote' | 'comparison' | 'custom';
   notes: string;
-  theme: 'blue' | 'emerald' | 'amber' | 'dark' | 'purple' | 'crimson';
+  theme: 'blue' | 'emerald' | 'amber' | 'dark' | 'purple' | 'crimson' | 'custom';
   transition?: 'none' | 'fade' | 'push' | 'wipe' | 'zoom';
+  backgroundImage?: string;
+  backgroundColor?: string;
+  textColor?: string;
+  titleColor?: string;
+  hasCardFrame?: boolean;
+  cardBg?: string;
+  cardBorder?: string;
+  fontFamily?: string;
 }
 
 export interface NoteItem {

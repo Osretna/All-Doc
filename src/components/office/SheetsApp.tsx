@@ -1,11 +1,14 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { SheetData, SheetCell } from '../../types';
 import { localVault } from '../../utils/storage';
+import { evaluateExcelFormula, EXCEL_FUNCTIONS, ExcelFunctionDef } from '../../utils/excelEngine';
+import { parseExcelFile } from '../../utils/fileImport';
 import { 
   Sigma, 
   BarChart3, 
   PieChart, 
   Download, 
+  Upload,
   Plus, 
   Trash2, 
   Check, 
@@ -15,23 +18,24 @@ import {
   X,
   Grid,
   ArrowRightLeft,
-  Eye,
   FunctionSquare,
   HelpCircle,
-  TrendingUp
+  FileUp
 } from 'lucide-react';
 
 interface Props {
   fontFamily: string;
   zoomLevel: number;
+  initialSheets?: Record<string, { label: string; data: SheetData }>;
+  onSheetsChange?: (sheets: Record<string, { label: string; data: SheetData }>) => void;
 }
 
-const COLS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N'];
-const ROWS_COUNT = 40;
+const COLS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P'];
+const ROWS_COUNT = 45;
 
-const SHEET_PRESETS: Record<string, { label: string; data: SheetData }> = {
+const DEFAULT_EXCEL_PRESETS: Record<string, { label: string; data: SheetData }> = {
   sheet1: {
-    label: 'ورقة 1: ميزانية ملاك',
+    label: 'ورقة 1: ميزانية ملاك والصيانة',
     data: {
       'A1': { value: 'كشف ميزانية اتحاد شاغلين - برج النخيل (نظام ملاك)', bold: true, bg: '#107c41', color: '#ffffff', align: 'center' },
       'A3': { value: 'البند / المصروف', bold: true, bg: '#e2e8f0', align: 'right' },
@@ -78,7 +82,7 @@ const SHEET_PRESETS: Record<string, { label: string; data: SheetData }> = {
     },
   },
   sheet2: {
-    label: 'ورقة 2: مسير الرواتب والبدلات',
+    label: 'ورقة 2: مسير رواتب الموظفين',
     data: {
       'A1': { value: 'مسير رواتب موظفي إنفينيتي تكنولوجي لتقنية المعلومات', bold: true, bg: '#1e293b', color: '#ffffff', align: 'center' },
       'A3': { value: 'اسم الموظف', bold: true, bg: '#e2e8f0' },
@@ -117,41 +121,29 @@ const SHEET_PRESETS: Record<string, { label: string; data: SheetData }> = {
       'F7': { value: '50925', formula: '=SUM(F4:F6)', bold: true, bg: '#fef08a' },
     },
   },
-  sheet3: {
-    label: 'ورقة 3: تكاليف سيرفرات VPS',
-    data: {
-      'A1': { value: 'تكاليف البنية التحتية السحابية ZFS NVMe', bold: true, bg: '#0369a1', color: '#ffffff', align: 'center' },
-      'A3': { value: 'الخادم السحابي', bold: true, bg: '#e2e8f0' },
-      'B3': { value: 'المواصفات', bold: true, bg: '#e2e8f0' },
-      'C3': { value: 'التكلفة بالدولار ($)', bold: true, bg: '#e2e8f0' },
-      'D3': { value: 'المعادل بالريال (ر.س)', bold: true, bg: '#e2e8f0' },
-
-      'A4': { value: 'SRV-ZFS-01 (الرياض)' },
-      'B4': { value: '16 vCPU / 64GB RAM' },
-      'C4': { value: '120' },
-      'D4': { value: '450', formula: '=C4*3.75' },
-
-      'A5': { value: 'SRV-ZFS-02 (دبي)' },
-      'B5': { value: '8 vCPU / 32GB RAM' },
-      'C5': { value: '80' },
-      'D5': { value: '300', formula: '=C5*3.75' },
-
-      'A6': { value: 'الإجمالي السحابي', bold: true, bg: '#e0f2fe' },
-      'B6': { value: '24 Cores / 96GB' },
-      'C6': { value: '200', formula: '=SUM(C4:C5)', bold: true },
-      'D6': { value: '750', formula: '=SUM(D4:D5)', bold: true, bg: '#e0f2fe' },
-    },
-  },
 };
 
-export const SheetsApp: React.FC<Props> = ({ fontFamily, zoomLevel }) => {
+export const SheetsApp: React.FC<Props> = ({ 
+  fontFamily, 
+  zoomLevel,
+  initialSheets,
+  onSheetsChange
+}) => {
   const [activeSheetKey, setActiveSheetKey] = useState<string>('sheet1');
   const [sheets, setSheets] = useState<Record<string, { label: string; data: SheetData }>>(() => {
-    return localVault.get<Record<string, { label: string; data: SheetData }>>(
+    return initialSheets || localVault.get<Record<string, { label: string; data: SheetData }>>(
       localVault.KEYS.SHEETS_DATA,
-      SHEET_PRESETS
+      DEFAULT_EXCEL_PRESETS
     );
   });
+
+  // Sync when initialSheets is updated externally (e.g. from Backstage file open)
+  useEffect(() => {
+    if (initialSheets && Object.keys(initialSheets).length > 0) {
+      setSheets(initialSheets);
+      setActiveSheetKey(Object.keys(initialSheets)[0]);
+    }
+  }, [initialSheets]);
 
   const [selectedCell, setSelectedCell] = useState<string>('A4');
   const [formulaInput, setFormulaInput] = useState<string>('');
@@ -161,92 +153,131 @@ export const SheetsApp: React.FC<Props> = ({ fontFamily, zoomLevel }) => {
   const [chartType, setChartType] = useState<'bar' | 'pie'>('bar');
   const [showFxHelper, setShowFxHelper] = useState<boolean>(false);
 
-  const currentSheet = sheets[activeSheetKey] || sheets['sheet1'];
-  const data = currentSheet.data;
+  // Excel Formula Autocomplete state
+  const [matchingFunctions, setMatchingFunctions] = useState<ExcelFunctionDef[]>([]);
+  const [selectedFunctionIndex, setSelectedFunctionIndex] = useState<number>(0);
+  const [showAutocomplete, setShowAutocomplete] = useState<boolean>(false);
+  const [currentFunctionSyntax, setCurrentFunctionSyntax] = useState<string | null>(null);
+  const [isEditingCell, setIsEditingCell] = useState<boolean>(false);
+  const formulaInputRef = useRef<HTMLInputElement>(null);
 
+  const currentSheet = sheets[activeSheetKey] || sheets[Object.keys(sheets)[0]];
+  const data = currentSheet ? currentSheet.data : {};
+
+  // Auto-recalculate formula cells on load or sheet change
   useEffect(() => {
+    if (!currentSheet) return;
     const cell = data[selectedCell];
     setFormulaInput(cell?.formula || cell?.value || '');
-  }, [selectedCell, data, activeSheetKey]);
+    setShowAutocomplete(false);
+    setCurrentFunctionSyntax(null);
+  }, [selectedCell, activeSheetKey]);
+
+  // Handle formula typing and autocomplete suggestions
+  const handleFormulaInputChange = (val: string) => {
+    setFormulaInput(val);
+    handleCellChange(selectedCell, val);
+
+    if (val.startsWith('=')) {
+      // Find trailing function prefix: e.g. "=S" or "=SUM(" or "=A1+AV"
+      const match = val.match(/([A-Za-z]+)$/);
+      if (match) {
+        const prefix = match[1].toUpperCase();
+        const filtered = EXCEL_FUNCTIONS.filter((f) => f.name.startsWith(prefix));
+        if (filtered.length > 0) {
+          setMatchingFunctions(filtered);
+          setSelectedFunctionIndex(0);
+          setShowAutocomplete(true);
+          setCurrentFunctionSyntax(null);
+          return;
+        }
+      }
+
+      // Check if inside a function call for parameter syntax tooltip
+      const funcCallMatch = val.match(/([A-Z]+)\s*\([^)]*$/i);
+      if (funcCallMatch) {
+        const fnName = funcCallMatch[1].toUpperCase();
+        const fnDef = EXCEL_FUNCTIONS.find((f) => f.name === fnName);
+        if (fnDef) {
+          setCurrentFunctionSyntax(`${fnDef.syntax} — ${fnDef.desc}`);
+        } else {
+          setCurrentFunctionSyntax(null);
+        }
+        setShowAutocomplete(false);
+        return;
+      }
+    }
+
+    setShowAutocomplete(false);
+    setCurrentFunctionSyntax(null);
+  };
+
+  const handleSelectFunction = (fn: ExcelFunctionDef) => {
+    let newVal = '';
+    if (formulaInput.includes('(')) {
+      // Replace last incomplete function name
+      newVal = formulaInput.replace(/([A-Za-z]+)$/, `${fn.name}(`);
+    } else {
+      newVal = `=${fn.name}(`;
+    }
+    setFormulaInput(newVal);
+    handleCellChange(selectedCell, newVal);
+    setShowAutocomplete(false);
+    setCurrentFunctionSyntax(`${fn.syntax} — ${fn.desc}`);
+    if (formulaInputRef.current) {
+      formulaInputRef.current.focus();
+    }
+  };
+
+  const handleFormulaKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (showAutocomplete && matchingFunctions.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setSelectedFunctionIndex((prev) => (prev + 1) % matchingFunctions.length);
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setSelectedFunctionIndex((prev) => (prev - 1 + matchingFunctions.length) % matchingFunctions.length);
+        return;
+      }
+      if (e.key === 'Tab' || e.key === 'Enter') {
+        e.preventDefault();
+        handleSelectFunction(matchingFunctions[selectedFunctionIndex]);
+        return;
+      }
+      if (e.key === 'Escape') {
+        setShowAutocomplete(false);
+        return;
+      }
+    }
+  };
 
   const saveSheets = (newSheets: Record<string, { label: string; data: SheetData }>) => {
     setSheets(newSheets);
     localVault.set(localVault.KEYS.SHEETS_DATA, newSheets);
+    onSheetsChange?.(newSheets);
   };
 
-  const evaluateFormula = (expr: string, currentData: SheetData): string => {
-    if (!expr.startsWith('=')) return expr;
-    const upper = expr.toUpperCase().trim();
-
-    // Check SUM
-    const sumMatch = upper.match(/^=SUM\(([A-Z])(\d+):([A-Z])(\d+)\)$/);
-    if (sumMatch) {
-      const colStart = sumMatch[1];
-      const rowStart = parseInt(sumMatch[2], 10);
-      const colEnd = sumMatch[3];
-      const rowEnd = parseInt(sumMatch[4], 10);
-
-      let sum = 0;
-      if (colStart === colEnd) {
-        for (let r = rowStart; r <= rowEnd; r++) {
-          const val = parseFloat(currentData[`${colStart}${r}`]?.value || '0');
-          if (!isNaN(val)) sum += val;
-        }
+  // Recalculates all formulas across the current sheet
+  const recalculateSheet = (sourceData: SheetData): SheetData => {
+    const updated = { ...sourceData };
+    Object.keys(updated).forEach((cellId) => {
+      const cell = updated[cellId];
+      if (cell && cell.formula) {
+        const computed = evaluateExcelFormula(cell.formula, updated);
+        updated[cellId] = {
+          ...cell,
+          value: computed,
+        };
       }
-      return sum.toString();
-    }
-
-    // Check AVERAGE
-    const avgMatch = upper.match(/^=AVERAGE\(([A-Z])(\d+):([A-Z])(\d+)\)$/);
-    if (avgMatch) {
-      const col = avgMatch[1];
-      const r1 = parseInt(avgMatch[2], 10);
-      const r2 = parseInt(avgMatch[4], 10);
-      let sum = 0;
-      let count = 0;
-      for (let r = r1; r <= r2; r++) {
-        const val = parseFloat(currentData[`${col}${r}`]?.value || '0');
-        if (!isNaN(val)) {
-          sum += val;
-          count++;
-        }
-      }
-      return count > 0 ? (sum / count).toFixed(2) : '0';
-    }
-
-    // Direct arithmetic e.g. =SUM(B4:D4)-E4 or =C4*3.75
-    try {
-      let mathStr = upper.replace(/^=/, '');
-      // Replace SUM(B4:D4) inside expression
-      mathStr = mathStr.replace(/SUM\(([A-Z])(\d+):([A-Z])(\d+)\)/g, (_, col1, r1, col2, r2) => {
-        let subSum = 0;
-        for (let r = parseInt(r1, 10); r <= parseInt(r2, 10); r++) {
-          const val = parseFloat(currentData[`${col1}${r}`]?.value || '0');
-          if (!isNaN(val)) subSum += val;
-        }
-        return subSum.toString();
-      });
-
-      mathStr = mathStr.replace(/([A-Z]\d+)/g, (match) => {
-        const val = parseFloat(currentData[match]?.value || '0');
-        return isNaN(val) ? '0' : val.toString();
-      });
-
-      if (/^[\d+\-*/. ()]+$/.test(mathStr)) {
-        // eslint-disable-next-line no-eval
-        const res = Function(`'use strict'; return (${mathStr})`)();
-        return typeof res === 'number' ? (Number.isInteger(res) ? res.toString() : res.toFixed(2)) : String(res);
-      }
-    } catch {
-      return '#ERROR!';
-    }
-
-    return expr;
+    });
+    return updated;
   };
 
   const handleCellChange = (cellId: string, rawVal: string) => {
     const isFormula = rawVal.startsWith('=');
-    const computedVal = isFormula ? evaluateFormula(rawVal, data) : rawVal;
+    const computedVal = isFormula ? evaluateExcelFormula(rawVal, data) : rawVal;
 
     const nextData = {
       ...data,
@@ -257,11 +288,14 @@ export const SheetsApp: React.FC<Props> = ({ fontFamily, zoomLevel }) => {
       },
     };
 
+    // Cascade recalculation across other formula cells
+    const fullyComputed = recalculateSheet(nextData);
+
     const updatedSheets = {
       ...sheets,
       [activeSheetKey]: {
         ...currentSheet,
-        data: nextData,
+        data: fullyComputed,
       },
     };
     saveSheets(updatedSheets);
@@ -285,10 +319,30 @@ export const SheetsApp: React.FC<Props> = ({ fontFamily, zoomLevel }) => {
     });
   };
 
+  // Real Excel .xlsx / .csv file opener
+  const handleOpenExcelFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const parsedSheets = await parseExcelFile(file);
+      if (Object.keys(parsedSheets).length > 0) {
+        saveSheets(parsedSheets);
+        setActiveSheetKey(Object.keys(parsedSheets)[0]);
+        alert(`تم فتح ملف إكسيل "${file.name}" بنجاح وتضمين ${Object.keys(parsedSheets).length} ورقة عمل!`);
+      } else {
+        alert('لم يتم العثور على أوراق عمل داخل الملف.');
+      }
+    } catch (err) {
+      console.error(err);
+      alert('حدث خطأ أثناء قراءة ملف Excel. تأكد من سلامة الملف.');
+    }
+  };
+
   const handleAddSheet = () => {
     const newKey = `sheet_${Date.now()}`;
     const newSheet = {
-      label: `ورقة ${Object.keys(sheets).length + 1}: جديدة`,
+      label: `ورقة ${Object.keys(sheets).length + 1}`,
       data: {
         'A1': { value: 'ورقة عمل جديدة', bold: true, bg: '#107c41', color: '#ffffff' },
       },
@@ -300,7 +354,7 @@ export const SheetsApp: React.FC<Props> = ({ fontFamily, zoomLevel }) => {
 
   const exportCSV = () => {
     let csv = '';
-    for (let r = 1; r <= 20; r++) {
+    for (let r = 1; r <= 30; r++) {
       const rowVals = COLS.map((c) => `"${data[`${c}${r}`]?.value || ''}"`);
       csv += rowVals.join(',') + '\n';
     }
@@ -326,7 +380,7 @@ export const SheetsApp: React.FC<Props> = ({ fontFamily, zoomLevel }) => {
   return (
     <div className="flex-1 flex flex-col bg-white overflow-hidden text-xs select-none">
       {/* 1. Authentic Excel Formula Bar */}
-      <div className="flex items-center gap-2 px-3 py-1.5 bg-[#f3f2f1] border-b border-gray-300">
+      <div className="flex items-center gap-2 px-3 py-1.5 bg-[#f3f2f1] border-b border-gray-300 relative z-30">
         {/* Active Cell Reference box */}
         <div className="w-16 px-2 py-1 bg-white border border-gray-300 rounded font-mono font-bold text-center text-gray-900 shadow-2xs">
           {selectedCell}
@@ -341,20 +395,93 @@ export const SheetsApp: React.FC<Props> = ({ fontFamily, zoomLevel }) => {
           fx
         </button>
 
-        {/* Formula Input */}
-        <input
-          type="text"
-          value={formulaInput}
-          onChange={(e) => {
-            setFormulaInput(e.target.value);
-            handleCellChange(selectedCell, e.target.value);
+        {/* Equal Sign Indicator Button (Pin/Toggle '=' at the beginning) */}
+        <button
+          onClick={() => {
+            if (!formulaInput.startsWith('=')) {
+              const newVal = '=' + formulaInput;
+              handleFormulaInputChange(newVal);
+            }
+            formulaInputRef.current?.focus();
           }}
-          placeholder="أدخل صيغة رياضية مثل =SUM(B4:B8) أو =AVERAGE(C4:C8) أو =C4*1.15"
-          className="flex-1 bg-white border border-gray-300 rounded px-3 py-1 text-xs text-gray-800 outline-none focus:border-[#107c41] focus:ring-1 focus:ring-[#107c41]"
-        />
+          className={`w-7 h-7 flex items-center justify-center font-mono font-black text-sm rounded cursor-pointer transition select-none ${
+            formulaInput.startsWith('=')
+              ? 'bg-[#107c41] text-white shadow-xs'
+              : 'bg-white border border-gray-300 text-gray-700 hover:bg-emerald-50 hover:text-emerald-700'
+          }`}
+          title="تفعيل صيغة رياضية (=)"
+        >
+          =
+        </button>
 
-        {/* Right Quick Controls */}
+        {/* Formula Input (strictly LTR for Excel formulas) */}
+        <div className="flex-1 relative">
+          <input
+            ref={formulaInputRef}
+            type="text"
+            dir="ltr"
+            value={formulaInput}
+            onChange={(e) => handleFormulaInputChange(e.target.value)}
+            onKeyDown={handleFormulaKeyDown}
+            placeholder="=SUM(B4:B8), =AVERAGE(C4:C8), =IF(C4>1000,'فائض','ضمن الحد')"
+            className="w-full bg-white border border-gray-300 rounded px-3 py-1 font-mono text-xs text-gray-900 outline-none focus:border-[#107c41] focus:ring-1 focus:ring-[#107c41] text-left"
+            style={{ direction: 'ltr', textAlign: 'left' }}
+          />
+
+          {/* Excel Function Autocomplete Dropdown */}
+          {showAutocomplete && matchingFunctions.length > 0 && (
+            <div className="absolute left-0 top-full mt-1 w-96 max-h-64 overflow-y-auto bg-white border border-gray-300 rounded-lg shadow-2xl z-50 p-1 divide-y divide-gray-100 text-right animate-in fade-in">
+              <div className="px-2.5 py-1.5 text-[10px] text-gray-500 font-bold bg-gray-50 flex items-center justify-between">
+                <span>اقتراحات دوال إكسيل التلقائية:</span>
+                <span className="font-mono text-[9px] text-emerald-700">اضغط Tab أو Enter للإكمال</span>
+              </div>
+              {matchingFunctions.map((fn, idx) => (
+                <div
+                  key={fn.name}
+                  onClick={() => handleSelectFunction(fn)}
+                  className={`p-2.5 rounded cursor-pointer text-xs transition ${
+                    idx === selectedFunctionIndex
+                      ? 'bg-emerald-100/90 text-emerald-950 font-bold border border-emerald-300'
+                      : 'hover:bg-gray-100 text-gray-800'
+                  }`}
+                >
+                  <div className="flex items-center justify-between mb-0.5">
+                    <span className="font-mono text-xs font-black text-emerald-800 tracking-wide">{fn.name}</span>
+                    <span className="text-[10px] px-1.5 py-0.5 bg-gray-200 text-gray-700 rounded font-normal">
+                      {fn.category}
+                    </span>
+                  </div>
+                  <div className="text-[11.5px] text-gray-600 line-clamp-1">{fn.desc}</div>
+                  <div className="font-mono text-[10.5px] text-emerald-700 mt-1 font-semibold" dir="ltr" style={{ textAlign: 'left' }}>
+                    {fn.syntax}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Parameter Syntax Helper Pill */}
+          {currentFunctionSyntax && (
+            <div className="absolute left-0 top-full mt-1 bg-emerald-50 border border-emerald-300 text-emerald-950 rounded-md px-3 py-1.5 text-[11px] shadow-lg z-40 flex items-center gap-2 animate-in fade-in">
+              <span className="font-bold text-emerald-800">صيغة الدالة:</span>
+              <span className="font-mono text-xs text-emerald-900 font-semibold" dir="ltr">{currentFunctionSyntax}</span>
+            </div>
+          )}
+        </div>
+
+        {/* Right Quick Controls & Open Real Excel File Button */}
         <div className="flex items-center gap-1">
+          <label className="flex items-center gap-1 px-2.5 py-1 rounded border border-gray-300 bg-white hover:bg-emerald-50 text-emerald-800 font-bold cursor-pointer transition shadow-2xs">
+            <FileUp className="w-3.5 h-3.5 text-emerald-600" />
+            <span>فتح ملف Excel (.xlsx)</span>
+            <input
+              type="file"
+              accept=".xlsx,.xls,.csv"
+              onChange={handleOpenExcelFile}
+              className="hidden"
+            />
+          </label>
+
           <button
             onClick={() => handleFormat('bold', !data[selectedCell]?.bold)}
             className={`px-2 py-1 rounded border cursor-pointer font-bold ${
@@ -370,13 +497,6 @@ export const SheetsApp: React.FC<Props> = ({ fontFamily, zoomLevel }) => {
             title="تنسيق العملة (ر.س)"
           >
             ر.س
-          </button>
-          <button
-            onClick={() => handleFormat('format', 'percent')}
-            className="px-2 py-1 rounded border border-gray-300 bg-white hover:bg-gray-100 cursor-pointer text-gray-700 font-bold"
-            title="نسبة مئوية (%)"
-          >
-            %
           </button>
           <button
             onClick={() => setIsRTL(!isRTL)}
@@ -413,6 +533,7 @@ export const SheetsApp: React.FC<Props> = ({ fontFamily, zoomLevel }) => {
             { name: '=AVERAGE(C4:C8)', desc: 'المتوسط الحسابي' },
             { name: '=IF(C4>1000, "فائض", "ضمن الحد")', desc: 'دالة الشرط' },
             { name: '=COUNT(A4:A20)', desc: 'عدد القيم' },
+            { name: '=ROUND(B4*1.15, 2)', desc: 'تقريب رقمي' },
             { name: '=MAX(C4:C8)', desc: 'أعلى قيمة' },
             { name: '=MIN(C4:C8)', desc: 'أدنى قيمة' },
           ].map((fx) => (
@@ -466,7 +587,25 @@ export const SheetsApp: React.FC<Props> = ({ fontFamily, zoomLevel }) => {
                     return (
                       <td
                         key={cellId}
-                        onClick={() => setSelectedCell(cellId)}
+                        onClick={() => {
+                          // If writing a formula in formula bar and ended with operator/paren, clicking a cell appends coordinate
+                          if (
+                            formulaInput.startsWith('=') &&
+                            (formulaInput.endsWith('(') ||
+                              formulaInput.endsWith(',') ||
+                              formulaInput.endsWith('+') ||
+                              formulaInput.endsWith('-') ||
+                              formulaInput.endsWith('*') ||
+                              formulaInput.endsWith('/') ||
+                              formulaInput.endsWith('='))
+                          ) {
+                            const appended = formulaInput + cellId;
+                            handleFormulaInputChange(appended);
+                            formulaInputRef.current?.focus();
+                            return;
+                          }
+                          setSelectedCell(cellId);
+                        }}
                         className={`p-1 relative transition-all ${
                           showGridlines ? 'border border-gray-300' : 'border border-transparent'
                         } ${
@@ -482,9 +621,13 @@ export const SheetsApp: React.FC<Props> = ({ fontFamily, zoomLevel }) => {
                       >
                         <input
                           type="text"
-                          value={cell?.value || ''}
+                          value={isSelected && isEditingCell && cell?.formula ? cell.formula : (cell?.value || '')}
+                          onFocus={() => {
+                            setSelectedCell(cellId);
+                            setIsEditingCell(true);
+                          }}
+                          onBlur={() => setIsEditingCell(false)}
                           onChange={(e) => handleCellChange(cellId, e.target.value)}
-                          onFocus={() => setSelectedCell(cellId)}
                           className={`w-full bg-transparent outline-none text-xs px-1 text-inherit font-inherit ${
                             isRTL ? 'text-right' : 'text-left'
                           }`}
@@ -604,7 +747,7 @@ export const SheetsApp: React.FC<Props> = ({ fontFamily, zoomLevel }) => {
         </div>
 
         <div className="text-[10px] text-gray-500 font-mono hidden sm:inline">
-          Excel Sovereign Engine | Ready | 100% Offline
+          Excel Sovereign Formula Engine | Ready | 100% Offline
         </div>
       </div>
     </div>

@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { OfficeAppId } from '../../types';
 import { APP_CONFIGS } from '../../utils/appConfigs';
 import { localVault } from '../../utils/storage';
+import { SheetData, SlideItem } from '../../types';
+import { parseDocxFile, parseExcelFile, parsePptxFile } from '../../utils/fileImport';
 import {
   FileText,
   Plus,
@@ -20,7 +22,10 @@ import {
   Table,
   Presentation,
   Building2,
-  FileSpreadsheet
+  FileSpreadsheet,
+  FileCheck,
+  Loader2,
+  Sparkles
 } from 'lucide-react';
 
 interface Props {
@@ -30,6 +35,9 @@ interface Props {
   documentTitle: string;
   onApplyTemplate: (templateContent: string, title: string) => void;
   onExport: (format: 'docx' | 'xlsx' | 'pptx' | 'pdf' | 'json' | 'txt') => void;
+  onSwitchApp?: (app: OfficeAppId) => void;
+  onLoadExcelData?: (sheets: Record<string, { label: string; data: SheetData }>, title: string) => void;
+  onLoadSlidesData?: (slides: SlideItem[], title: string) => void;
 }
 
 export const BackstageModal: React.FC<Props> = ({
@@ -39,11 +47,15 @@ export const BackstageModal: React.FC<Props> = ({
   documentTitle,
   onApplyTemplate,
   onExport,
+  onSwitchApp,
+  onLoadExcelData,
+  onLoadSlidesData,
 }) => {
   if (!isOpen) return null;
 
   const [activeTab, setActiveTab] = useState<'new' | 'open' | 'save' | 'export' | 'print' | 'sovereign' | 'cloud'>('new');
   const [copiedBackup, setCopiedBackup] = useState(false);
+  const [loadingFileMessage, setLoadingFileMessage] = useState<string | null>(null);
   const currentConfig = APP_CONFIGS[activeApp];
 
   const handleCopyBackup = () => {
@@ -362,31 +374,217 @@ export const BackstageModal: React.FC<Props> = ({
           {/* TAB 2: OPEN */}
           {activeTab === 'open' && (
             <div>
-              <h1 className="text-2xl font-black text-gray-900 mb-2">فتح ملف محلي من جهازك</h1>
-              <p className="text-sm text-gray-500 mb-6">
-                افتح ملفات Office السابقة، أو استورد نسخ احتياطية بصيغة DOCX أو XLSX أو JSON أو TXT دون أي رفع لسيرفرات خارجية.
-              </p>
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h1 className="text-2xl font-black text-gray-900 mb-1">فتح ملف محلي من جهازك</h1>
+                  <p className="text-sm text-gray-500">
+                    افتح ملفات Word و Excel و PowerPoint الحقيقية من جهازك دون تشويه الخطوط أو عكس النصوص وبدون إرسال أي بايت لسيرفرات خارجية.
+                  </p>
+                </div>
+              </div>
 
-              <div className="p-8 border-2 border-dashed border-gray-300 rounded-2xl bg-gray-50 text-center flex flex-col items-center justify-center">
-                <FolderOpen className="w-12 h-12 text-[#0078d4] mb-3" />
-                <h3 className="font-bold text-base text-gray-800">اختر ملفاً من حاسوبك أو هاتفك</h3>
-                <p className="text-xs text-gray-500 mt-1 mb-4">يدعم .docx, .xlsx, .pptx, .json, .txt, .html</p>
-                <label className="bg-[#0078d4] hover:bg-[#006abc] text-white px-5 py-2.5 rounded-lg text-xs font-bold cursor-pointer transition shadow">
-                  <span>استعراض الملفات المحلية</span>
+              {loadingFileMessage && (
+                <div className="mb-5 p-4 rounded-xl bg-blue-50 border border-blue-200 flex items-center gap-3 text-blue-900 text-sm animate-pulse">
+                  <Loader2 className="w-5 h-5 text-blue-600 animate-spin shrink-0" />
+                  <span>{loadingFileMessage}</span>
+                </div>
+              )}
+
+              {/* Grid of File Type Openers */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+                {/* 1. Open Word .docx */}
+                <label className="p-4 rounded-xl border border-blue-200 bg-blue-50/40 hover:bg-blue-50 hover:border-blue-500 cursor-pointer transition flex flex-col justify-between group">
+                  <div className="flex items-center gap-3 mb-2">
+                    <div className="w-9 h-9 rounded-lg bg-[#0078d4] text-white flex items-center justify-center font-bold text-sm shadow-xs">
+                      W
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-gray-900 text-sm">مستند Word</h4>
+                      <span className="text-[11px] text-blue-700 font-mono font-medium">.docx, .doc</span>
+                    </div>
+                  </div>
+                  <p className="text-[11.5px] text-gray-600 mb-3">
+                    قراءة الفقرات والجداول وتنسيقات الخطوط العربية والإنجليزية بدون تشفير أو رموز تالفة.
+                  </p>
+                  <span className="text-xs font-bold text-[#0078d4] group-hover:underline">فتح مستند Word ➔</span>
                   <input
                     type="file"
                     className="hidden"
-                    accept=".txt,.html,.json,.docx,.xlsx"
-                    onChange={(e) => {
+                    accept=".docx,.doc,.txt,.html"
+                    onChange={async (e) => {
                       const file = e.target.files?.[0];
-                      if (file) {
-                        const reader = new FileReader();
-                        reader.onload = (event) => {
-                          const content = event.target?.result as string;
-                          onApplyTemplate(content, file.name.replace(/\.[^/.]+$/, ''));
+                      if (!file) return;
+                      setLoadingFileMessage(`جاري فك ضغط وقراءة مستند Word "${file.name}"...`);
+                      try {
+                        let html = '';
+                        if (file.name.endsWith('.docx') || file.name.endsWith('.doc')) {
+                          html = await parseDocxFile(file);
+                        } else {
+                          const text = await file.text();
+                          html = text.includes('<p') ? text : `<p style="white-space: pre-wrap;">${text}</p>`;
+                        }
+                        const cleanTitle = file.name.replace(/\.[^/.]+$/, '');
+                        onApplyTemplate(html, cleanTitle);
+                        onSwitchApp?.('docs');
+                        setLoadingFileMessage(null);
+                        onClose();
+                      } catch (err) {
+                        console.error(err);
+                        setLoadingFileMessage(null);
+                        alert('حدث خطأ أثناء فتح ملف Word. يرجى التأكد من سلامة الملف.');
+                      }
+                    }}
+                  />
+                </label>
+
+                {/* 2. Open Excel .xlsx */}
+                <label className="p-4 rounded-xl border border-emerald-200 bg-emerald-50/40 hover:bg-emerald-50 hover:border-emerald-500 cursor-pointer transition flex flex-col justify-between group">
+                  <div className="flex items-center gap-3 mb-2">
+                    <div className="w-9 h-9 rounded-lg bg-[#107c41] text-white flex items-center justify-center font-bold text-sm shadow-xs">
+                      X
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-gray-900 text-sm">مصنف Excel</h4>
+                      <span className="text-[11px] text-emerald-700 font-mono font-medium">.xlsx, .xls, .csv</span>
+                    </div>
+                  </div>
+                  <p className="text-[11.5px] text-gray-600 mb-3">
+                    استيراد جميع أوراق العمل والصيغ الرياضية والأرقام والنسب المئوية والعملات بتنسيق إكسيل الأصلي.
+                  </p>
+                  <span className="text-xs font-bold text-[#107c41] group-hover:underline">فتح مصنف Excel ➔</span>
+                  <input
+                    type="file"
+                    className="hidden"
+                    accept=".xlsx,.xls,.csv"
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      setLoadingFileMessage(`جاري تحليل جداول وصيغ ملف Excel "${file.name}"...`);
+                      try {
+                        const parsedSheets = await parseExcelFile(file);
+                        if (Object.keys(parsedSheets).length > 0) {
+                          const cleanTitle = file.name.replace(/\.[^/.]+$/, '');
+                          localVault.set(localVault.KEYS.SHEETS_DATA, parsedSheets);
+                          onLoadExcelData?.(parsedSheets, cleanTitle);
+                          onSwitchApp?.('sheets');
+                          setLoadingFileMessage(null);
                           onClose();
-                        };
-                        reader.readAsText(file);
+                        } else {
+                          setLoadingFileMessage(null);
+                          alert('لم يتم العثور على أوراق عمل داخل الملف.');
+                        }
+                      } catch (err) {
+                        console.error(err);
+                        setLoadingFileMessage(null);
+                        alert('حدث خطأ أثناء فتح ملف Excel.');
+                      }
+                    }}
+                  />
+                </label>
+
+                {/* 3. Open PowerPoint .pptx */}
+                <label className="p-4 rounded-xl border border-orange-200 bg-orange-50/40 hover:bg-orange-50 hover:border-orange-500 cursor-pointer transition flex flex-col justify-between group">
+                  <div className="flex items-center gap-3 mb-2">
+                    <div className="w-9 h-9 rounded-lg bg-[#d83b01] text-white flex items-center justify-center font-bold text-sm shadow-xs">
+                      P
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-gray-900 text-sm">عرض PowerPoint</h4>
+                      <span className="text-[11px] text-orange-700 font-mono font-medium">.pptx</span>
+                    </div>
+                  </div>
+                  <p className="text-[11.5px] text-gray-600 mb-3">
+                    استيراد الشرائح والعناوين والنقاط وعرضها بدقة 16:9 مع وضع مقدم العروض والأدوات التفاعلية.
+                  </p>
+                  <span className="text-xs font-bold text-[#d83b01] group-hover:underline">فتح عرض PowerPoint ➔</span>
+                  <input
+                    type="file"
+                    className="hidden"
+                    accept=".pptx"
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      setLoadingFileMessage(`جاري استخراج شرائح عرض PowerPoint "${file.name}"...`);
+                      try {
+                        const parsedSlides = await parsePptxFile(file);
+                        if (parsedSlides.length > 0) {
+                          const cleanTitle = file.name.replace(/\.[^/.]+$/, '');
+                          localVault.set(localVault.KEYS.SLIDES_DATA, parsedSlides);
+                          onLoadSlidesData?.(parsedSlides, cleanTitle);
+                          onSwitchApp?.('slides');
+                          setLoadingFileMessage(null);
+                          onClose();
+                        } else {
+                          setLoadingFileMessage(null);
+                          alert('لم يتم العثور على شرائح داخل الملف.');
+                        }
+                      } catch (err) {
+                        console.error(err);
+                        setLoadingFileMessage(null);
+                        alert('حدث خطأ أثناء فتح ملف PowerPoint.');
+                      }
+                    }}
+                  />
+                </label>
+              </div>
+
+              {/* Universal Drag & Drop / File Browser */}
+              <div className="p-8 border-2 border-dashed border-gray-300 hover:border-[#0078d4] rounded-2xl bg-gray-50/80 text-center flex flex-col items-center justify-center transition">
+                <FolderOpen className="w-12 h-12 text-[#0078d4] mb-3" />
+                <h3 className="font-bold text-base text-gray-800">أو استعرض أي ملف من حاسوبك أو هاتفك</h3>
+                <p className="text-xs text-gray-500 mt-1 mb-4">
+                  يدعم التعرف التلقائي على .docx, .xlsx, .pptx, .csv, .json, .txt
+                </p>
+                <label className="bg-[#0078d4] hover:bg-[#006abc] text-white px-6 py-2.5 rounded-lg text-xs font-bold cursor-pointer transition shadow flex items-center gap-2">
+                  <FolderOpen className="w-4 h-4" />
+                  <span>استعراض كافة ملفات Office</span>
+                  <input
+                    type="file"
+                    className="hidden"
+                    accept=".docx,.doc,.xlsx,.xls,.pptx,.csv,.json,.txt,.html"
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+
+                      const ext = file.name.split('.').pop()?.toLowerCase();
+                      const cleanTitle = file.name.replace(/\.[^/.]+$/, '');
+                      setLoadingFileMessage(`جاري فتح ملف ${file.name}...`);
+
+                      try {
+                        if (ext === 'docx' || ext === 'doc') {
+                          const html = await parseDocxFile(file);
+                          onApplyTemplate(html, cleanTitle);
+                          onSwitchApp?.('docs');
+                        } else if (ext === 'xlsx' || ext === 'xls' || ext === 'csv') {
+                          const parsedSheets = await parseExcelFile(file);
+                          localVault.set(localVault.KEYS.SHEETS_DATA, parsedSheets);
+                          onLoadExcelData?.(parsedSheets, cleanTitle);
+                          onSwitchApp?.('sheets');
+                        } else if (ext === 'pptx') {
+                          const parsedSlides = await parsePptxFile(file);
+                          localVault.set(localVault.KEYS.SLIDES_DATA, parsedSlides);
+                          onLoadSlidesData?.(parsedSlides, cleanTitle);
+                          onSwitchApp?.('slides');
+                        } else if (ext === 'json') {
+                          const text = await file.text();
+                          const success = localVault.importSovereignBackup(text);
+                          if (success) {
+                            alert('تم استيراد الخزنة السيادية بنجاح!');
+                          } else {
+                            onApplyTemplate(text, cleanTitle);
+                          }
+                        } else {
+                          const text = await file.text();
+                          onApplyTemplate(text, cleanTitle);
+                          onSwitchApp?.('docs');
+                        }
+
+                        setLoadingFileMessage(null);
+                        onClose();
+                      } catch (err) {
+                        console.error(err);
+                        setLoadingFileMessage(null);
+                        alert(`تعذر قراءة الملف: ${file.name}`);
                       }
                     }}
                   />

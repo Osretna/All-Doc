@@ -1,16 +1,14 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { localVault } from '../../utils/storage';
+import { parseDocxFile } from '../../utils/fileImport';
 import { 
   FileText, 
   Printer, 
   Download, 
-  Sparkles, 
+  Upload,
   CheckCircle2, 
-  Building2, 
-  Share2,
-  Calendar,
-  User,
-  ShieldCheck
+  ShieldCheck,
+  FolderOpen
 } from 'lucide-react';
 
 interface Props {
@@ -66,28 +64,8 @@ const DEFAULT_DOC_CONTENT = `
       <td style="padding: 8px 10px; border: 1px solid #e1dfdd;">Microsoft PowerPoint</td>
       <td style="padding: 8px 10px; border: 1px solid #e1dfdd;">عروض تقديمية 16:9، وضع عارض كامل الشاشة، أشكال متقدمة، قوالب خليجية</td>
     </tr>
-    <tr style="background-color: #f9fafb;">
-      <td style="padding: 8px 10px; border: 1px solid #e1dfdd; font-weight: bold; color: #7719aa;">Infinity Notes</td>
-      <td style="padding: 8px 10px; border: 1px solid #e1dfdd;">Microsoft OneNote</td>
-      <td style="padding: 8px 10px; border: 1px solid #e1dfdd;">دفاتر مقسمة لأقسام، مذكرات صوتية تفاعلية، وسوم هامة، وقوائم مهام</td>
-    </tr>
-    <tr style="background-color: #ffffff;">
-      <td style="padding: 8px 10px; border: 1px solid #e1dfdd; font-weight: bold; color: #a4373a;">Infinity Base</td>
-      <td style="padding: 8px 10px; border: 1px solid #e1dfdd;">Microsoft Access</td>
-      <td style="padding: 8px 10px; border: 1px solid #e1dfdd;">مصمم قواعد بيانات بصرية، نماذج إدخال آلية، وحدة استعلامات SQL مدمجة</td>
-    </tr>
-    <tr style="background-color: #f9fafb;">
-      <td style="padding: 8px 10px; border: 1px solid #e1dfdd; font-weight: bold; color: #e81123;">PDF Studio</td>
-      <td style="padding: 8px 10px; border: 1px solid #e1dfdd;">Adobe Acrobat</td>
-      <td style="padding: 8px 10px; border: 1px solid #e1dfdd;">توقيع إلكتروني حي، أختام رسمية معتمدة، تعليقات، وتصدير فوري</td>
-    </tr>
   </tbody>
 </table>
-
-<h2 style="color: #106ebe; font-size: 18px; margin-top: 25px; border-right: 4px solid #0078d4; padding-right: 10px;">3. نظام "ملاك" المتكامل لإدارة العقارات والاتحادات السكنية</h2>
-<p style="line-height: 1.8; text-align: justify;">
-تم دمج حل <strong>"نظام ملاك"</strong> كنموذج رائد للحلول المخصصة، حيث يمكن لمجالس إدارات الأبراج السكنية والمجمعات إدارة اشتراكات الوحدات، تتبع مصروفات الصيانة، وإصدار كشوفات الحساب الختامية المعتمدة بضغطة زر واحدة.
-</p>
 `;
 
 export const DocsApp: React.FC<Props> = ({
@@ -100,24 +78,33 @@ export const DocsApp: React.FC<Props> = ({
   onContentChange,
 }) => {
   const editorRef = useRef<HTMLDivElement>(null);
-  const [content, setContent] = useState<string>(() => {
-    return initialContent || localVault.get<string>(localVault.KEYS.DOCS_CONTENT, DEFAULT_DOC_CONTENT);
-  });
+  const isInitialized = useRef<boolean>(false);
+  const lastInternalHtml = useRef<string>('');
 
+  // Initialize editor content once or on external content update
   useEffect(() => {
-    if (initialContent !== undefined) {
-      setContent(initialContent);
-      if (editorRef.current) {
-        editorRef.current.innerHTML = initialContent;
-      }
+    if (!editorRef.current) return;
+
+    if (!isInitialized.current) {
+      const initial = initialContent !== undefined 
+        ? initialContent 
+        : localVault.get<string>(localVault.KEYS.DOCS_CONTENT, DEFAULT_DOC_CONTENT);
+
+      editorRef.current.innerHTML = initial;
+      lastInternalHtml.current = initial;
+      isInitialized.current = true;
+      updateCounts();
+      return;
     }
-  }, [initialContent]);
 
-  useEffect(() => {
-    if (editorRef.current) {
+    // CRITICAL: Only update innerHTML if content changed externally (template/open file).
+    // NEVER overwrite innerHTML during active user typing as that resets caret position to 0!
+    if (initialContent !== undefined && initialContent !== lastInternalHtml.current) {
+      editorRef.current.innerHTML = initialContent;
+      lastInternalHtml.current = initialContent;
       updateCounts();
     }
-  }, []);
+  }, [initialContent]);
 
   const updateCounts = () => {
     if (!editorRef.current) return;
@@ -131,14 +118,133 @@ export const DocsApp: React.FC<Props> = ({
   const handleInput = () => {
     if (!editorRef.current) return;
     const html = editorRef.current.innerHTML;
-    setContent(html);
+    // Record internal HTML so useEffect doesn't echo-replace it and disrupt caret
+    lastInternalHtml.current = html;
     localVault.set(localVault.KEYS.DOCS_CONTENT, html);
     updateCounts();
     onContentChange?.(html);
   };
 
+  // Keyboard navigation & Ctrl+Backspace full word delete handler
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    // Ctrl + Backspace: Delete full word backwards cleanly
+    if ((e.ctrlKey || e.altKey) && e.key === 'Backspace') {
+      e.preventDefault();
+      const sel = window.getSelection();
+      if (sel && sel.rangeCount > 0) {
+        // @ts-ignore - modify is supported in WebKit, Blink, and Firefox
+        if (typeof sel.modify === 'function') {
+          // @ts-ignore
+          sel.modify('extend', 'backward', 'word');
+          document.execCommand('delete', false);
+        } else {
+          document.execCommand('delete', false);
+        }
+      }
+      handleInput();
+      return;
+    }
+
+    // Ctrl + B: Bold
+    if ((e.ctrlKey || e.metaKey) && (e.key === 'b' || e.key === 'B')) {
+      e.preventDefault();
+      document.execCommand('bold', false);
+      handleInput();
+      return;
+    }
+
+    // Ctrl + I: Italic
+    if ((e.ctrlKey || e.metaKey) && (e.key === 'i' || e.key === 'I')) {
+      e.preventDefault();
+      document.execCommand('italic', false);
+      handleInput();
+      return;
+    }
+
+    // Ctrl + U: Underline
+    if ((e.ctrlKey || e.metaKey) && (e.key === 'u' || e.key === 'U')) {
+      e.preventDefault();
+      document.execCommand('underline', false);
+      handleInput();
+      return;
+    }
+
+    // Ctrl + Z: Undo
+    if ((e.ctrlKey || e.metaKey) && (e.key === 'z' || e.key === 'Z') && !e.shiftKey) {
+      e.preventDefault();
+      document.execCommand('undo', false);
+      handleInput();
+      return;
+    }
+
+    // Ctrl + Y: Redo
+    if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || e.key === 'Y' || (e.shiftKey && (e.key === 'z' || e.key === 'Z')))) {
+      e.preventDefault();
+      document.execCommand('redo', false);
+      handleInput();
+      return;
+    }
+
+    // Ctrl + A: Select All
+    if ((e.ctrlKey || e.metaKey) && (e.key === 'a' || e.key === 'A')) {
+      // Allow browser native select all
+      return;
+    }
+  };
+
+  // Direct file opener for .docx, .doc, .txt, .html
+  const handleOpenLocalDoc = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      let parsedHtml = '';
+      if (file.name.endsWith('.docx') || file.name.endsWith('.doc')) {
+        parsedHtml = await parseDocxFile(file);
+      } else {
+        const text = await file.text();
+        if (text.includes('<html') || text.includes('<p') || text.includes('<div')) {
+          parsedHtml = text;
+        } else {
+          parsedHtml = `<p style="white-space: pre-wrap;">${text}</p>`;
+        }
+      }
+
+      if (editorRef.current) {
+        editorRef.current.innerHTML = parsedHtml;
+        localVault.set(localVault.KEYS.DOCS_CONTENT, parsedHtml);
+        updateCounts();
+        onContentChange?.(parsedHtml);
+        alert(`تم فتح وقراءة المستند "${file.name}" بنجاح!`);
+      }
+    } catch (err) {
+      console.error(err);
+      alert('حدث خطأ أثناء قراءة الملف. تأكد من سلامة ملف Word.');
+    }
+  };
+
   return (
-    <div className="flex-1 bg-[#eaeaea] overflow-y-auto p-4 sm:p-8 flex justify-center">
+    <div className="flex-1 bg-[#eaeaea] overflow-y-auto p-4 sm:p-8 flex flex-col items-center">
+      {/* Top Quick Bar: File Open & Ruler Action */}
+      <div className="w-full max-w-[210mm] mb-2 flex items-center justify-between text-xs text-gray-600 no-print">
+        <div className="flex items-center gap-2">
+          <label className="flex items-center gap-1.5 px-3 py-1 bg-white border border-gray-300 hover:border-blue-500 rounded-lg cursor-pointer text-xs font-bold text-gray-800 shadow-2xs transition">
+            <Upload className="w-3.5 h-3.5 text-blue-600" />
+            <span>فتح مستند Word (.docx / .txt)</span>
+            <input
+              type="file"
+              accept=".docx,.doc,.txt,.html"
+              onChange={handleOpenLocalDoc}
+              className="hidden"
+            />
+          </label>
+        </div>
+
+        <div className="text-[11px] text-gray-500">
+          دعم كامل لكتابة العربية (RTL) واختصارات Word
+        </div>
+      </div>
+
       {/* Container with Zoom Scaler */}
       <div 
         style={{ 
@@ -159,21 +265,25 @@ export const DocsApp: React.FC<Props> = ({
             <span>20</span>
           </div>
 
-          {/* Editable Document Canvas */}
+          {/* Editable Document Canvas with Native RTL and zero cursor jumping */}
           <div
             ref={editorRef}
             contentEditable
             suppressContentEditableWarning
+            dir="rtl"
             onInput={handleInput}
+            onKeyDown={handleKeyDown}
             style={{ 
               fontFamily: fontFamily, 
               fontSize: `${fontSize}px`,
-              lineHeight: 1.7,
-              minHeight: '250mm',
-              outline: 'none'
+              lineHeight: 1.8,
+              minHeight: '260mm',
+              outline: 'none',
+              direction: 'rtl',
+              textAlign: 'right',
+              unicodeBidi: 'plaintext'
             }}
             className="text-gray-900 focus:outline-none focus:ring-0 selection:bg-blue-100"
-            dangerouslySetInnerHTML={{ __html: content }}
           />
 
           {/* Page Footer Simulation */}

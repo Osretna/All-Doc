@@ -2,7 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { 
   OfficeAppId, 
   MainNavSection, 
-  RibbonTab 
+  RibbonTab,
+  SheetData,
+  SlideItem
 } from './types';
 import { APP_CONFIGS } from './utils/appConfigs';
 import { TitleBar } from './components/layout/TitleBar';
@@ -44,8 +46,10 @@ export default function App() {
   const [wordCount, setWordCount] = useState<number>(342);
   const [charCount, setCharCount] = useState<number>(2410);
 
-  // Document Content State for DocsApp
+  // Document Content State for DocsApp, SheetsApp, and SlidesApp
   const [docContent, setDocContent] = useState<string | undefined>(undefined);
+  const [excelSheets, setExcelSheets] = useState<Record<string, { label: string; data: SheetData }> | undefined>(undefined);
+  const [slidesList, setSlidesList] = useState<SlideItem[] | undefined>(undefined);
 
   // Automatically reset tab to home when switching applications
   const handleSwitchApp = (app: OfficeAppId) => {
@@ -247,10 +251,20 @@ export default function App() {
               />
             )}
             {activeApp === 'sheets' && (
-              <SheetsApp fontFamily={selectedFont} zoomLevel={zoomLevel} />
+              <SheetsApp 
+                fontFamily={selectedFont} 
+                zoomLevel={zoomLevel} 
+                initialSheets={excelSheets}
+                onSheetsChange={setExcelSheets}
+              />
             )}
             {activeApp === 'slides' && (
-              <SlidesApp fontFamily={selectedFont} zoomLevel={zoomLevel} />
+              <SlidesApp 
+                fontFamily={selectedFont} 
+                zoomLevel={zoomLevel} 
+                initialSlides={slidesList}
+                onSlidesChange={setSlidesList}
+              />
             )}
             {activeApp === 'notes' && (
               <NotesApp fontFamily={selectedFont} />
@@ -303,6 +317,15 @@ export default function App() {
         documentTitle={documentTitle}
         onApplyTemplate={handleApplyTemplate}
         onExport={handleExport}
+        onSwitchApp={handleSwitchApp}
+        onLoadExcelData={(sheets, title) => {
+          setExcelSheets(sheets);
+          setDocumentTitle(title);
+        }}
+        onLoadSlidesData={(slides, title) => {
+          setSlidesList(slides);
+          setDocumentTitle(title);
+        }}
       />
 
       {/* 6. Offline Sovereign PWA Toast Indicator */}

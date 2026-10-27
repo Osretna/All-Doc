@@ -24,12 +24,16 @@ import {
   Circle,
   Square,
   ArrowRight,
-  Star
+  Star,
+  FileUp
 } from 'lucide-react';
+import { parsePptxFile } from '../../utils/fileImport';
 
 interface Props {
   fontFamily: string;
   zoomLevel: number;
+  initialSlides?: SlideItem[];
+  onSlidesChange?: (slides: SlideItem[]) => void;
 }
 
 const INITIAL_SLIDES: SlideItem[] = [
@@ -91,10 +95,24 @@ const INITIAL_SLIDES: SlideItem[] = [
   },
 ];
 
-export const SlidesApp: React.FC<Props> = ({ fontFamily, zoomLevel }) => {
+export const SlidesApp: React.FC<Props> = ({ 
+  fontFamily, 
+  zoomLevel,
+  initialSlides,
+  onSlidesChange
+}) => {
   const [slides, setSlides] = useState<SlideItem[]>(() => {
-    return localVault.get<SlideItem[]>(localVault.KEYS.SLIDES_DATA, INITIAL_SLIDES);
+    return initialSlides || localVault.get<SlideItem[]>(localVault.KEYS.SLIDES_DATA, INITIAL_SLIDES);
   });
+
+  // Sync when initialSlides changes externally (e.g. from Backstage file open)
+  useEffect(() => {
+    if (initialSlides && initialSlides.length > 0) {
+      setSlides(initialSlides);
+      setCurrentSlideIndex(0);
+    }
+  }, [initialSlides]);
+
   const [currentSlideIndex, setCurrentSlideIndex] = useState<number>(0);
   const [isPresenterMode, setIsPresenterMode] = useState<boolean>(false);
   const [presentationTime, setPresentationTime] = useState<number>(0);
@@ -104,8 +122,27 @@ export const SlidesApp: React.FC<Props> = ({ fontFamily, zoomLevel }) => {
 
   const presenterCanvasRef = useRef<HTMLCanvasElement>(null);
 
+  const handleOpenPptx = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const parsed = await parsePptxFile(file);
+      if (parsed.length > 0) {
+        setSlides(parsed);
+        setCurrentSlideIndex(0);
+        localVault.set(localVault.KEYS.SLIDES_DATA, parsed);
+        onSlidesChange?.(parsed);
+        alert(`تم فتح عرض PowerPoint "${file.name}" بنجاح مع الصور والتنسيقات الأصلية!`);
+      }
+    } catch (err) {
+      console.error(err);
+      alert('حدث خطأ أثناء فتح ملف PowerPoint.');
+    }
+  };
+
   useEffect(() => {
     localVault.set(localVault.KEYS.SLIDES_DATA, slides);
+    onSlidesChange?.(slides);
   }, [slides]);
 
   // Timer in presenter mode
@@ -306,10 +343,25 @@ export const SlidesApp: React.FC<Props> = ({ fontFamily, zoomLevel }) => {
                 </div>
               </div>
 
-              {/* Mini Slide Preview */}
-              <div className={`aspect-video rounded p-2 text-[9px] text-white overflow-hidden shadow-inner ${thumbTheme.bg}`}>
-                <div className="font-bold truncate text-sky-200">{s.title}</div>
-                <div className="text-[7.5px] opacity-70 truncate">{s.subtitle}</div>
+              {/* Mini Slide Preview with Wallpaper Support */}
+              <div 
+                className={`aspect-video rounded p-2 text-[9px] text-white overflow-hidden shadow-inner relative flex items-center justify-center text-center ${thumbTheme.bg}`}
+                style={{
+                  backgroundImage: s.backgroundImage ? `url(${s.backgroundImage})` : undefined,
+                  backgroundSize: 'cover',
+                  backgroundPosition: 'center',
+                }}
+              >
+                {s.backgroundImage && s.hasCardFrame ? (
+                  <div className="bg-white/95 border border-black px-2 py-1 text-[8.5px] text-black font-serif font-black uppercase truncate max-w-[85%] shadow-xs">
+                    {s.title}
+                  </div>
+                ) : (
+                  <div>
+                    <div className="font-bold truncate text-sky-200">{s.title}</div>
+                    <div className="text-[7.5px] opacity-70 truncate">{s.subtitle}</div>
+                  </div>
+                )}
               </div>
             </div>
           );
@@ -359,6 +411,17 @@ export const SlidesApp: React.FC<Props> = ({ fontFamily, zoomLevel }) => {
           </div>
 
           <div className="flex items-center gap-2">
+            <label className="flex items-center gap-1.5 px-3 py-1 bg-white border border-orange-300 hover:bg-orange-50 text-orange-900 rounded text-xs font-bold cursor-pointer transition shadow-2xs">
+              <FileUp className="w-3.5 h-3.5 text-orange-600" />
+              <span>فتح عرض PowerPoint (.pptx)</span>
+              <input
+                type="file"
+                accept=".pptx"
+                onChange={handleOpenPptx}
+                className="hidden"
+              />
+            </label>
+
             <span className="text-gray-500">الانتقال:</span>
             <select
               value={currentSlide.transition || 'fade'}
@@ -381,74 +444,124 @@ export const SlidesApp: React.FC<Props> = ({ fontFamily, zoomLevel }) => {
           </div>
         </div>
 
-        {/* 16:9 Widescreen Active Slide Canvas */}
+        {/* 16:9 Widescreen Active Slide Canvas with Wallpaper & Card Layout Support */}
         <div
-          className={`w-full max-w-4xl aspect-video rounded-xl shadow-2xl p-8 sm:p-12 text-right relative flex flex-col justify-between overflow-hidden transition-all duration-300 ${activeTheme.bg}`}
-          style={{ fontFamily: fontFamily }}
+          className={`w-full max-w-4xl aspect-video rounded-xl shadow-2xl p-8 sm:p-12 text-right relative flex flex-col justify-between overflow-hidden transition-all duration-300 ${
+            currentSlide.backgroundImage ? '' : activeTheme.bg
+          }`}
+          style={{
+            fontFamily: currentSlide.fontFamily || fontFamily,
+            backgroundImage: currentSlide.backgroundImage ? `url(${currentSlide.backgroundImage})` : undefined,
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
+            backgroundColor: currentSlide.backgroundColor || undefined,
+          }}
         >
-          {/* Subtle Ambient Decorative Circles */}
-          <div className="absolute -top-16 -left-16 w-64 h-64 rounded-full bg-white/5 blur-2xl pointer-events-none" />
-          <div className="absolute -bottom-16 -right-16 w-64 h-64 rounded-full bg-blue-500/10 blur-3xl pointer-events-none" />
+          {/* Subtle Ambient Decorative Circles (only when no custom background) */}
+          {!currentSlide.backgroundImage && (
+            <>
+              <div className="absolute -top-16 -left-16 w-64 h-64 rounded-full bg-white/5 blur-2xl pointer-events-none" />
+              <div className="absolute -bottom-16 -right-16 w-64 h-64 rounded-full bg-blue-500/10 blur-3xl pointer-events-none" />
+            </>
+          )}
 
           {/* Slide Top Branding */}
-          <div className="flex items-center justify-between text-xs text-white/60 select-none pb-4 border-b border-white/10">
+          <div className={`flex items-center justify-between text-xs select-none pb-4 ${
+            currentSlide.backgroundImage ? 'text-gray-800' : 'text-white/60 border-b border-white/10'
+          }`}>
             <div className="flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
-              <span className="font-bold tracking-wider text-white">INFINITY SOVEREIGN TECH</span>
+              <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+              <span className={`font-bold tracking-wider ${currentSlide.backgroundImage ? 'text-gray-900 bg-white/80 px-2 py-0.5 rounded shadow-2xs' : 'text-white'}`}>
+                INFINITY SOVEREIGN TECH
+              </span>
             </div>
-            <span className="font-mono text-white/50">الشريحة {currentSlideIndex + 1} / {slides.length}</span>
+            <span className={`font-mono ${currentSlide.backgroundImage ? 'text-gray-900 bg-white/80 px-2 py-0.5 rounded shadow-2xs' : 'text-white/50'}`}>
+              الشريحة {currentSlideIndex + 1} / {slides.length}
+            </span>
           </div>
 
-          {/* Slide Content (Editable Inline) */}
-          <div className="my-auto space-y-4">
-            <input
-              type="text"
-              value={currentSlide.title}
-              onChange={(e) => handleUpdateCurrentSlide('title', e.target.value)}
-              className={`w-full bg-transparent border-b border-transparent hover:border-white/20 focus:border-white/50 font-black text-2xl sm:text-4xl outline-none transition text-right ${activeTheme.titleColor}`}
-              placeholder="اكتب عنوان الشريحة الرئيسي..."
-            />
-
-            <input
-              type="text"
-              value={currentSlide.subtitle}
-              onChange={(e) => handleUpdateCurrentSlide('subtitle', e.target.value)}
-              className="w-full bg-transparent border-b border-transparent hover:border-white/20 focus:border-white/50 text-white/80 text-sm sm:text-lg font-medium outline-none transition text-right"
-              placeholder="اكتب العنوان الفرعي أو الفكرة..."
-            />
-
-            {/* Layout Comparison or Regular Bullets */}
-            {currentSlide.layout === 'comparison' ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-3">
-                <div className="p-4 rounded-xl bg-white/10 backdrop-blur-md border border-white/10 space-y-2">
-                  <h4 className="font-bold text-sky-300 text-sm">البدائل الاحتكارية العامة:</h4>
-                  <p className="text-white/80 text-xs leading-relaxed">{currentSlide.body[0]}</p>
+          {/* Slide Content: Check if centered framed card layout (e.g. from PPTX template) */}
+          {currentSlide.hasCardFrame ? (
+            <div
+              className="my-auto mx-auto max-w-lg w-full p-8 sm:p-10 text-center rounded-xs shadow-2xl relative"
+              style={{
+                backgroundColor: currentSlide.cardBg || '#ffffff',
+                border: currentSlide.cardBorder || '2px solid #111827',
+                fontFamily: currentSlide.fontFamily || "'Times New Roman', Georgia, serif",
+              }}
+            >
+              <input
+                type="text"
+                value={currentSlide.title}
+                onChange={(e) => handleUpdateCurrentSlide('title', e.target.value)}
+                className="w-full bg-transparent font-serif font-black text-2xl sm:text-4xl text-center text-gray-900 outline-none uppercase tracking-wider mb-2"
+                placeholder="TITLE LOREM IPSUM"
+              />
+              <input
+                type="text"
+                value={currentSlide.subtitle}
+                onChange={(e) => handleUpdateCurrentSlide('subtitle', e.target.value)}
+                className="w-full bg-transparent text-sm sm:text-base text-center text-gray-700 outline-none font-normal"
+                placeholder="Sit Dolor Amet"
+              />
+              {currentSlide.body && currentSlide.body.length > 0 && currentSlide.body[0] !== 'نقطة مستوردة من العرض التقديمي' && (
+                <div className="mt-4 pt-3 border-t border-gray-200 text-xs text-gray-600 space-y-1">
+                  {currentSlide.body.map((b, i) => (
+                    <div key={i}>{b}</div>
+                  ))}
                 </div>
-                <div className="p-4 rounded-xl bg-emerald-500/20 backdrop-blur-md border border-emerald-400/30 space-y-2">
-                  <h4 className="font-bold text-emerald-300 text-sm">جناح إنفينيتي السيادي 100%:</h4>
-                  <p className="text-white/90 text-xs leading-relaxed">{currentSlide.body[1]}</p>
-                </div>
-              </div>
-            ) : (
-              <div className="pt-4 space-y-2.5">
-                {currentSlide.body.map((item, bIdx) => (
-                  <div key={bIdx} className="flex items-start gap-3 group">
-                    <span className="w-2.5 h-2.5 rounded-full bg-sky-400 mt-2 shrink-0 group-hover:scale-125 transition" />
-                    <input
-                      type="text"
-                      value={item}
-                      onChange={(e) => {
-                        const newBody = [...currentSlide.body];
-                        newBody[bIdx] = e.target.value;
-                        handleUpdateCurrentSlide('body', newBody);
-                      }}
-                      className="w-full bg-transparent border-b border-transparent hover:border-white/20 focus:border-white/40 text-white/90 text-sm sm:text-base outline-none transition"
-                    />
+              )}
+            </div>
+          ) : (
+            <div className="my-auto space-y-4">
+              <input
+                type="text"
+                value={currentSlide.title}
+                onChange={(e) => handleUpdateCurrentSlide('title', e.target.value)}
+                className={`w-full bg-transparent border-b border-transparent hover:border-white/20 focus:border-white/50 font-black text-2xl sm:text-4xl outline-none transition text-right ${activeTheme.titleColor}`}
+                placeholder="اكتب عنوان الشريحة الرئيسي..."
+              />
+
+              <input
+                type="text"
+                value={currentSlide.subtitle}
+                onChange={(e) => handleUpdateCurrentSlide('subtitle', e.target.value)}
+                className="w-full bg-transparent border-b border-transparent hover:border-white/20 focus:border-white/50 text-white/80 text-sm sm:text-lg font-medium outline-none transition text-right"
+                placeholder="اكتب العنوان الفرعي أو الفكرة..."
+              />
+
+              {currentSlide.layout === 'comparison' ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-3">
+                  <div className="p-4 rounded-xl bg-white/10 backdrop-blur-md border border-white/10 space-y-2">
+                    <h4 className="font-bold text-sky-300 text-sm">البدائل الاحتكارية العامة:</h4>
+                    <p className="text-white/80 text-xs leading-relaxed">{currentSlide.body[0]}</p>
                   </div>
-                ))}
-              </div>
-            )}
-          </div>
+                  <div className="p-4 rounded-xl bg-emerald-500/20 backdrop-blur-md border border-emerald-400/30 space-y-2">
+                    <h4 className="font-bold text-emerald-300 text-sm">جناح إنفينيتي السيادي 100%:</h4>
+                    <p className="text-white/90 text-xs leading-relaxed">{currentSlide.body[1]}</p>
+                  </div>
+                </div>
+              ) : (
+                <div className="pt-4 space-y-2.5">
+                  {currentSlide.body.map((item, bIdx) => (
+                    <div key={bIdx} className="flex items-start gap-3 group">
+                      <span className="w-2.5 h-2.5 rounded-full bg-sky-400 mt-2 shrink-0 group-hover:scale-125 transition" />
+                      <input
+                        type="text"
+                        value={item}
+                        onChange={(e) => {
+                          const newBody = [...currentSlide.body];
+                          newBody[bIdx] = e.target.value;
+                          handleUpdateCurrentSlide('body', newBody);
+                        }}
+                        className="w-full bg-transparent border-b border-transparent hover:border-white/20 focus:border-white/40 text-white/90 text-sm sm:text-base outline-none transition"
+                      />
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Slide Footer */}
           <div className="pt-4 border-t border-white/10 flex items-center justify-between text-[11px] text-white/40 select-none">
@@ -509,29 +622,62 @@ export const SlidesApp: React.FC<Props> = ({ fontFamily, zoomLevel }) => {
           </div>
 
           {/* Active Big Slide Canvas */}
-          <div className="my-auto max-w-5xl mx-auto w-full aspect-video rounded-2xl shadow-2xl p-10 sm:p-16 flex flex-col justify-between border border-white/20 relative"
-               style={{ ...activeTheme, fontFamily: fontFamily }}>
-            <div className="text-right">
-              <h1 className={`text-3xl sm:text-5xl font-black mb-3 ${activeTheme.titleColor}`}>
-                {currentSlide.title}
-              </h1>
-              <h3 className="text-xl sm:text-2xl text-white/80 font-medium mb-8">
-                {currentSlide.subtitle}
-              </h3>
-
-              <div className="space-y-4">
-                {currentSlide.body.map((item, idx) => (
-                  <div key={idx} className="flex items-center gap-4 text-lg sm:text-2xl text-white/95">
-                    <span className="w-3 h-3 rounded-full bg-sky-400 shrink-0" />
-                    <span>{item}</span>
+          <div 
+            className="my-auto max-w-5xl mx-auto w-full aspect-video rounded-2xl shadow-2xl p-10 sm:p-16 flex flex-col justify-between border border-white/20 relative overflow-hidden"
+            style={{ 
+              fontFamily: currentSlide.fontFamily || fontFamily,
+              backgroundImage: currentSlide.backgroundImage ? `url(${currentSlide.backgroundImage})` : undefined,
+              backgroundSize: 'cover',
+              backgroundPosition: 'center',
+              backgroundColor: currentSlide.backgroundImage ? undefined : (activeTheme.bg.includes('gradient') ? undefined : '#003366'),
+            }}
+          >
+            {currentSlide.hasCardFrame ? (
+              <div 
+                className="my-auto mx-auto max-w-xl w-full p-10 sm:p-14 text-center rounded-xs shadow-2xl relative"
+                style={{
+                  backgroundColor: currentSlide.cardBg || '#ffffff',
+                  border: currentSlide.cardBorder || '2.5px solid #111827',
+                  fontFamily: currentSlide.fontFamily || "'Times New Roman', Georgia, serif"
+                }}
+              >
+                <h1 className="font-serif font-black text-3xl sm:text-5xl text-center text-gray-950 uppercase tracking-widest mb-3">
+                  {currentSlide.title}
+                </h1>
+                <h3 className="text-base sm:text-xl text-center text-gray-800 font-normal">
+                  {currentSlide.subtitle}
+                </h3>
+                {currentSlide.body && currentSlide.body.length > 0 && currentSlide.body[0] !== 'نقطة مستوردة من العرض التقديمي' && (
+                  <div className="mt-6 pt-4 border-t border-gray-200 text-sm text-gray-700 space-y-2">
+                    {currentSlide.body.map((b, i) => (
+                      <div key={i}>{b}</div>
+                    ))}
                   </div>
-                ))}
+                )}
               </div>
-            </div>
+            ) : (
+              <div className="text-right my-auto">
+                <h1 className={`text-3xl sm:text-5xl font-black mb-3 ${activeTheme.titleColor}`}>
+                  {currentSlide.title}
+                </h1>
+                <h3 className="text-xl sm:text-2xl text-white/80 font-medium mb-8">
+                  {currentSlide.subtitle}
+                </h3>
 
-            <div className="flex items-center justify-between text-xs text-white/40 pt-6 border-t border-white/10">
+                <div className="space-y-4">
+                  {currentSlide.body.map((item, idx) => (
+                    <div key={idx} className="flex items-center gap-4 text-lg sm:text-2xl text-white/95">
+                      <span className="w-3 h-3 rounded-full bg-sky-400 shrink-0" />
+                      <span>{item}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className={`flex items-center justify-between text-xs pt-6 border-t ${currentSlide.backgroundImage ? 'border-black/20 text-gray-900 bg-white/70 px-3 py-1 rounded' : 'border-white/10 text-white/40'}`}>
               <span>Infinity Sovereign Office Presenter</span>
-              <span>مؤشر الليزر الافتراضي نشط بالماوس</span>
+              <span>مؤشر الليزر الافتراضي نشط بالماوس (F5)</span>
             </div>
           </div>
 
