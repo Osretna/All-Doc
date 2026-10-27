@@ -92,18 +92,81 @@
   margin: 0 auto;
 }
 
+/* Professional Print Isolation Engine */
 @media print {
+  @page {
+    size: auto;
+    margin: 15mm;
+  }
+
   body {
     background: white !important;
     color: black !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
   }
-  .no-print {
+
+  /* Completely hide all UI Chrome: TitleBar, Ribbons, Modals, StatusBars, Rulers, Sidebars, Buttons */
+  header,
+  nav,
+  aside,
+  button,
+  input,
+  select,
+  .no-print,
+  .mini-toolbar,
+  .toast-container,
+  [role="tablist"],
+  .fixed,
+  .bg-black\/60 {
     display: none !important;
   }
+
+  /* Make main container transparent and full width */
+  #root, main, .h-screen, .w-screen {
+    height: auto !important;
+    width: 100% !important;
+    overflow: visible !important;
+    background: transparent !important;
+  }
+
+  /* Word Document page styling */
+  .print-page,
   .office-page-canvas {
     box-shadow: none !important;
-    margin: 0 !important;
+    margin: 0 auto !important;
+    border: none !important;
     width: 100% !important;
     min-height: auto !important;
+    background: transparent !important;
+  }
+
+  /* Slides layout for PowerPoint */
+  .slide-page {
+    page-break-after: always !important;
+    break-after: page !important;
+    border: 1px solid #cbd5e1 !important;
+    padding: 24px !important;
+    margin-bottom: 20px !important;
+  }
+
+  /* Table layout for Excel & Access */
+  table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+    page-break-inside: auto !important;
+  }
+
+  tr {
+    page-break-inside: avoid !important;
+    page-break-after: auto !important;
+  }
+
+  th, td {
+    border: 1px solid #94a3b8 !important;
+    padding: 6px 10px !important;
   }
 }
+
