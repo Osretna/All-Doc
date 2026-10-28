@@ -57,6 +57,8 @@ import {
   Check
 } from 'lucide-react';
 import { SheetCell } from '../../../types';
+import { ExcelBorderDropdown, ExcelBorderType } from './ExcelBorderDropdown';
+import { ExcelColorPalette } from './ExcelColorPalette';
 
 export type ExcelRibbonTab = 'file' | 'home' | 'insert' | 'layout' | 'formulas' | 'data' | 'review' | 'view' | 'design';
 
@@ -74,7 +76,8 @@ interface Props {
   onPaste: () => void;
   onPasteSpecial: (type: 'values' | 'formats' | 'formulas') => void;
   onFormatRange: (key: keyof SheetCell, value: any) => void;
-  onSetBorder: (borderType: SheetCell['border']) => void;
+  onSetBorder: (borderType: SheetCell['border'], options?: { color?: string; style?: 'solid' | 'dashed' | 'dotted' | 'double' | 'thick' }) => void;
+  onOpenTableStylesGallery?: () => void;
   onSetAlignment: (hAlign: 'right' | 'center' | 'left', vAlign?: 'top' | 'middle' | 'bottom') => void;
   onToggleWrapText: () => void;
   onMergeAndCenter: () => void;
@@ -226,9 +229,12 @@ export const ExcelRibbon: React.FC<Props> = ({
   onResizeTable,
   onExportTable,
   onInsertSlicer,
+  onOpenTableStylesGallery,
 }) => {
   // Dropdown states
   const [showBorderMenu, setShowBorderMenu] = useState(false);
+  const [showFillColorPalette, setShowFillColorPalette] = useState(false);
+  const [showFontColorPalette, setShowFontColorPalette] = useState(false);
   const [showPasteSpecialMenu, setShowPasteSpecialMenu] = useState(false);
   const [showNumberFormatMenu, setShowNumberFormatMenu] = useState(false);
   const [showFormatCellsMenu, setShowFormatCellsMenu] = useState(false);
@@ -512,75 +518,69 @@ export const ExcelRibbon: React.FC<Props> = ({
                   <div className="relative">
                     <button
                       onClick={() => setShowBorderMenu(!showBorderMenu)}
-                      className="p-1 hover:bg-gray-100 rounded flex items-center gap-0.5 text-gray-700"
+                      className="p-1 hover:bg-gray-100 rounded flex items-center gap-0.5 text-gray-700 cursor-pointer"
                       title="حدود الخلايا (Borders)"
                     >
                       <Grid className="w-3.5 h-3.5" />
                       <ChevronDown className="w-2.5 h-2.5" />
                     </button>
-                    {showBorderMenu && (
-                      <div className="absolute top-full left-0 mt-1 bg-white border border-gray-300 rounded shadow-xl py-1 z-50 w-44 text-right">
-                        <button
-                          onClick={() => { onSetBorder('all'); setShowBorderMenu(false); }}
-                          className="w-full px-3 py-1 text-right hover:bg-emerald-50 text-[11px] block"
-                        >
-                          كافة الحدود (All Borders)
-                        </button>
-                        <button
-                          onClick={() => { onSetBorder('outside'); setShowBorderMenu(false); }}
-                          className="w-full px-3 py-1 text-right hover:bg-emerald-50 text-[11px] block"
-                        >
-                          حدود خارجية مربعة
-                        </button>
-                        <button
-                          onClick={() => { onSetBorder('thick-bottom'); setShowBorderMenu(false); }}
-                          className="w-full px-3 py-1 text-right hover:bg-emerald-50 text-[11px] block"
-                        >
-                          حد سفلي سميك
-                        </button>
-                        <button
-                          onClick={() => { onSetBorder('double-bottom'); setShowBorderMenu(false); }}
-                          className="w-full px-3 py-1 text-right hover:bg-emerald-50 text-[11px] block"
-                        >
-                          حد سفلي مزدوج
-                        </button>
-                        <button
-                          onClick={() => { onSetBorder('bottom'); setShowBorderMenu(false); }}
-                          className="w-full px-3 py-1 text-right hover:bg-emerald-50 text-[11px] block"
-                        >
-                          حد سفلي فقط
-                        </button>
-                        <button
-                          onClick={() => { onSetBorder('none'); setShowBorderMenu(false); }}
-                          className="w-full px-3 py-1 text-right hover:bg-red-50 text-[11px] text-red-600 block"
-                        >
-                          بلا حدود (Clear Borders)
-                        </button>
-                      </div>
-                    )}
+                    <ExcelBorderDropdown
+                      isOpen={showBorderMenu}
+                      onClose={() => setShowBorderMenu(false)}
+                      onSelectBorder={onSetBorder}
+                      onOpenFormatCells={onOpenFormatCells}
+                    />
                   </div>
 
                   {/* Fill Color */}
-                  <label className="p-1 hover:bg-gray-100 rounded cursor-pointer relative" title="لون التعبئة">
-                    <div className="w-3.5 h-3.5 rounded-xs border border-gray-400 bg-amber-200" />
-                    <input
-                      type="color"
-                      defaultValue="#fef08a"
-                      onChange={(e) => onFormatRange('bg', e.target.value)}
-                      className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                  <div className="relative">
+                    <button
+                      onClick={() => {
+                        setShowFillColorPalette(!showFillColorPalette);
+                        setShowFontColorPalette(false);
+                      }}
+                      className="p-1 hover:bg-gray-100 rounded cursor-pointer flex items-center gap-0.5"
+                      title="لون التعبئة (Fill Color - Excel 365 Palettes)"
+                    >
+                      <div 
+                        className="w-3.5 h-3.5 rounded-xs border border-gray-400"
+                        style={{ backgroundColor: activeCellData?.bg || '#fef08a' }}
+                      />
+                      <ChevronDown className="w-2.5 h-2.5 text-gray-500" />
+                    </button>
+                    <ExcelColorPalette
+                      isOpen={showFillColorPalette}
+                      onClose={() => setShowFillColorPalette(false)}
+                      onSelectColor={(c) => onFormatRange('bg', c)}
+                      title="لون تعبئة الخلية (Fill Color)"
                     />
-                  </label>
+                  </div>
 
                   {/* Font Color */}
-                  <label className="p-1 hover:bg-gray-100 rounded cursor-pointer relative" title="لون النص">
-                    <div className="text-[11px] font-black underline text-red-600">A</div>
-                    <input
-                      type="color"
-                      defaultValue="#1e293b"
-                      onChange={(e) => onFormatRange('color', e.target.value)}
-                      className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                  <div className="relative">
+                    <button
+                      onClick={() => {
+                        setShowFontColorPalette(!showFontColorPalette);
+                        setShowFillColorPalette(false);
+                      }}
+                      className="p-1 hover:bg-gray-100 rounded cursor-pointer flex items-center gap-0.5"
+                      title="لون النص (Font Color - Excel 365 Palettes)"
+                    >
+                      <div 
+                        className="text-[11px] font-black underline"
+                        style={{ color: activeCellData?.color || '#ef4444' }}
+                      >
+                        A
+                      </div>
+                      <ChevronDown className="w-2.5 h-2.5 text-gray-500" />
+                    </button>
+                    <ExcelColorPalette
+                      isOpen={showFontColorPalette}
+                      onClose={() => setShowFontColorPalette(false)}
+                      onSelectColor={(c) => onFormatRange('color', c)}
+                      title="لون خط النص (Font Color)"
                     />
-                  </label>
+                  </div>
                 </div>
               </div>
               <div className="flex items-center justify-between px-1 text-[10px] text-gray-400 font-medium mt-1">
@@ -799,7 +799,9 @@ export const ExcelRibbon: React.FC<Props> = ({
 
                 <button
                   onClick={() => {
-                    if (onCreateTable) {
+                    if (onOpenTableStylesGallery) {
+                      onOpenTableStylesGallery();
+                    } else if (onCreateTable) {
                       onCreateTable();
                     } else {
                       onFormatRange('bg', '#107c41');
@@ -808,7 +810,7 @@ export const ExcelRibbon: React.FC<Props> = ({
                     }
                   }}
                   className="flex flex-col items-center justify-center p-1 hover:bg-emerald-50 rounded text-gray-700 hover:text-[#107c41] cursor-pointer"
-                  title="تنسيق كجدول Excel رسمي (Alt + T / Ctrl + T)"
+                  title="تنسيق كجدول Excel رسمي والمعرض الشامل (Alt + T / Ctrl + T)"
                 >
                   <Table className="w-4 h-4 text-blue-600" />
                   <span className="text-[9.5px] font-semibold mt-0.5">تنسيق كجدول</span>
@@ -2119,6 +2121,16 @@ export const ExcelRibbon: React.FC<Props> = ({
                   <div className="h-2 bg-white" />
                   <div className="h-2 bg-[#dbeafe] rounded-b-xs" />
                 </div>
+
+                {/* Full Gallery Button */}
+                <button
+                  onClick={() => onOpenTableStylesGallery?.()}
+                  className="w-14 h-12 rounded border border-emerald-400 bg-emerald-50 hover:bg-emerald-100 p-1 cursor-pointer transition flex flex-col items-center justify-center shrink-0 shadow-2xs text-[#107c41]"
+                  title="عرض كافة أنماط جداول Excel 365 (Light, Medium, Dark)"
+                >
+                  <Table className="w-4 h-4" />
+                  <span className="text-[8px] font-bold mt-0.5">كافة الأنماط</span>
+                </button>
               </div>
               <div className="text-[10px] text-gray-400 text-center font-medium mt-1">Table Styles</div>
             </div>

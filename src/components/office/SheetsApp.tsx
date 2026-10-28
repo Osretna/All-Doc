@@ -17,6 +17,11 @@ import { TextToColumnsModal } from './excel/TextToColumnsModal';
 import { GoalSeekModal } from './excel/GoalSeekModal';
 import { ExcelContextMenu } from './excel/ExcelContextMenu';
 import { FormatCellsModal, FormatCellsTab, FormatCellsConfig } from './excel/FormatCellsModal';
+import { ExcelBackstageModal } from './excel/ExcelBackstageModal';
+import { ExcelTableStylesGallery, ExcelTableStyle } from './excel/ExcelTableStylesGallery';
+import { ExcelTemplateDefinition } from './excel/excelTemplates';
+import * as XLSX from 'xlsx';
+import { saveFileDirectlyToDevice } from '../../utils/fileSaver';
 import { 
   Plus, 
   FileUp, 
@@ -25,14 +30,16 @@ import {
   TrendingUp,
   BarChart2,
   Image as ImageIcon,
-  CheckCircle2
+  CheckCircle2,
+  Save,
+  Download
 } from 'lucide-react';
 
 interface Props {
   fontFamily: string;
   zoomLevel: number;
-  initialSheets?: Record<string, { label: string; data: SheetData }>;
-  onSheetsChange?: (sheets: Record<string, { label: string; data: SheetData }>) => void;
+  initialSheets?: Record<string, { label: string; data: SheetData; colWidths?: Record<string, number>; rowHeights?: Record<number, number>; isRTL?: boolean }>;
+  onSheetsChange?: (sheets: Record<string, { label: string; data: SheetData; colWidths?: Record<string, number>; rowHeights?: Record<number, number>; isRTL?: boolean }>) => void;
   onOpenBackstage?: () => void;
 }
 
@@ -50,10 +57,11 @@ const generateCols = (): string[] => {
 export const COLS = generateCols();
 export const MAX_EXCEL_ROWS = 1048576;
 
-const DEFAULT_EXCEL_BLANK: Record<string, { label: string; data: SheetData }> = {
+const DEFAULT_EXCEL_BLANK: Record<string, { label: string; data: SheetData; colWidths?: Record<string, number>; rowHeights?: Record<number, number>; isRTL?: boolean }> = {
   sheet1: {
     label: 'ورقة 1',
     data: {},
+    isRTL: false,
   },
 };
 
@@ -82,8 +90,8 @@ export const SheetsApp: React.FC<Props> = ({
     localVault.set('infinity_office_active_sheet_key', key);
   };
 
-  const [sheets, setSheets] = useState<Record<string, { label: string; data: SheetData }>>(() => {
-    return initialSheets || localVault.get<Record<string, { label: string; data: SheetData }>>(
+  const [sheets, setSheets] = useState<Record<string, { label: string; data: SheetData; colWidths?: Record<string, number>; rowHeights?: Record<number, number>; isRTL?: boolean }>>(() => {
+    return initialSheets || localVault.get<Record<string, { label: string; data: SheetData; colWidths?: Record<string, number>; rowHeights?: Record<number, number>; isRTL?: boolean }>>(
       localVault.KEYS.SHEETS_DATA,
       DEFAULT_EXCEL_BLANK
     );
@@ -129,8 +137,8 @@ export const SheetsApp: React.FC<Props> = ({
   const [formulaDragStartCell, setFormulaDragStartCell] = useState<string | null>(null);
   const [formulaReferencedRange, setFormulaReferencedRange] = useState<string[]>([]);
 
-  // View & UI controls
-  const [isRTL, setIsRTL] = useState<boolean>(true);
+  // View & UI controls (Excel 365 defaults to LTR Left-to-Right for standard workbooks)
+  const [isRTL, setIsRTL] = useState<boolean>(false);
   const [showFormulaBar, setShowFormulaBar] = useState<boolean>(true);
   const [showGridlines, setShowGridlines] = useState<boolean>(true);
   const [showHeadings, setShowHeadings] = useState<boolean>(true);
@@ -175,6 +183,11 @@ export const SheetsApp: React.FC<Props> = ({
   ]);
   const [visibleRowCount, setVisibleRowCount] = useState<number>(100);
   const [tableNotification, setTableNotification] = useState<string | null>(null);
+  const [isExcelBackstageOpen, setIsExcelBackstageOpen] = useState(false);
+  const [isTableStylesGalleryOpen, setIsTableStylesGalleryOpen] = useState(false);
+  const [isSaved, setIsSaved] = useState(true);
+  const [autoSaveCountdown, setAutoSaveCountdown] = useState(300);
+  const [docTitle, setDocTitle] = useState(() => localVault.get('infinity_office_doc_title', 'مصنف 1 - فارغ'));
   const imageInputRef = useRef<HTMLInputElement>(null);
   const floatingImageInputRef = useRef<HTMLInputElement>(null);
 
@@ -367,6 +380,21 @@ export const SheetsApp: React.FC<Props> = ({
     }
   }, [initialSheets]);
 
+  // Sync dimensions and sheet direction on activeSheetKey change
+  useEffect(() => {
+    const sheet = sheets[activeSheetKey];
+    if (!sheet) return;
+    if (sheet.colWidths && Object.keys(sheet.colWidths).length > 0) {
+      setColWidths(sheet.colWidths);
+    }
+    if (sheet.rowHeights && Object.keys(sheet.rowHeights).length > 0) {
+      setRowHeights(sheet.rowHeights);
+    }
+    if (sheet.isRTL !== undefined) {
+      setIsRTL(sheet.isRTL);
+    }
+  }, [activeSheetKey, sheets]);
+
   // Sync zoom prop
   useEffect(() => {
     if (initialZoom) setZoom(initialZoom);
@@ -443,11 +471,144 @@ export const SheetsApp: React.FC<Props> = ({
     setCurrentFunctionSyntax(null);
   }, [selectedCell, activeSheetKey]);
 
+  // Auto-save every 5 minutes (300 seconds)
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setAutoSaveCountdown((prev) => {
+        if (prev <= 1) {
+          localVault.set(localVault.KEYS.SHEETS_DATA, sheets);
+          setIsSaved(true);
+          return 300;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [sheets]);
+
+  const handleQuickSave = () => {
+    localVault.set(localVault.KEYS.SHEETS_DATA, sheets);
+    setIsSaved(true);
+    setAutoSaveCountdown(300);
+    setTableNotification('تم حفظ المصنف بنجاح محلياً على جهازك!');
+    setTimeout(() => setTableNotification(null), 3000);
+  };
+
+  const handleSelectTemplate = (template: ExcelTemplateDefinition) => {
+    setSheets(template.sheets);
+    const targetKey = template.sheets['sheet3'] ? 'sheet3' : (Object.keys(template.sheets)[0] || 'sheet1');
+    setActiveSheetKey(targetKey);
+    const sheet = template.sheets[targetKey];
+    if (sheet?.colWidths) setColWidths(sheet.colWidths);
+    if (sheet?.rowHeights) setRowHeights(sheet.rowHeights);
+    if (sheet?.isRTL !== undefined) setIsRTL(sheet.isRTL);
+    saveSheets(template.sheets);
+    const title = template.titleEn || template.title;
+    setDocTitle(title);
+    localVault.set('infinity_office_doc_title', title);
+    setSelectedCell('B2');
+    setSelectedRange(['B2']);
+    setTableNotification(`تم تحميل وتطبيق قالب "${title}" بنجاح!`);
+    setTimeout(() => setTableNotification(null), 4000);
+  };
+
+  const handleLoadExcelData = (loadedSheets: Record<string, { label: string; data: SheetData; colWidths?: Record<string, number>; rowHeights?: Record<number, number>; isRTL?: boolean }>, title: string) => {
+    setSheets(loadedSheets);
+    const keys = Object.keys(loadedSheets);
+    const introKey = keys.find(k => loadedSheets[k].label?.toLowerCase().includes('introduction to function')) || keys[0] || 'sheet1';
+    setActiveSheetKey(introKey);
+    const sheet = loadedSheets[introKey];
+    if (sheet?.colWidths) setColWidths(sheet.colWidths);
+    if (sheet?.rowHeights) setRowHeights(sheet.rowHeights);
+    if (sheet?.isRTL !== undefined) setIsRTL(sheet.isRTL);
+    saveSheets(loadedSheets);
+    setDocTitle(title);
+    localVault.set('infinity_office_doc_title', title);
+    setSelectedCell('B2');
+    setSelectedRange(['B2']);
+    setTableNotification(`تم فتح المصنف "${title}" بنجاح بكافة التنسيقات والألوان والأبعاد!`);
+    setTimeout(() => setTableNotification(null), 4000);
+  };
+
+  const handleExportMultiFormat = (format: 'xlsx' | 'xlsm' | 'xlsb' | 'xls' | 'csv' | 'tsv' | 'ods' | 'xml' | 'html' | 'pdf') => {
+    if (format === 'pdf') {
+      window.print();
+      return;
+    }
+
+    try {
+      const wb = XLSX.utils.book_new();
+      Object.keys(sheets).forEach((sKey) => {
+        const sheet = sheets[sKey];
+        const rows: any[][] = [];
+        
+        let maxR = 1;
+        let maxC = 0;
+        Object.keys(sheet.data).forEach((cid) => {
+          const coord = parseCellCoord(cid);
+          if (coord.row > maxR) maxR = coord.row;
+          if (coord.colIdx > maxC) maxC = coord.colIdx;
+        });
+
+        for (let r = 1; r <= maxR; r++) {
+          const rowData: any[] = [];
+          for (let c = 0; c <= maxC; c++) {
+            const cellId = `${COLS[c]}${r}`;
+            const cell = sheet.data[cellId];
+            if (!cell) {
+              rowData.push('');
+            } else if (cell.formula) {
+              rowData.push({ f: cell.formula.replace(/^=/, ''), v: cell.value });
+            } else {
+              rowData.push(cell.value);
+            }
+          }
+          rows.push(rowData);
+        }
+
+        const ws = XLSX.utils.aoa_to_sheet(rows);
+        XLSX.utils.book_append_sheet(wb, ws, sheet.label || sKey);
+      });
+
+      const bookTypeMap: Record<string, XLSX.BookType> = {
+        xlsx: 'xlsx',
+        xlsm: 'xlsm',
+        xlsb: 'xlsb',
+        xls: 'biff8',
+        csv: 'csv',
+        tsv: 'txt',
+        ods: 'ods',
+        html: 'html',
+        xml: 'xlsx',
+      };
+
+      const bookType = bookTypeMap[format] || 'xlsx';
+      const ext = format === 'tsv' ? 'tsv' : (format === 'xml' ? 'xml' : format);
+      const fileName = `${docTitle || 'مصنف إكسيل 365'}.${ext}`;
+
+      const out = XLSX.write(wb, { bookType, type: 'array' });
+      const blob = new Blob([out], { type: 'application/octet-stream' });
+      saveFileDirectlyToDevice({
+        filename: fileName,
+        data: blob,
+        mimeType: 'application/octet-stream',
+        primaryExtension: ext,
+      });
+      setTableNotification(`تم تصدير وحفظ المصنف بصيغة .${ext} بنجاح!`);
+      setTimeout(() => setTableNotification(null), 4000);
+    } catch (err) {
+      console.error('Export failed:', err);
+      setTableNotification('حدث خطأ أثناء تصدير الملف.');
+      setTimeout(() => setTableNotification(null), 4000);
+    }
+  };
+
   // Save sheets helper
-  const saveSheets = (newSheets: Record<string, { label: string; data: SheetData }>) => {
+  const saveSheets = (newSheets: Record<string, { label: string; data: SheetData; colWidths?: Record<string, number>; rowHeights?: Record<number, number>; isRTL?: boolean }>) => {
     setSheets(newSheets);
     localVault.set(localVault.KEYS.SHEETS_DATA, newSheets);
     onSheetsChange?.(newSheets);
+    setIsSaved(false);
   };
 
   // Recalculate sheet formulas
@@ -513,9 +674,29 @@ export const SheetsApp: React.FC<Props> = ({
     saveSheets(updatedSheets);
   };
 
-  // Set borders
-  const handleSetBorder = (borderType: SheetCell['border']) => {
-    handleFormatRange('border', borderType);
+  // Set borders with color and style options
+  const handleSetBorder = (
+    borderType: SheetCell['border'],
+    options?: { color?: string; style?: 'solid' | 'dashed' | 'dotted' | 'double' | 'thick' }
+  ) => {
+    const targets = selectedRange.length > 0 ? selectedRange : [selectedCell];
+    const nextData = { ...data };
+    targets.forEach((cid) => {
+      nextData[cid] = {
+        ...(nextData[cid] || { value: '' }),
+        border: borderType,
+        borderColor: options?.color || nextData[cid]?.borderColor,
+        borderStyle: options?.style || nextData[cid]?.borderStyle,
+      };
+    });
+    const updatedSheets = {
+      ...sheets,
+      [activeSheetKey]: {
+        ...currentSheet,
+        data: nextData,
+      },
+    };
+    saveSheets(updatedSheets);
   };
 
   // Set alignment
@@ -1587,6 +1768,75 @@ export const SheetsApp: React.FC<Props> = ({
 
     if (isEditingCell) return;
 
+    // Quick Save Shortcut: Ctrl + S
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+      e.preventDefault();
+      handleQuickSave();
+      return;
+    }
+
+    // Ctrl + Shift + Down: Jump to row 1,048,576
+    if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'ArrowDown') {
+      e.preventDefault();
+      setVisibleRowCount(MAX_EXCEL_ROWS);
+      const coords = parseCellCoord(selectedCell);
+      const targetCellId = `${coords.col}${MAX_EXCEL_ROWS}`;
+      setSelectedCell(targetCellId);
+      setSelectedRange([targetCellId]);
+      setTimeout(() => {
+        if (gridContainerRef.current) {
+          gridContainerRef.current.scrollTop = gridContainerRef.current.scrollHeight;
+          gridContainerRef.current.focus();
+        }
+      }, 50);
+      return;
+    }
+
+    // Ctrl + Shift + Up: Jump to row 1
+    if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'ArrowUp') {
+      e.preventDefault();
+      const coords = parseCellCoord(selectedCell);
+      const targetCellId = `${coords.col}1`;
+      setSelectedCell(targetCellId);
+      setSelectedRange([targetCellId]);
+      setTimeout(() => {
+        if (gridContainerRef.current) {
+          gridContainerRef.current.scrollTop = 0;
+          gridContainerRef.current.focus();
+        }
+      }, 50);
+      return;
+    }
+
+    // Ctrl + Shift + Left / Right: Jump to first / last column
+    if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+      e.preventDefault();
+      const coords = parseCellCoord(selectedCell);
+      const isGoToLast = (isRTL && e.key === 'ArrowLeft') || (!isRTL && e.key === 'ArrowRight');
+      const targetCol = isGoToLast ? COLS[COLS.length - 1] : COLS[0];
+      const targetCellId = `${targetCol}${coords.row}`;
+      setSelectedCell(targetCellId);
+      setSelectedRange([targetCellId]);
+      setTimeout(() => gridContainerRef.current?.focus(), 0);
+      return;
+    }
+
+    // Ctrl + د or Ctrl + ]: Increase font size
+    if ((e.ctrlKey || e.metaKey) && (e.key === 'د' || e.key === ']' || e.code === 'BracketClose')) {
+      e.preventDefault();
+      const currentSz = activeCellData?.fontSize || 11;
+      handleFormatRange('fontSize', Math.min(72, currentSz + 1));
+      return;
+    }
+
+    // Ctrl + ج or Ctrl + [: Decrease font size
+    if ((e.ctrlKey || e.metaKey) && (e.key === 'ج' || e.key === '[' || e.code === 'BracketOpen')) {
+      e.preventDefault();
+      const currentSz = activeCellData?.fontSize || 11;
+      handleFormatRange('fontSize', Math.max(8, currentSz - 1));
+      return;
+    }
+
     const coords = parseCellCoord(selectedCell);
     let nextColIdx = coords.colIdx;
     let nextRow = coords.row;
@@ -1957,11 +2207,22 @@ export const SheetsApp: React.FC<Props> = ({
     try {
       const parsedSheets = await parseExcelFile(file);
       if (Object.keys(parsedSheets).length > 0) {
+        setSheets(parsedSheets);
+        const keys = Object.keys(parsedSheets);
+        const introKey = keys.find((k) => parsedSheets[k].label?.toLowerCase().includes('introduction to function')) || keys[0];
+        setActiveSheetKey(introKey);
+        const targetSheet = parsedSheets[introKey];
+        if (targetSheet?.colWidths) setColWidths(targetSheet.colWidths);
+        if (targetSheet?.rowHeights) setRowHeights(targetSheet.rowHeights);
+        if (targetSheet?.isRTL !== undefined) setIsRTL(targetSheet.isRTL);
         saveSheets(parsedSheets);
-        setActiveSheetKey(Object.keys(parsedSheets)[0]);
-        setSelectedCell('A1');
-        setSelectedRange(['A1']);
-        alert(`تم فتح ملف Excel "${file.name}" واستيراد أوراق العمل بنجاح!`);
+        const nameNoExt = file.name.replace(/\.[^/.]+$/, '');
+        setDocTitle(nameNoExt);
+        localVault.set('infinity_office_doc_title', nameNoExt);
+        setSelectedCell('B2');
+        setSelectedRange(['B2']);
+        setTableNotification(`تم فتح ملف Excel "${file.name}" واستيراد أوراق العمل بكافة الأبعاد والتنسيقات بنجاح!`);
+        setTimeout(() => setTableNotification(null), 4000);
       }
     } catch (err) {
       console.error(err);
@@ -2025,9 +2286,24 @@ export const SheetsApp: React.FC<Props> = ({
     'deep-blue': { headerBg: '#1e40af', headerColor: '#ffffff', bandBg: '#eff6ff', border: '#bfdbfe' },
   };
 
-  const handleApplyTableStyle = (styleName: string) => {
+  const handleApplyTableStyle = (styleParam: string | ExcelTableStyle) => {
+    let preset: { headerBg: string; headerColor: string; bandBg: string; border: string };
+    let styleName = 'green';
+
+    if (typeof styleParam === 'string') {
+      styleName = styleParam;
+      preset = TABLE_STYLES_MAP[styleParam] || TABLE_STYLES_MAP.green;
+    } else {
+      styleName = styleParam.id;
+      preset = {
+        headerBg: styleParam.headerBg,
+        headerColor: styleParam.headerColor,
+        bandBg: styleParam.bandBg,
+        border: styleParam.borderColor,
+      };
+    }
+
     setActiveTableStyle(styleName);
-    const preset = TABLE_STYLES_MAP[styleName] || TABLE_STYLES_MAP.green;
     const nextData = { ...data };
 
     for (let r = rangeBounds.minRow; r <= rangeBounds.maxRow; r++) {
@@ -2168,11 +2444,78 @@ export const SheetsApp: React.FC<Props> = ({
 
   return (
     <div className="flex-1 flex flex-col bg-[#f3f2f1] overflow-hidden text-xs select-none h-full">
+      {/* 0. Excel 365 Quick Access Toolbar & AutoSave / Status Bar */}
+      <div className="bg-[#107c41] px-3 py-1 flex items-center justify-between text-white text-xs border-b border-emerald-900 shrink-0 select-none">
+        <div className="flex items-center gap-3">
+          {/* Quick Save Button with Live Status Dot */}
+          <button
+            onClick={handleQuickSave}
+            className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-emerald-800/80 hover:bg-emerald-700 transition cursor-pointer font-bold shadow-xs border border-emerald-600/50"
+            title={`حفظ يدوي (Ctrl+S) - الحفظ التلقائي يعمل كل 5 دقائق (متبقي ${Math.floor(autoSaveCountdown / 60)}:${String(autoSaveCountdown % 60).padStart(2, '0')})`}
+          >
+            <Save className="w-3.5 h-3.5 text-white" />
+            <span>حفظ</span>
+            <span
+              className={`w-2.5 h-2.5 rounded-full inline-block transition-all ${
+                isSaved
+                  ? 'bg-emerald-300 ring-2 ring-emerald-200'
+                  : 'bg-amber-400 ring-2 ring-amber-200 animate-pulse'
+              }`}
+              title={isSaved ? 'المصنف محفوظ محلياً (دائرة خضراء)' : 'توجد تعديلات غير محفوظة (دائرة برتقالية)'}
+            />
+          </button>
+
+          {/* AutoSave Countdown Badge */}
+          <div className="hidden sm:flex items-center gap-1.5 text-[10.5px] bg-emerald-900/40 px-2 py-0.5 rounded text-emerald-100 font-mono">
+            <span>حفظ تلقائي:</span>
+            <span className="font-bold text-white">
+              {Math.floor(autoSaveCountdown / 60)}:{String(autoSaveCountdown % 60).padStart(2, '0')}
+            </span>
+          </div>
+
+          {/* Document Title (Editable) */}
+          <div className="flex items-center gap-1">
+            <input
+              type="text"
+              value={docTitle}
+              onChange={(e) => {
+                setDocTitle(e.target.value);
+                localVault.set('infinity_office_doc_title', e.target.value);
+              }}
+              className="bg-transparent hover:bg-black/20 focus:bg-white focus:text-gray-900 px-2 py-0.5 rounded font-bold text-xs outline-none transition text-white border border-transparent focus:border-white w-44 sm:w-56"
+              title="انقر لتعديل اسم المصنف"
+            />
+          </div>
+        </div>
+
+        {/* Right Action Tools: Templates & Export */}
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setIsExcelBackstageOpen(true)}
+            className="flex items-center gap-1 px-2 py-0.5 bg-white/15 hover:bg-white/25 rounded text-[11px] font-bold transition cursor-pointer"
+            title="فتح معرض قوالب Excel 365 (Backstage Templates Gallery)"
+          >
+            <span>القوالب و جديد</span>
+            <span className="text-[10px] bg-emerald-700 px-1 rounded">30</span>
+          </button>
+
+          <button
+            onClick={() => handleExportMultiFormat('xlsx')}
+            className="flex items-center gap-1 px-2 py-0.5 bg-emerald-800 hover:bg-emerald-700 rounded text-[11px] font-bold transition cursor-pointer border border-emerald-600/50"
+            title="حفظ وتصدير بصيغة Excel (.xlsx)"
+          >
+            <Download className="w-3 h-3 text-white" />
+            <span>تصدير .xlsx</span>
+          </button>
+        </div>
+      </div>
+
       {/* 1. Official Microsoft Excel Ribbon Bar */}
       <ExcelRibbon
         activeTab={activeRibbonTab}
         setActiveTab={setActiveRibbonTab}
-        onOpenBackstage={onOpenBackstage || (() => {})}
+        onOpenBackstage={() => setIsExcelBackstageOpen(true)}
+        onOpenTableStylesGallery={() => setIsTableStylesGalleryOpen(true)}
         activeCell={selectedCell}
         activeCellData={activeCellData}
         selectedRangeStr={rangeBounds.rangeStr}
@@ -2953,16 +3296,34 @@ export const SheetsApp: React.FC<Props> = ({
 
                     // Border styling
                     let cellBorderStyle: React.CSSProperties = {};
+                    const bColor = cell?.borderColor || '#0f172a';
+                    const bStyle = cell?.borderStyle || 'solid';
+                    const bThick = bStyle === 'thick' ? '3px solid' : (bStyle === 'double' ? '3px double' : (bStyle === 'dashed' ? '1px dashed' : (bStyle === 'dotted' ? '1px dotted' : '1px solid')));
+
                     if (cell?.border === 'all') {
-                      cellBorderStyle = { border: '1px solid #94a3b8' };
+                      cellBorderStyle = { border: `${bThick} ${bColor}` };
                     } else if (cell?.border === 'outside') {
-                      cellBorderStyle = { border: '2px solid #0f172a' };
+                      cellBorderStyle = { border: `2px ${bStyle === 'thick' ? 'solid' : bStyle} ${bColor}` };
+                    } else if (cell?.border === 'thick-outside') {
+                      cellBorderStyle = { border: `3px solid ${bColor}` };
                     } else if (cell?.border === 'thick-bottom') {
-                      cellBorderStyle = { borderBottom: '3px solid #0f172a' };
+                      cellBorderStyle = { borderBottom: `3px solid ${bColor}` };
                     } else if (cell?.border === 'double-bottom') {
-                      cellBorderStyle = { borderBottom: '3px double #0f172a' };
+                      cellBorderStyle = { borderBottom: `3px double ${bColor}` };
                     } else if (cell?.border === 'bottom') {
-                      cellBorderStyle = { borderBottom: '1px solid #0f172a' };
+                      cellBorderStyle = { borderBottom: `1px solid ${bColor}` };
+                    } else if (cell?.border === 'top') {
+                      cellBorderStyle = { borderTop: `1px solid ${bColor}` };
+                    } else if (cell?.border === 'left') {
+                      cellBorderStyle = { borderLeft: `1px solid ${bColor}` };
+                    } else if (cell?.border === 'right') {
+                      cellBorderStyle = { borderRight: `1px solid ${bColor}` };
+                    } else if (cell?.border === 'top-bottom') {
+                      cellBorderStyle = { borderTop: `1px solid ${bColor}`, borderBottom: `1px solid ${bColor}` };
+                    } else if (cell?.border === 'top-thick-bottom') {
+                      cellBorderStyle = { borderTop: `1px solid ${bColor}`, borderBottom: `3px solid ${bColor}` };
+                    } else if (cell?.border === 'top-double-bottom') {
+                      cellBorderStyle = { borderTop: `1px solid ${bColor}`, borderBottom: `3px double ${bColor}` };
                     } else if (cell?.border === 'none') {
                       cellBorderStyle = { border: 'none' };
                     }
@@ -3144,33 +3505,102 @@ export const SheetsApp: React.FC<Props> = ({
                                 }}
                               />
                             ) : (
-                              <div
-                                onDoubleClick={() => setIsEditingCell(true)}
-                                className={`w-full px-1 truncate text-xs select-none flex items-center gap-1.5`}
-                                style={{
-                                  textAlign: effectiveAlign,
-                                  justifyContent: flexJustify,
-                                }}
-                              >
-                                {cell?.image && (
-                                  <img
-                                    src={cell.image}
-                                    alt="خلية"
-                                    className="w-5 h-5 rounded object-cover border border-emerald-600 shrink-0 shadow-2xs"
-                                    title="صورة مدرجة في الخلية"
-                                  />
-                                )}
-                                <span 
-                                  className="truncate"
-                                  style={{
-                                    textAlign: effectiveAlign,
-                                    width: effectiveAlign === 'center' ? '100%' : undefined,
-                                    display: 'inline-block',
-                                  }}
-                                >
-                                  {showFormulasMode && cell?.formula ? cell.formula : formatCellValue(cell)}
-                                </span>
-                              </div>
+                              (() => {
+                                const isWideCol = (colWidths[col] || 110) >= 180;
+                                const shouldWrap = cell?.wrapText || isWideCol;
+                                const rawDisplay = showFormulasMode && cell?.formula ? cell.formula : formatCellValue(cell);
+
+                                // Special card renderers for tutorial sheets and rich cards
+                                const stepMatch = typeof rawDisplay === 'string' ? rawDisplay.match(/^([1-9])\.\s+(.*)$/) : null;
+                                const isActionButtons = typeof rawDisplay === 'string' && rawDisplay.includes('Dive down for more detail');
+                                const isTitleHeader = rawDisplay === 'Introduction to functions' || rawDisplay === 'More about functions' || rawDisplay === 'Basic math in Excel' || rawDisplay === 'Welcome to Excel';
+
+                                if (isTitleHeader) {
+                                  return (
+                                    <div 
+                                      onDoubleClick={() => setIsEditingCell(true)}
+                                      className="w-full py-1 text-left px-1 select-none" 
+                                      dir="ltr"
+                                    >
+                                      <span className="text-[18px] font-bold text-[#262626] tracking-tight">{rawDisplay}</span>
+                                    </div>
+                                  );
+                                }
+
+                                if (isActionButtons) {
+                                  return (
+                                    <div 
+                                      onDoubleClick={() => setIsEditingCell(true)}
+                                      className="flex items-center gap-3 py-1 text-left px-1 select-none" 
+                                      dir="ltr"
+                                    >
+                                      <button 
+                                        type="button"
+                                        onClick={(e) => { e.stopPropagation(); alert('تفاصيل إضافية حول دوال إكسيل 365: يمكنك استخدام دوال SUM و AVERAGE و COUNT لإجراء كافة العمليات الحسابية.'); }}
+                                        className="px-3.5 py-1.5 rounded bg-[#f2f2f2] hover:bg-[#e6e6e6] text-[#333333] text-xs font-semibold border border-gray-300 shadow-xs cursor-pointer"
+                                      >
+                                        Dive down for more detail
+                                      </button>
+                                      <button 
+                                        type="button"
+                                        onClick={(e) => { e.stopPropagation(); setActiveSheetKey('sheet4'); }}
+                                        className="px-3.5 py-1.5 rounded bg-white hover:bg-emerald-50 text-[#107c41] text-xs font-semibold border-2 border-[#107c41] flex items-center gap-1 shadow-xs cursor-pointer"
+                                      >
+                                        Next step ➔
+                                      </button>
+                                    </div>
+                                  );
+                                }
+
+                                if (stepMatch) {
+                                  return (
+                                    <div 
+                                      onDoubleClick={() => setIsEditingCell(true)}
+                                      className="flex items-start gap-2.5 text-left py-1 px-1 w-full leading-relaxed select-none" 
+                                      dir="ltr"
+                                    >
+                                      <span className="w-5 h-5 rounded-full bg-[#107c41] text-white flex items-center justify-center font-bold text-xs shrink-0 mt-0.5 shadow-xs">
+                                        {stepMatch[1]}
+                                      </span>
+                                      <span className="flex-1 text-xs text-gray-800 leading-normal font-normal whitespace-normal break-words">
+                                        {stepMatch[2]}
+                                      </span>
+                                    </div>
+                                  );
+                                }
+
+                                return (
+                                  <div
+                                    onDoubleClick={() => setIsEditingCell(true)}
+                                    className={`w-full px-1 text-xs select-none flex items-center gap-1.5 ${
+                                      shouldWrap ? 'whitespace-normal break-words leading-relaxed py-0.5' : 'truncate'
+                                    }`}
+                                    style={{
+                                      textAlign: effectiveAlign,
+                                      justifyContent: flexJustify,
+                                    }}
+                                  >
+                                    {cell?.image && (
+                                      <img
+                                        src={cell.image}
+                                        alt="خلية"
+                                        className="w-5 h-5 rounded object-cover border border-emerald-600 shrink-0 shadow-2xs"
+                                        title="صورة مدرجة في الخلية"
+                                      />
+                                    )}
+                                    <span 
+                                      className={shouldWrap ? 'whitespace-normal break-words' : 'truncate'}
+                                      style={{
+                                        textAlign: effectiveAlign,
+                                        width: effectiveAlign === 'center' ? '100%' : undefined,
+                                        display: 'inline-block',
+                                      }}
+                                    >
+                                      {rawDisplay}
+                                    </span>
+                                  </div>
+                                );
+                              })()
                             )}
 
                             {/* In-Cell Floating Autocomplete Dropdown */}
@@ -3260,7 +3690,10 @@ export const SheetsApp: React.FC<Props> = ({
       )}
 
       {/* 4. Multi-Sheet Tabs Bar & Live Excel Status Bar */}
-      <div className="flex items-center justify-between px-3 py-1 bg-[#f3f2f1] border-t border-gray-300 text-[11px] text-gray-700 select-none shrink-0">
+      <div 
+        dir={isRTL ? 'rtl' : 'ltr'} 
+        className="flex items-center justify-between px-3 py-1 bg-[#f3f2f1] border-t border-gray-300 text-[11px] text-gray-700 select-none shrink-0"
+      >
         {/* Sheet Tabs */}
         <div className="flex items-center gap-1 overflow-x-auto">
           {Object.entries(sheets).map(([key, s]) => {
@@ -3286,6 +3719,31 @@ export const SheetsApp: React.FC<Props> = ({
             title="إضافة ورقة عمل جديدة (+)"
           >
             <Plus className="w-3.5 h-3.5" />
+          </button>
+
+          {/* Quick LTR / RTL Sheet Direction Toggle */}
+          <button
+            onClick={() => {
+              const nextRTL = !isRTL;
+              setIsRTL(nextRTL);
+              if (sheets[activeSheetKey]) {
+                const updated = {
+                  ...sheets,
+                  [activeSheetKey]: {
+                    ...sheets[activeSheetKey],
+                    isRTL: nextRTL,
+                  },
+                };
+                saveSheets(updated);
+              }
+            }}
+            className={`px-2 py-0.5 rounded text-[10px] font-bold transition flex items-center gap-1 border cursor-pointer ms-2 ${
+              isRTL ? 'bg-emerald-100 text-[#107c41] border-emerald-300' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-100'
+            }`}
+            title="تبديل اتجاه الورقة (ورقة من اليمين لليسار / ورقة من اليسار لليمين - Sheet Direction LTR/RTL)"
+          >
+            <ArrowRightLeft className="w-3 h-3 text-[#107c41]" />
+            <span>{isRTL ? 'ورقة: يمين ➔ يسار (RTL)' : 'ورقة: يسار ➔ يمين (LTR)'}</span>
           </button>
         </div>
 
@@ -3602,6 +4060,27 @@ export const SheetsApp: React.FC<Props> = ({
         sampleValue={data[selectedCell]?.value || '1234.56'}
         onClose={() => setIsFormatCellsOpen(false)}
         onApply={handleApplyFormatCells}
+      />
+
+      {/* 8. Excel 365 Backstage Modal (Templates & Multi-Format Save/Open) */}
+      <ExcelBackstageModal
+        isOpen={isExcelBackstageOpen}
+        onClose={() => setIsExcelBackstageOpen(false)}
+        documentTitle={docTitle}
+        onSelectTemplate={handleSelectTemplate}
+        onLoadExcelData={handleLoadExcelData}
+        onExport={handleExportMultiFormat}
+        sheetsData={sheets}
+        isSaved={isSaved}
+        onQuickSave={handleQuickSave}
+      />
+
+      {/* 9. Excel 365 Table Styles Gallery (Light 1-21, Medium 1-28, Dark 1-11) */}
+      <ExcelTableStylesGallery
+        isOpen={isTableStylesGalleryOpen}
+        onClose={() => setIsTableStylesGalleryOpen(false)}
+        activeStyleId={activeTableStyle}
+        onSelectStyle={(style) => handleApplyTableStyle(style)}
       />
     </div>
   );
