@@ -15,6 +15,8 @@ const STORAGE_KEYS = {
   ACTIVE_SHEET_KEY: 'infinity_office_active_sheet_key',
   SELECTED_CELL: 'infinity_office_selected_cell',
   SOVEREIGN_MODE: 'infinity_office_sovereign_strict',
+  NAMED_RANGES: 'infinity_office_named_ranges_v1',
+  CHARTS: 'infinity_office_charts_v1',
 };
 
 export const localVault = {
@@ -59,3 +61,6 @@ export const localVault = {
 
   KEYS: STORAGE_KEYS,
 };
+
+export const AppStorage = localVault;
+export { STORAGE_KEYS };

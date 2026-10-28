@@ -1,0 +1,84 @@
+import React, { useState } from 'react';
+import { X, Lock, ShieldCheck } from 'lucide-react';
+
+interface Props {
+  isOpen: boolean;
+  onClose: () => void;
+  isProtected: boolean;
+  onToggleProtect: (password: string) => void;
+}
+
+export const ProtectSheetModal: React.FC<Props> = ({
+  isOpen,
+  onClose,
+  isProtected,
+  onToggleProtect,
+}) => {
+  const [password, setPassword] = useState('');
+
+  if (!isOpen) return null;
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    onToggleProtect(password);
+    setPassword('');
+    onClose();
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4 select-none">
+      <div className="bg-white rounded-lg shadow-2xl border border-gray-300 w-full max-w-sm flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-100">
+        <div className="flex items-center justify-between px-4 py-3 bg-[#107c41] text-white">
+          <div className="flex items-center gap-2">
+            <Lock className="w-5 h-5" />
+            <h3 className="font-bold text-sm">
+              {isProtected ? 'إلغاء حماية ورقة العمل' : 'حماية ورقة العمل (Protect Sheet)'}
+            </h3>
+          </div>
+          <button onClick={onClose} className="p-1 hover:bg-white/20 rounded cursor-pointer transition">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="p-4 space-y-3 text-xs text-gray-700">
+          <div className="flex items-start gap-2 p-2 bg-amber-50 border border-amber-200 rounded text-amber-900 text-[11px]">
+            <ShieldCheck className="w-4 h-4 shrink-0 text-amber-700 mt-0.5" />
+            <span>
+              {isProtected
+                ? 'ورقة العمل الحالية محمية. أدخل كلمة المرور لإلغاء الحماية والسماح بالتعديل.'
+                : 'حماية الورقة تمنع التعديلات العشوائية على الخلايا والصيغ.'}
+            </span>
+          </div>
+
+          <div>
+            <label className="block font-medium mb-1">كلمة المرور:</label>
+            <input
+              type="password"
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              className="w-full border border-gray-300 rounded px-2.5 py-1.5 text-xs outline-none focus:border-[#107c41]"
+              placeholder="أدخل كلمة المرور..."
+              required
+            />
+          </div>
+
+          <div className="pt-2 flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-1.5 rounded bg-gray-200 hover:bg-gray-300 text-gray-800 text-xs font-medium cursor-pointer"
+            >
+              إلغاء
+            </button>
+            <button
+              type="submit"
+              className="px-5 py-1.5 rounded bg-[#107c41] hover:bg-[#0e6b37] text-white font-bold text-xs cursor-pointer shadow-xs"
+            >
+              {isProtected ? 'إلغاء الحماية' : 'تفعيل الحماية'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+};

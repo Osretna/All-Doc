@@ -1,5 +1,7 @@
 import { CellCoordinate, SheetCells } from '../types/excel';
 
+export const COLUMN_LETTERS = Array.from({ length: 26 }, (_, i) => String.fromCharCode(65 + i));
+
 export function colIndexToLabel(col: number): string {
   let label = '';
   let c = col;
@@ -10,6 +12,8 @@ export function colIndexToLabel(col: number): string {
   return label;
 }
 
+export const colIndexToLetter = colIndexToLabel;
+
 export function labelToColIndex(label: string): number {
   let col = 0;
   const upper = label.toUpperCase();
@@ -18,6 +22,8 @@ export function labelToColIndex(label: string): number {
   }
   return col - 1;
 }
+
+export const letterToColIndex = labelToColIndex;
 
 export function coordinateToKey(coord: CellCoordinate): string {
   return `${coord.col},${coord.row}`;
@@ -128,7 +134,8 @@ export function evaluateCell(
 export function evaluateFormulaExpression(
   expression: string,
   cells: SheetCells,
-  visited: Set<string>
+  visited: Set<string> = new Set(),
+  namedRanges?: any
 ): string | number {
   const upper = expression.trim().toUpperCase();
 
@@ -258,22 +265,72 @@ export function evaluateFormulaExpression(
   return '#VALUE!';
 }
 
-export function formatCellValue(value: string | number, format?: string): string {
-  if (value === undefined || value === null || value === '') return '';
-  if (typeof value === 'string' && value.startsWith('#')) return value;
+export function parseCellCoordinate(cellRef: string): { colIdx: number; row: number; col: number } {
+  if (cellRef.includes(',')) {
+    const parts = cellRef.split(',');
+    const c = parseInt(parts[0], 10) || 0;
+    const r = parseInt(parts[1], 10) || 0;
+    return { colIdx: c, col: c, row: r + 1 };
+  }
+  const match = cellRef.trim().toUpperCase().match(/^([A-Z]+)(\d+)$/);
+  if (!match) return { colIdx: 0, col: 0, row: 1 };
+  const c = labelToColIndex(match[1]);
+  const r = parseInt(match[2], 10);
+  return { colIdx: c, col: c, row: r };
+}
 
-  const num = typeof value === 'number' ? value : parseFloat(String(value));
-  if (isNaN(num)) return String(value);
+export function expandRange(rangeStr: string): string[] {
+  const coords = parseRange(rangeStr);
+  const result: string[] = [];
+  coords.forEach((c) => {
+    result.push(`${colIndexToLabel(c.col)}${c.row + 1}`);
+    result.push(`${c.col},${c.row}`);
+  });
+  return result;
+}
 
-  if (format === 'currency') {
+export function getCellValue(cellRef: string, sheetData: any, visited?: Set<string>, namedRanges?: any): string | number {
+  if (!sheetData) return '';
+  let key = cellRef;
+  if (!cellRef.includes(',')) {
+    const coord = cellIdToCoordinate(cellRef);
+    if (coord) key = `${coord.col},${coord.row}`;
+  }
+  const cell = sheetData[key] || sheetData[cellRef];
+  if (!cell) return '';
+  if (cell.formula) {
+    return evaluateFormulaExpression(cell.formula, sheetData, visited, namedRanges);
+  }
+  return cell.computedValue !== undefined ? cell.computedValue : (cell.value !== undefined ? cell.value : '');
+}
+
+export function evaluateFormula(formula: string, sheetData: any, visited?: Set<string>, namedRanges?: any): string | number {
+  return evaluateFormulaExpression(formula, sheetData, visited || new Set(), namedRanges);
+}
+
+export function formatCellValue(valueOrCell: any, formatOrRaw?: any): string {
+  let val = valueOrCell;
+  let fmt = formatOrRaw;
+  if (valueOrCell && typeof valueOrCell === 'object' && ('value' in valueOrCell || 'formula' in valueOrCell || 'format' in valueOrCell)) {
+    val = formatOrRaw !== undefined ? formatOrRaw : valueOrCell.value;
+    fmt = valueOrCell.format;
+  }
+  if (val === undefined || val === null || val === '') return '';
+  if (typeof val === 'string' && val.startsWith('#')) return val;
+
+  const num = typeof val === 'number' ? val : parseFloat(String(val));
+  if (isNaN(num)) return String(val);
+
+  if (fmt === 'currency') {
     return new Intl.NumberFormat('ar-EG', { style: 'currency', currency: 'EGP' }).format(num);
   }
-  if (format === 'percent') {
+  if (fmt === 'percent') {
     return `${(num * 100).toFixed(1)}%`;
   }
-  if (format === 'number') {
+  if (fmt === 'number') {
     return new Intl.NumberFormat('en-US', { maximumFractionDigits: 4 }).format(num);
   }
 
-  return String(value);
+  return String(val);
 }
+

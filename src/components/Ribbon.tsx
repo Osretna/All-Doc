@@ -41,6 +41,9 @@ interface RibbonProps {
   zoom: number;
   onZoomChange: (newZoom: number) => void;
   onOpenMacros: () => void;
+  onContentChange?: () => void;
+  isSplitView?: boolean;
+  onToggleSplitView?: () => void;
 }
 
 export const Ribbon: React.FC<RibbonProps> = ({
@@ -73,6 +76,9 @@ export const Ribbon: React.FC<RibbonProps> = ({
   zoom,
   onZoomChange,
   onOpenMacros,
+  onContentChange,
+  isSplitView,
+  onToggleSplitView,
 }) => {
   const [isRibbonCollapsed, setIsRibbonCollapsed] = useState(false);
 
@@ -141,6 +147,8 @@ export const Ribbon: React.FC<RibbonProps> = ({
               onOpenFind={onOpenFind}
               onOpenReplace={onOpenReplace}
               onOpenBordersDialog={onOpenPageBordersModal}
+              editorRef={editorRef}
+              onContentChange={onContentChange}
             />
           )}
 
@@ -150,6 +158,7 @@ export const Ribbon: React.FC<RibbonProps> = ({
               onOpenShapeModal={onOpenShapeModal}
               onOpenSymbolModal={onOpenSymbolModal}
               onOpenComments={onOpenComments}
+              onContentChange={onContentChange}
             />
           )}
 
@@ -183,6 +192,7 @@ export const Ribbon: React.FC<RibbonProps> = ({
               onOpenComments={onOpenComments}
               onOpenWordCount={onOpenWordCount}
               editorRef={editorRef}
+              onContentChange={onContentChange}
             />
           )}
 
@@ -199,6 +209,8 @@ export const Ribbon: React.FC<RibbonProps> = ({
               zoom={zoom}
               onZoomChange={onZoomChange}
               onOpenMacros={onOpenMacros}
+              isSplitView={isSplitView}
+              onToggleSplitView={onToggleSplitView}
             />
           )}
         </div>

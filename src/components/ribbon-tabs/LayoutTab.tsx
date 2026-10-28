@@ -147,8 +147,19 @@ export const LayoutTab: React.FC<LayoutTabProps> = ({
               <span>أرقام الأسطر</span>
             </button>
             <button
-              onClick={() => alert('تم إدراج فاصل مقطعي للصفحة التالية')}
+              onClick={() => {
+                const sel = window.getSelection();
+                if (sel && sel.rangeCount > 0) {
+                  const range = sel.getRangeAt(0);
+                  const div = document.createElement('div');
+                  div.style.pageBreakAfter = 'always';
+                  div.className = 'border-b-2 border-dashed border-blue-400 my-4 text-center text-xs text-blue-500 select-none';
+                  div.innerText = '┈┈┈┈ فاصل مقطعي للصفحة التالية ┈┈┈┈';
+                  range.insertNode(div);
+                }
+              }}
               className="flex items-center gap-1 px-1.5 py-0.5 hover:bg-slate-200 rounded text-[10px]"
+              title="إدراج فاصل مقطعي للصفحة التالية"
             >
               <Scissors className="w-3 h-3 text-slate-500" />
               <span>فواصل الصفحات</span>
@@ -156,6 +167,7 @@ export const LayoutTab: React.FC<LayoutTabProps> = ({
             <button
               onClick={() => onUpdatePageSetup({ hyphenation: !pageSetup.hyphenation })}
               className={`flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] ${pageSetup.hyphenation ? 'bg-blue-100 text-[#2b579a] font-bold' : 'hover:bg-slate-200'}`}
+              title="تفعيل الواصلات التلقائية"
             >
               <Minus className="w-3 h-3 text-slate-500" />
               <span>واصلات (Hyphenation)</span>
@@ -196,43 +208,94 @@ export const LayoutTab: React.FC<LayoutTabProps> = ({
       <div className="flex flex-col justify-between px-3 min-w-[240px] shrink-0">
         <div className="grid grid-cols-2 gap-1.5 py-1">
           <button
-            onClick={() => alert('موضع العنصر: مضمن في السطر')}
+            onClick={() => {
+              const editor = document.getElementById('document-editor');
+              const el = editor?.querySelector('figure, table, img');
+              if (el) {
+                (el as HTMLElement).style.margin = (el as HTMLElement).style.margin === 'auto' ? '0' : 'auto';
+                (el as HTMLElement).style.display = 'block';
+              }
+            }}
             className="flex items-center gap-1.5 px-1.5 py-0.5 hover:bg-slate-200 rounded text-[10px]"
+            title="تبديل موضع العنصر المحدد في الصفحة"
           >
             <Move className="w-3.5 h-3.5 text-blue-600" />
             <span>الموضع (Position)</span>
           </button>
           <button
-            onClick={() => alert('التفاف النص: مشدود حول الشكل/الصورة')}
+            onClick={() => {
+              const editor = document.getElementById('document-editor');
+              const img = editor?.querySelector('img, figure');
+              if (img) {
+                const currentFloat = (img as HTMLElement).style.float;
+                (img as HTMLElement).style.float = currentFloat === 'right' ? 'none' : 'right';
+                (img as HTMLElement).style.margin = currentFloat === 'right' ? '10px auto' : '0 0 14px 14px';
+              }
+            }}
             className="flex items-center gap-1.5 px-1.5 py-0.5 hover:bg-slate-200 rounded text-[10px]"
+            title="التفاف النص حول الصورة أو الجدول"
           >
             <WrapText className="w-3.5 h-3.5 text-indigo-600" />
             <span>التفاف النص</span>
           </button>
           <button
-            onClick={() => alert('إحضار العنصر إلى الأمام')}
+            onClick={() => {
+              const editor = document.getElementById('document-editor');
+              const el = editor?.querySelector('figure, table, .cover-page');
+              if (el) (el as HTMLElement).style.zIndex = '30';
+            }}
             className="flex items-center gap-1.5 px-1.5 py-0.5 hover:bg-slate-200 rounded text-[10px]"
+            title="إحضار العنصر للأمام"
           >
             <BringToFront className="w-3.5 h-3.5 text-slate-600" />
             <span>إحضار للأمام</span>
           </button>
           <button
-            onClick={() => alert('إرسال العنصر إلى الخلف')}
+            onClick={() => {
+              const editor = document.getElementById('document-editor');
+              const el = editor?.querySelector('figure, table, .cover-page');
+              if (el) (el as HTMLElement).style.zIndex = '0';
+            }}
             className="flex items-center gap-1.5 px-1.5 py-0.5 hover:bg-slate-200 rounded text-[10px]"
+            title="إرسال العنصر للخلف"
           >
             <SendToBack className="w-3.5 h-3.5 text-slate-600" />
             <span>إرسال للخلف</span>
           </button>
           <button
-            onClick={() => alert('تجميع الكائنات المحددة')}
+            onClick={() => {
+              const sel = window.getSelection();
+              if (sel && sel.rangeCount > 0 && !sel.isCollapsed) {
+                const range = sel.getRangeAt(0);
+                const wrapper = document.createElement('div');
+                wrapper.className = 'p-3 my-2 border border-dashed border-slate-400 rounded-lg bg-slate-50/50';
+                try {
+                  range.surroundContents(wrapper);
+                } catch {
+                  // surround fallback
+                }
+              }
+            }}
             className="flex items-center gap-1.5 px-1.5 py-0.5 hover:bg-slate-200 rounded text-[10px]"
+            title="تجميع العناصر المحددة داخل إطار موحد"
           >
             <Group className="w-3.5 h-3.5 text-slate-600" />
             <span>تجميع (Group)</span>
           </button>
           <button
-            onClick={() => alert('استدارة العنصر 90 درجة')}
+            onClick={() => {
+              const editor = document.getElementById('document-editor');
+              const img = editor?.querySelector('img, figure');
+              if (img) {
+                const current = (img as any).__rotation || 0;
+                const nextRot = (current + 90) % 360;
+                (img as any).__rotation = nextRot;
+                (img as HTMLElement).style.transform = `rotate(${nextRot}deg)`;
+                (img as HTMLElement).style.transition = 'transform 0.2s ease';
+              }
+            }}
             className="flex items-center gap-1.5 px-1.5 py-0.5 hover:bg-slate-200 rounded text-[10px]"
+            title="استدارة الصورة أو الشكل 90 درجة"
           >
             <RotateCcw className="w-3.5 h-3.5 text-slate-600" />
             <span>استدارة (Rotate)</span>

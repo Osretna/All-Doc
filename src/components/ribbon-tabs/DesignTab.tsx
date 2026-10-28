@@ -44,6 +44,88 @@ export const DesignTab: React.FC<DesignTabProps> = ({
     { label: 'داكن مريح للعين', color: '#1e293b' },
   ];
 
+  const [activePaletteIndex, setActivePaletteIndex] = React.useState(0);
+  const [activeFontPairIndex, setActiveFontPairIndex] = React.useState(0);
+  const [activeSpacingIndex, setActiveSpacingIndex] = React.useState(0);
+
+  const palettes = [
+    { name: 'Office 365 الأزرق', primary: '#2b579a', secondary: '#3b82f6', accent: '#f59e0b' },
+    { name: 'الزمردي الحديث', primary: '#059669', secondary: '#10b981', accent: '#065f46' },
+    { name: 'الأرجواني الملكي', primary: '#7c3aed', secondary: '#8b5cf6', accent: '#f43f5e' },
+    { name: 'الكهرماني الدافئ', primary: '#d97706', secondary: '#f59e0b', accent: '#b45309' },
+    { name: 'الفحمي الأنيق', primary: '#1e293b', secondary: '#475569', accent: '#64748b' },
+  ];
+
+  const fontPairs = [
+    { label: 'Cairo + Tajawal', heading: 'Cairo', body: 'Tajawal' },
+    { label: 'Amiri (أميري تراثي)', heading: 'Amiri', body: 'Amiri' },
+    { label: 'Segoe UI الحديث', heading: 'Segoe UI', body: 'Segoe UI' },
+  ];
+
+  const spacings = ['1.6', '1.8', '2.0', '1.4'];
+
+  const applyColorPalette = () => {
+    const nextIdx = (activePaletteIndex + 1) % palettes.length;
+    setActivePaletteIndex(nextIdx);
+    const pal = palettes[nextIdx];
+    const editor = document.getElementById('document-editor');
+    if (editor) {
+      const h1s = editor.querySelectorAll('h1');
+      h1s.forEach(h => (h as HTMLElement).style.color = pal.primary);
+      const ths = editor.querySelectorAll('th');
+      ths.forEach(th => (th as HTMLElement).style.backgroundColor = pal.primary);
+      const bqs = editor.querySelectorAll('blockquote');
+      bqs.forEach(bq => (bq as HTMLElement).style.borderRightColor = pal.primary);
+    }
+  };
+
+  const applyFontPairing = () => {
+    const nextIdx = (activeFontPairIndex + 1) % fontPairs.length;
+    setActiveFontPairIndex(nextIdx);
+    const fp = fontPairs[nextIdx];
+    const editor = document.getElementById('document-editor');
+    if (editor) {
+      editor.style.fontFamily = fp.body;
+      const headings = editor.querySelectorAll('h1, h2, h3');
+      headings.forEach(h => (h as HTMLElement).style.fontFamily = fp.heading);
+    }
+  };
+
+  const applyParagraphSpacing = () => {
+    const nextIdx = (activeSpacingIndex + 1) % spacings.length;
+    setActiveSpacingIndex(nextIdx);
+    const sp = spacings[nextIdx];
+    const editor = document.getElementById('document-editor');
+    if (editor) {
+      editor.style.lineHeight = sp;
+    }
+  };
+
+  const applyEffects = () => {
+    const editor = document.getElementById('document-editor');
+    if (editor) {
+      const tables = editor.querySelectorAll('table, figure, blockquote');
+      tables.forEach(t => {
+        (t as HTMLElement).classList.toggle('shadow-md');
+        (t as HTMLElement).classList.toggle('rounded-lg');
+      });
+    }
+  };
+
+  const handleSetAsDefault = () => {
+    try {
+      localStorage.setItem('infinity_office_design_preset', JSON.stringify({
+        palette: palettes[activePaletteIndex].name,
+        font: fontPairs[activeFontPairIndex].label,
+        spacing: spacings[activeSpacingIndex],
+        pageColor,
+      }));
+      alert('تم حفظ إعدادات التصميم الحالية كنسق افتراضي للمستندات الجديدة.');
+    } catch {
+      // fallback
+    }
+  };
+
   return (
     <div className="flex items-stretch h-[96px] py-1 px-2 overflow-x-auto text-slate-700 select-none divide-x divide-x-reverse divide-slate-200" dir="rtl">
       
@@ -72,39 +154,40 @@ export const DesignTab: React.FC<DesignTabProps> = ({
       <div className="flex flex-col justify-between px-3 min-w-[260px] shrink-0">
         <div className="grid grid-cols-2 gap-2 py-1">
           <button
-            onClick={() => alert('تم تطبيق لوحة ألوان متناسقة مع نسق Office 365 الأزرق الاحترافي')}
+            onClick={applyColorPalette}
             className="flex items-center gap-1.5 px-2 py-1 hover:bg-slate-200 rounded text-[11px] text-slate-700"
+            title={`تغيير ألوان المستند (الحالي: ${palettes[activePaletteIndex].name})`}
           >
             <div className="flex gap-0.5">
-              <span className="w-2.5 h-2.5 rounded-full bg-[#2b579a]"></span>
-              <span className="w-2.5 h-2.5 rounded-full bg-blue-400"></span>
-              <span className="w-2.5 h-2.5 rounded-full bg-amber-500"></span>
+              <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: palettes[activePaletteIndex].primary }}></span>
+              <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: palettes[activePaletteIndex].secondary }}></span>
+              <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: palettes[activePaletteIndex].accent }}></span>
             </div>
             <span>الألوان (Colors)</span>
           </button>
 
           <button
-            onClick={() => alert('تم تطبيق نمط خطوط النسق (Aptos / Cairo)')}
+            onClick={applyFontPairing}
             className="flex items-center gap-1.5 px-2 py-1 hover:bg-slate-200 rounded text-[11px] text-slate-700"
+            title={`تغيير خطوط النسق (الحالي: ${fontPairs[activeFontPairIndex].label})`}
           >
             <Type className="w-3.5 h-3.5 text-slate-600" />
             <span>الخطوط (Fonts)</span>
           </button>
 
           <button
-            onClick={() => {
-              const editor = document.getElementById('document-editor');
-              if (editor) editor.style.lineHeight = '1.8';
-            }}
+            onClick={applyParagraphSpacing}
             className="flex items-center gap-1.5 px-2 py-1 hover:bg-slate-200 rounded text-[11px] text-slate-700"
+            title={`تباعد الأسطر والفقرات: ${spacings[activeSpacingIndex]}`}
           >
             <SlidersHorizontal className="w-3.5 h-3.5 text-slate-600" />
             <span>تباعد الفقرات</span>
           </button>
 
           <button
-            onClick={() => alert('تم تطبيق تأثيرات الظلال والحواف الأنيقة')}
+            onClick={applyEffects}
             className="flex items-center gap-1.5 px-2 py-1 hover:bg-slate-200 rounded text-[11px] text-slate-700"
+            title="تبديل تأثيرات الظلال والحواف للعناصر"
           >
             <Sparkles className="w-3.5 h-3.5 text-purple-600" />
             <span>تأثيرات (Effects)</span>
@@ -116,7 +199,7 @@ export const DesignTab: React.FC<DesignTabProps> = ({
       {/* 3. Set as Default */}
       <div className="flex flex-col justify-between px-2 min-w-[90px] shrink-0">
         <button
-          onClick={() => alert('تم تعيين إعدادات التنسيق الحالية كافتراضية لجميع المستندات الجديدة.')}
+          onClick={handleSetAsDefault}
           className="flex flex-col items-center justify-center p-2 hover:bg-slate-200 rounded text-slate-700 group my-auto"
           title="تعيين كافتراضي"
         >

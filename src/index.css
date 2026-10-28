@@ -221,4 +221,48 @@
   }
 }
 
+/* Pilcrow marks (¶) formatting */
+.show-pilcrows p::after,
+.show-pilcrows h1::after,
+.show-pilcrows h2::after,
+.show-pilcrows h3::after,
+.show-pilcrows li::after {
+  content: " ¶";
+  color: #94a3b8;
+  font-weight: normal;
+  font-size: 0.85em;
+  user-select: none;
+}
+
+/* Gridlines pattern on Word document page */
+.show-gridlines .print-page {
+  background-image: linear-gradient(to right, rgba(203, 213, 225, 0.4) 1px, transparent 1px),
+                    linear-gradient(to bottom, rgba(203, 213, 225, 0.4) 1px, transparent 1px) !important;
+  background-size: 20px 20px !important;
+}
+
+/* Format painter cursor */
+.cursor-format-painter,
+.cursor-format-painter * {
+  cursor: copy !important;
+}
+
+/* Outline view mode styling */
+.outline-mode h1 {
+  margin-right: 0 !important;
+  color: #1e3a8a !important;
+}
+.outline-mode h2 {
+  margin-right: 24px !important;
+  color: #2563eb !important;
+}
+.outline-mode h3 {
+  margin-right: 48px !important;
+  color: #475569 !important;
+}
+.outline-mode p {
+  margin-right: 72px !important;
+}
+
+
 

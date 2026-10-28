@@ -32,6 +32,11 @@ interface ViewTabProps {
   zoom: number;
   onZoomChange: (newZoom: number) => void;
   onOpenMacros: () => void;
+  isSplitView?: boolean;
+  onToggleSplitView?: () => void;
+  onNewWindow?: () => void;
+  onArrangeAll?: () => void;
+  onSideBySide?: () => void;
 }
 
 export const ViewTab: React.FC<ViewTabProps> = ({
@@ -46,6 +51,11 @@ export const ViewTab: React.FC<ViewTabProps> = ({
   zoom,
   onZoomChange,
   onOpenMacros,
+  isSplitView = false,
+  onToggleSplitView,
+  onNewWindow,
+  onArrangeAll,
+  onSideBySide,
 }) => {
   return (
     <div className="flex items-stretch h-[96px] py-1 px-2 overflow-x-auto text-slate-700 select-none divide-x divide-x-reverse divide-slate-200" dir="rtl">
@@ -204,29 +214,49 @@ export const ViewTab: React.FC<ViewTabProps> = ({
       <div className="flex flex-col justify-between px-3 min-w-[200px] shrink-0">
         <div className="grid grid-cols-2 gap-1 py-1">
           <button
-            onClick={() => window.open(window.location.href, '_blank')}
+            onClick={() => {
+              if (onNewWindow) onNewWindow();
+              else onToggleSplitView?.();
+            }}
             className="flex items-center gap-1 px-1.5 py-0.5 hover:bg-slate-200 rounded text-[10px]"
+            title="فتح إطار عرض موازٍ للمستند"
           >
             <AppWindow className="w-3.5 h-3.5 text-slate-600" />
             <span>نافذة جديدة</span>
           </button>
           <button
-            onClick={() => alert('ترتيب النوافذ جنباً إلى جنب')}
+            onClick={() => {
+              if (onArrangeAll) onArrangeAll();
+              else {
+                onZoomChange(100);
+                document.getElementById('document-editor')?.scrollIntoView({ behavior: 'smooth' });
+              }
+            }}
             className="flex items-center gap-1 px-1.5 py-0.5 hover:bg-slate-200 rounded text-[10px]"
+            title="ترتيب إطارات العرض وإعادة ضبط التكبير إلى 100%"
           >
             <Columns className="w-3.5 h-3.5 text-slate-600" />
             <span>ترتيب الكل</span>
           </button>
           <button
-            onClick={() => alert('تم تقسيم إطار العرض لمراجعة جزءين مختلفين من المستند معاً')}
-            className="flex items-center gap-1 px-1.5 py-0.5 hover:bg-slate-200 rounded text-[10px]"
+            onClick={() => {
+              if (onToggleSplitView) onToggleSplitView();
+            }}
+            className={`flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] transition-colors ${
+              isSplitView ? 'bg-blue-100 text-[#2b579a] font-bold border border-blue-300' : 'hover:bg-slate-200 text-slate-700'
+            }`}
+            title="تقسيم نافذة المستند إلى جزأين للمراجعة المتزامنة"
           >
-            <Split className="w-3.5 h-3.5 text-slate-600" />
-            <span>تقسيم</span>
+            <Split className="w-3.5 h-3.5" />
+            <span>{isSplitView ? 'إلغاء التقسيم' : 'تقسيم'}</span>
           </button>
           <button
-            onClick={() => alert('التمرير المتزامن مفعل')}
+            onClick={() => {
+              if (onSideBySide) onSideBySide();
+              else onZoomChange(70);
+            }}
             className="flex items-center gap-1 px-1.5 py-0.5 hover:bg-slate-200 rounded text-[10px]"
+            title="عرض الصفحات جنباً إلى جنب"
           >
             <FileText className="w-3.5 h-3.5 text-slate-600" />
             <span>جنباً إلى جنب</span>

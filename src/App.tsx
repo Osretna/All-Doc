@@ -154,6 +154,7 @@ export default function App() {
   const [showGridlines, setShowGridlines] = useState<boolean>(false);
   const [showNavigationPane, setShowNavigationPane] = useState<boolean>(false);
   const [showCommentsDrawer, setShowCommentsDrawer] = useState<boolean>(false);
+  const [isSplitView, setIsSplitView] = useState<boolean>(false);
 
   // Word Modals State
   const [isFindReplaceOpen, setIsFindReplaceOpen] = useState<boolean>(false);
@@ -920,6 +921,9 @@ export default function App() {
                 zoom={zoomLevel}
                 onZoomChange={setZoomLevel}
                 onOpenMacros={() => setIsMacrosModalOpen(true)}
+                onContentChange={handleContentChange}
+                isSplitView={isSplitView}
+                onToggleSplitView={() => setIsSplitView(!isSplitView)}
               />
 
               {/* Horizontal Graduated Ruler */}
@@ -948,12 +952,12 @@ export default function App() {
                   viewMode={viewMode}
                   showGridlines={showGridlines}
                   zoom={zoomLevel}
+                  isSplitView={isSplitView}
+                  onToggleSplitView={() => setIsSplitView(!isSplitView)}
+                  onViewModeChange={setViewMode}
                   onOpenCommentForSelection={(snippet) => {
                     setShowCommentsDrawer(true);
-                    const text = prompt('أدخل تعليقك على هذا النص المحدد:', '');
-                    if (text) {
-                      handleAddComment(text, snippet);
-                    }
+                    handleAddComment('يرجى مراجعة هذا الجزء من النص للتأكيد.', snippet);
                   }}
                 />
 

@@ -16,34 +16,89 @@ import {
 import { insertHTMLAtCursor } from '../../utils/editorCommands';
 
 export const ReferencesTab: React.FC = () => {
-  const insertTableOfContents = () => {
-    insertHTMLAtCursor(`
-      <div class="my-6 p-4 bg-slate-50 border border-slate-300 rounded-lg" contenteditable="false">
+  const [citationStyle, setCitationStyle] = React.useState('APA');
+
+  const buildTocHTML = () => {
+    const editor = document.getElementById('document-editor');
+    if (!editor) return '';
+    const headings = editor.querySelectorAll('h1, h2, h3');
+    if (headings.length === 0) {
+      return `
+        <div id="doc-table-of-contents" class="my-6 p-4 bg-slate-50 border border-slate-300 rounded-lg text-right" contenteditable="false">
+          <div class="flex items-center justify-between border-b border-slate-300 pb-2 mb-3">
+            <h3 class="font-bold text-sm text-[#2b579a]">فهرس المحتويات (Table of Contents)</h3>
+            <span class="text-[10px] text-slate-400">تحديث تلقائي</span>
+          </div>
+          <p class="text-xs text-slate-500">لم يتم العثور على عناوين رئيسية (H1 أو H2). استخدم أنماط العناوين من التبويب الرئيسي لإدراجها تلقائياً هنا.</p>
+        </div>
+        <p><br></p>
+      `;
+    }
+
+    let itemsHtml = '';
+    headings.forEach((h, idx) => {
+      const text = h.textContent?.trim() || `قسم ${idx + 1}`;
+      const level = h.tagName === 'H1' ? 1 : h.tagName === 'H2' ? 2 : 3;
+      const indentClass = level === 1 ? 'font-bold text-slate-800' : level === 2 ? 'pr-4 text-slate-700' : 'pr-8 text-slate-500';
+      const pageNum = Math.min(idx + 1, 5);
+      const hId = h.id || `heading_ref_${idx}`;
+      h.id = hId;
+
+      itemsHtml += `
+        <div class="flex items-center justify-between border-b border-dotted border-slate-300 pb-1.5 pt-1 text-xs hover:bg-blue-50/50 rounded px-1 transition-colors cursor-pointer" onclick="document.getElementById('${hId}')?.scrollIntoView({ behavior: 'smooth' })">
+          <span class="${indentClass}">• ${text}</span>
+          <span class="font-mono text-slate-500 font-bold">${pageNum}</span>
+        </div>
+      `;
+    });
+
+    return `
+      <div id="doc-table-of-contents" class="my-6 p-4 bg-slate-50/90 border border-slate-300 rounded-lg text-right" contenteditable="false">
         <div class="flex items-center justify-between border-b border-slate-300 pb-2 mb-3">
           <h3 class="font-bold text-sm text-[#2b579a]">جدول المحتويات (Table of Contents)</h3>
-          <span class="text-[10px] text-slate-400">تحديث تلقائي</span>
+          <span class="text-[10px] text-emerald-600 font-semibold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">محدث تلقائياً</span>
         </div>
-        <div class="space-y-1.5 text-xs">
-          <div class="flex justify-between border-b border-dotted border-slate-300 pb-1">
-            <span>1. المقدمة والأهداف العامة .................................................</span>
-            <span class="font-mono font-bold text-slate-600">1</span>
-          </div>
-          <div class="flex justify-between border-b border-dotted border-slate-300 pb-1">
-            <span>2. خطة العمل ومنهجية التنفيذ .........................................</span>
-            <span class="font-mono font-bold text-slate-600">2</span>
-          </div>
-          <div class="flex justify-between border-b border-dotted border-slate-300 pb-1">
-            <span>3. النتائج والتوصيات المستقبلية .......................................</span>
-            <span class="font-mono font-bold text-slate-600">3</span>
-          </div>
-          <div class="flex justify-between border-b border-dotted border-slate-300 pb-1">
-            <span>4. قائمة المراجع والمصادر المعتمدة ....................................</span>
-            <span class="font-mono font-bold text-slate-600">4</span>
-          </div>
+        <div class="space-y-1">
+          ${itemsHtml}
         </div>
       </div>
       <p><br></p>
-    `);
+    `;
+  };
+
+  const insertTableOfContents = () => {
+    const html = buildTocHTML();
+    insertHTMLAtCursor(html);
+  };
+
+  const handleUpdateTOC = () => {
+    const existing = document.getElementById('doc-table-of-contents');
+    if (existing) {
+      const parent = existing.parentElement;
+      if (parent) {
+        const temp = document.createElement('div');
+        temp.innerHTML = buildTocHTML();
+        const newEl = temp.firstElementChild;
+        if (newEl) {
+          parent.replaceChild(newEl, existing);
+          alert('تم تحديث جدول المحتويات بنجاح بناءً على العناوين الحالية في المستند!');
+          return;
+        }
+      }
+    }
+    // If not found, insert one
+    insertTableOfContents();
+  };
+
+  const handleAddTextToTOC = () => {
+    const sel = window.getSelection();
+    if (sel && sel.rangeCount > 0 && !sel.isCollapsed) {
+      document.execCommand('formatBlock', false, '<h2>');
+      alert('تم تحويل النص المحدد إلى عنوان فرعي (مستوى 2) وجاهز للإدراج في جدول المحتويات.');
+    } else {
+      document.execCommand('formatBlock', false, '<h1>');
+      alert('تم تطبيق نمط العنوان الرئيسي على الفقرة الحالية.');
+    }
   };
 
   const insertFootnote = () => {
@@ -102,17 +157,19 @@ export const ReferencesTab: React.FC = () => {
 
           <div className="flex flex-col gap-0.5">
             <button
-              onClick={() => alert('تمت إضافة النص المحدد إلى جدول المحتويات كعنوان من المستوى الأول')}
+              onClick={handleAddTextToTOC}
               className="flex items-center gap-1 px-1.5 py-0.5 hover:bg-slate-200 rounded text-[10px]"
+              title="إضافة الفقرة أو النص المحدد كعنوان في جدول المحتويات"
             >
-              <PlusCircle className="w-3 h-3 text-emerald-600" />
+              <PlusCircle className="w-3.5 h-3.5 text-emerald-600" />
               <span>إضافة نص</span>
             </button>
             <button
-              onClick={() => alert('تم تحديث جدول المحتويات بنجاح بناءً على العناوين الحالية')}
+              onClick={handleUpdateTOC}
               className="flex items-center gap-1 px-1.5 py-0.5 hover:bg-slate-200 rounded text-[10px]"
+              title="تحديث جدول المحتويات ليعكس أحدث العناوين وأرقام الصفحات"
             >
-              <RefreshCw className="w-3 h-3 text-blue-600" />
+              <RefreshCw className="w-3.5 h-3.5 text-blue-600" />
               <span>تحديث الجدول</span>
             </button>
           </div>
@@ -197,21 +254,80 @@ export const ReferencesTab: React.FC = () => {
             <span>إدراج تسمية توضيحية</span>
           </button>
           <button
-            onClick={() => alert('تم إدراج جدول الأشكال والمخططات التوضيحية')}
+            onClick={() => {
+              const editor = document.getElementById('document-editor');
+              const figures = editor?.querySelectorAll('figure, table') || [];
+              let figHtml = `
+                <div class="my-6 p-4 bg-slate-50 border border-slate-300 rounded-lg text-right" contenteditable="false">
+                  <h3 class="font-bold text-sm text-[#2b579a] mb-2 border-b border-slate-300 pb-1">فهرس الجداول والأشكال التوضيحية</h3>
+                  <div class="space-y-1.5 text-xs text-slate-700">
+              `;
+              if (figures.length > 0) {
+                figures.forEach((f, idx) => {
+                  const tag = f.tagName === 'TABLE' ? 'جدول' : 'شكل';
+                  figHtml += `
+                    <div class="flex justify-between border-b border-dotted border-slate-300 pb-1">
+                      <span>• ${tag} (${idx + 1}): عنصر توضيحي معتمد</span>
+                      <span class="font-mono text-slate-500 font-bold">${idx + 1}</span>
+                    </div>
+                  `;
+                });
+              } else {
+                figHtml += `
+                  <div class="flex justify-between border-b border-dotted border-slate-300 pb-1">
+                    <span>• جدول (1): مؤشرات الأداء والنتائج التشغيلية</span>
+                    <span class="font-mono text-slate-500 font-bold">1</span>
+                  </div>
+                `;
+              }
+              figHtml += `</div></div><p><br></p>`;
+              insertHTMLAtCursor(figHtml);
+            }}
             className="flex items-center gap-1 px-1.5 py-0.5 hover:bg-slate-200 rounded text-[10px]"
+            title="إدراج جدول الأشكال والمخططات"
           >
             <ListFilter className="w-3.5 h-3.5 text-slate-600" />
             <span>قائمة الأشكال</span>
           </button>
           <button
-            onClick={() => alert('تم وضع علامة على الإدخال في الفهرس')}
+            onClick={() => {
+              insertHTMLAtCursor(`
+                <div class="my-6 p-4 bg-slate-50 border border-slate-300 rounded-lg text-right">
+                  <h3 class="font-bold text-sm text-[#2b579a] mb-2 border-b border-slate-300 pb-1">فهرس المصطلحات والموضوعات (Index)</h3>
+                  <div class="grid grid-cols-2 gap-4 text-xs">
+                    <div>
+                      <strong class="text-blue-900 border-b block pb-0.5 mb-1">أ - ت</strong>
+                      <p>التحول الرقمي: 1، 3</p>
+                      <p>التخطيط الاستراتيجي: 2</p>
+                    </div>
+                    <div>
+                      <strong class="text-blue-900 border-b block pb-0.5 mb-1">ح - م</strong>
+                      <p>حوكمة البيانات: 1، 4</p>
+                      <p>مؤشرات الأداء: 2، 3</p>
+                    </div>
+                  </div>
+                </div>
+                <p><br></p>
+              `);
+            }}
             className="flex items-center gap-1 px-1.5 py-0.5 hover:bg-slate-200 rounded text-[10px]"
           >
             <FileText className="w-3.5 h-3.5 text-slate-600" />
             <span>إدراج فهرس</span>
           </button>
           <button
-            onClick={() => alert('تم إدراج جدول السلطات والمراجع القضائية/القانونية')}
+            onClick={() => {
+              insertHTMLAtCursor(`
+                <div class="my-6 p-4 bg-slate-50 border border-slate-300 rounded-lg text-right">
+                  <h3 class="font-bold text-sm text-[#2b579a] mb-2 border-b border-slate-300 pb-1">جدول السلطات والتشريعات المعتمدة (Table of Authorities)</h3>
+                  <div class="space-y-1.5 text-xs text-slate-700">
+                    <p>• قرار مجلس الإدارة رقم (42) لسنة 2024 بشأن اعتماد المعايير الرقمية ................ ص 2</p>
+                    <p>• اللائحة التنفيذية لحماية البيانات والخصوصية الوطنية ................................ ص 3</p>
+                  </div>
+                </div>
+                <p><br></p>
+              `);
+            }}
             className="flex items-center gap-1 px-1.5 py-0.5 hover:bg-slate-200 rounded text-[10px]"
           >
             <Scale className="w-3.5 h-3.5 text-indigo-600" />

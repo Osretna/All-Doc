@@ -31,13 +31,21 @@ import {
   ChevronDown,
   Sparkles
 } from 'lucide-react';
-import { executeCommand, insertHTMLAtCursor } from '../../utils/editorCommands';
+import { 
+  executeCommand, 
+  insertHTMLAtCursor, 
+  copyCurrentSelectionStyle, 
+  applyStyleToSelection, 
+  SavedTextStyle 
+} from '../../utils/editorCommands';
 
 interface HomeTabProps {
   onOpenFind: () => void;
   onOpenReplace: () => void;
   onOpenStylesPane?: () => void;
   onOpenBordersDialog?: () => void;
+  editorRef?: React.RefObject<HTMLDivElement | null>;
+  onContentChange?: () => void;
 }
 
 export const HomeTab: React.FC<HomeTabProps> = ({
@@ -45,33 +53,35 @@ export const HomeTab: React.FC<HomeTabProps> = ({
   onOpenReplace,
   onOpenStylesPane,
   onOpenBordersDialog,
+  editorRef,
+  onContentChange,
 }) => {
   const [fontFamily, setFontFamily] = useState('Cairo');
   const [fontSize, setFontSize] = useState('14');
   const [fontColor, setFontColor] = useState('#000000');
   const [highlightColor, setHighlightColor] = useState('#fef08a');
   const [isFormatPainterActive, setIsFormatPainterActive] = useState(false);
-  const [savedFormat, setSavedFormat] = useState<any>(null);
+  const [caseIndex, setCaseIndex] = useState(0);
 
   const applyFontFamily = (val: string) => {
     setFontFamily(val);
     executeCommand('fontName', val);
+    const selection = window.getSelection();
+    if (selection && selection.rangeCount > 0 && !selection.isCollapsed) {
+      applyStyleToSelection({ fontFamily: val });
+    }
+    onContentChange?.();
   };
 
   const applyFontSize = (val: string) => {
     setFontSize(val);
-    executeCommand('fontSize', '4'); // standard size
     const selection = window.getSelection();
-    if (selection && selection.rangeCount > 0) {
-      const span = document.createElement('span');
-      span.style.fontSize = `${val}px`;
-      const range = selection.getRangeAt(0);
-      try {
-        range.surroundContents(span);
-      } catch {
-        executeCommand('fontSize', '4');
-      }
+    if (selection && selection.rangeCount > 0 && !selection.isCollapsed) {
+      applyStyleToSelection({ fontSize: `${val}px` });
+    } else {
+      executeCommand('fontSize', '4');
     }
+    onContentChange?.();
   };
 
   const handleGrowFont = () => {
@@ -85,10 +95,25 @@ export const HomeTab: React.FC<HomeTabProps> = ({
   };
 
   const handleFormatPainter = () => {
+    const editor = editorRef?.current || document.getElementById('document-editor');
     if (!isFormatPainterActive) {
+      const styles = copyCurrentSelectionStyle();
       setIsFormatPainterActive(true);
+      if (editor) {
+        editor.classList.add('cursor-format-painter');
+        const handleApply = () => {
+          setTimeout(() => {
+            applyStyleToSelection(styles);
+            editor.classList.remove('cursor-format-painter');
+            setIsFormatPainterActive(false);
+            onContentChange?.();
+          }, 10);
+        };
+        editor.addEventListener('mouseup', handleApply, { once: true });
+      }
     } else {
       setIsFormatPainterActive(false);
+      if (editor) editor.classList.remove('cursor-format-painter');
     }
   };
 
@@ -98,19 +123,69 @@ export const HomeTab: React.FC<HomeTabProps> = ({
 
   const handleCut = () => {
     executeCommand('cut');
+    onContentChange?.();
   };
 
   const handlePaste = async () => {
+    const editor = editorRef?.current || document.getElementById('document-editor');
+    if (editor) editor.focus();
     try {
       if (navigator.clipboard && navigator.clipboard.readText) {
         const text = await navigator.clipboard.readText();
-        insertHTMLAtCursor(text.replace(/\n/g, '<br>'));
-      } else {
-        executeCommand('paste');
+        if (text) {
+          insertHTMLAtCursor(text.replace(/\r\n/g, '<br>').replace(/\n/g, '<br>'));
+          onContentChange?.();
+          return;
+        }
       }
-    } catch {
-      executeCommand('paste');
+    } catch (err) {
+      console.warn('Clipboard readText failed, fallback to execCommand', err);
     }
+    executeCommand('paste');
+    onContentChange?.();
+  };
+
+  const handleToggleCase = () => {
+    const selection = window.getSelection();
+    if (!selection || selection.isCollapsed) return;
+    const s = selection.toString();
+    if (!s) return;
+
+    let transformed = s;
+    const nextIdx = (caseIndex + 1) % 4;
+    setCaseIndex(nextIdx);
+
+    if (nextIdx === 1) {
+      // UPPERCASE
+      transformed = s.toUpperCase();
+    } else if (nextIdx === 2) {
+      // lowercase
+      transformed = s.toLowerCase();
+    } else if (nextIdx === 3) {
+      // Capitalize Each Word
+      transformed = s.replace(/\b\w/g, l => l.toUpperCase());
+    } else {
+      // Sentence case
+      transformed = s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
+    }
+
+    insertHTMLAtCursor(transformed);
+    onContentChange?.();
+  };
+
+  const handleClearFormatting = () => {
+    executeCommand('removeFormat');
+    const selection = window.getSelection();
+    if (selection && selection.rangeCount > 0) {
+      const range = selection.getRangeAt(0);
+      const parent = range.commonAncestorContainer.nodeType === Node.ELEMENT_NODE
+        ? (range.commonAncestorContainer as HTMLElement)
+        : range.commonAncestorContainer.parentElement;
+      if (parent && parent.id !== 'document-editor') {
+        parent.removeAttribute('style');
+      }
+    }
+    onContentChange?.();
   };
 
   const applyStylePreset = (styleType: string) => {
@@ -135,7 +210,9 @@ export const HomeTab: React.FC<HomeTabProps> = ({
         insertHTMLAtCursor('<p class="text-lg text-slate-500 font-medium mb-2 border-b border-slate-200 pb-1">عنوان فرعي</p>');
         break;
     }
+    onContentChange?.();
   };
+
 
   return (
     <div className="flex items-stretch h-[96px] py-1 px-2 overflow-x-auto text-slate-700 select-none divide-x divide-x-reverse divide-slate-200" dir="rtl">
@@ -236,13 +313,7 @@ export const HomeTab: React.FC<HomeTabProps> = ({
             </button>
 
             <button
-              onClick={() => {
-                const s = window.getSelection()?.toString();
-                if (s) {
-                  const upper = s.toUpperCase() === s ? s.toLowerCase() : s.toUpperCase();
-                  insertHTMLAtCursor(upper);
-                }
-              }}
+              onClick={handleToggleCase}
               className="w-6 h-6 flex items-center justify-center hover:bg-slate-200 rounded text-slate-600"
               title="تغيير حالة الأحرف (Aa)"
             >
@@ -250,7 +321,7 @@ export const HomeTab: React.FC<HomeTabProps> = ({
             </button>
 
             <button
-              onClick={() => executeCommand('removeFormat')}
+              onClick={handleClearFormatting}
               className="w-6 h-6 flex items-center justify-center hover:bg-slate-200 rounded text-slate-600"
               title="مسح كافة التنسيقات (Clear All Formatting)"
             >

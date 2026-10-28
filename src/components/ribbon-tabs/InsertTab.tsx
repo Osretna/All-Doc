@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef, useState } from 'react';
 import { 
   FilePlus, 
   FileText, 
@@ -26,7 +26,10 @@ import {
   Calendar, 
   Layers, 
   Pi, 
-  Sigma 
+  Sigma,
+  QrCode,
+  Award,
+  Globe
 } from 'lucide-react';
 import { insertHTMLAtCursor } from '../../utils/editorCommands';
 
@@ -35,6 +38,7 @@ interface InsertTabProps {
   onOpenShapeModal: () => void;
   onOpenSymbolModal: (tab: 'symbol' | 'equation') => void;
   onOpenComments: () => void;
+  onContentChange?: () => void;
 }
 
 export const InsertTab: React.FC<InsertTabProps> = ({
@@ -42,7 +46,32 @@ export const InsertTab: React.FC<InsertTabProps> = ({
   onOpenShapeModal,
   onOpenSymbolModal,
   onOpenComments,
+  onContentChange,
 }) => {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [showAddinsMenu, setShowAddinsMenu] = useState(false);
+
+  const handleImageFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const dataUrl = event.target?.result as string;
+        if (dataUrl) {
+          insertHTMLAtCursor(`
+            <figure class="my-4 text-center inline-block max-w-full">
+              <img src="${dataUrl}" alt="${file.name}" class="rounded-lg shadow border border-slate-200 max-h-80 mx-auto object-cover" />
+              <figcaption class="text-xs text-slate-500 mt-1 italic">${file.name}</figcaption>
+            </figure>
+            <p><br></p>
+          `);
+          onContentChange?.();
+        }
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
   const insertCoverPage = () => {
     const coverHtml = `
       <div class="cover-page p-12 my-6 bg-gradient-to-b from-blue-900 to-indigo-950 text-white rounded-lg text-center shadow-lg min-h-[400px] flex flex-col justify-between" contenteditable="true">
@@ -60,26 +89,22 @@ export const InsertTab: React.FC<InsertTabProps> = ({
       <p><br></p>
     `;
     insertHTMLAtCursor(coverHtml);
+    onContentChange?.();
   };
 
   const insertBlankPage = () => {
     insertHTMLAtCursor('<div style="page-break-after: always; min-height: 200px;"><br></div><p><br></p>');
+    onContentChange?.();
   };
 
   const insertPageBreak = () => {
     insertHTMLAtCursor('<div style="page-break-after: always;" class="border-b-2 border-dashed border-blue-400 my-4 text-center text-xs text-blue-500 select-none">┈┈┈┈ فاصل صفحة (Page Break) ┈┈┈┈</div><p><br></p>');
+    onContentChange?.();
   };
 
   const insertImagePrompt = () => {
-    const url = prompt('أدخل رابط الصورة (URL) أو اضغط موافق لإدراج صورة توضيحية احترافية:', 'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?auto=format&fit=crop&w=800&q=80');
-    if (url) {
-      insertHTMLAtCursor(`
-        <figure class="my-4 text-center inline-block max-w-full">
-          <img src="${url}" alt="صورة توضيحية" class="rounded-lg shadow border border-slate-200 max-h-80 mx-auto object-cover" />
-          <figcaption class="text-xs text-slate-500 mt-1 italic">الشكل (1): صورة توضيحية للمستند</figcaption>
-        </figure>
-        <p><br></p>
-      `);
+    if (fileInputRef.current) {
+      fileInputRef.current.click();
     }
   };
 
@@ -283,16 +308,103 @@ export const InsertTab: React.FC<InsertTabProps> = ({
         <span className="text-[10px] text-slate-400 text-center font-medium">رسومات توضيحية</span>
       </div>
 
+      {/* Hidden image file input */}
+      <input
+        type="file"
+        ref={fileInputRef}
+        onChange={handleImageFileChange}
+        accept="image/*"
+        className="hidden"
+      />
+
       {/* 4. Add-ins & Media */}
-      <div className="flex flex-col justify-between px-2 min-w-[110px] shrink-0">
+      <div className="flex flex-col justify-between px-2 min-w-[110px] shrink-0 relative">
         <div className="flex flex-col gap-0.5 justify-center py-1">
-          <button
-            onClick={() => alert('متجر وظائف Microsoft Office الإضافية (Add-ins) متصل وجاهز')}
-            className="flex items-center gap-1 px-1.5 py-0.5 hover:bg-slate-200 rounded text-[10px]"
-          >
-            <Puzzle className="w-3.5 h-3.5 text-blue-600" />
-            <span>وظائف إضافية</span>
-          </button>
+          <div className="relative">
+            <button
+              onClick={() => setShowAddinsMenu(!showAddinsMenu)}
+              className="flex items-center gap-1 px-1.5 py-0.5 hover:bg-slate-200 rounded text-[10px] w-full"
+              title="وظائف Microsoft Office الإضافية"
+            >
+              <Puzzle className="w-3.5 h-3.5 text-blue-600" />
+              <span>وظائف إضافية</span>
+            </button>
+
+            {/* Add-ins floating quick picker */}
+            {showAddinsMenu && (
+              <div 
+                className="absolute top-full right-0 mt-1 w-48 bg-white border border-slate-300 rounded-lg shadow-xl p-2 z-50 text-right space-y-1.5"
+                dir="rtl"
+              >
+                <div className="text-[10px] font-bold text-slate-700 pb-1 border-b border-slate-200">
+                  متجر الإضافات المعتمدة
+                </div>
+                <button
+                  onClick={() => {
+                    const qrText = prompt('أدخل الرابط أو النص لتوليد رمز QR له:', 'https://all-docu.vercel.app');
+                    if (qrText) {
+                      const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(qrText)}`;
+                      insertHTMLAtCursor(`
+                        <figure class="my-4 text-center inline-block">
+                          <img src="${qrUrl}" alt="QR Code" class="w-32 h-32 mx-auto rounded border border-slate-300 shadow-xs" />
+                          <figcaption class="text-[10px] text-slate-500 mt-1 font-mono">${qrText}</figcaption>
+                        </figure>
+                        <p><br></p>
+                      `);
+                      onContentChange?.();
+                    }
+                    setShowAddinsMenu(false);
+                  }}
+                  className="w-full flex items-center gap-2 px-2 py-1 hover:bg-blue-50 rounded text-xs text-slate-700 text-right"
+                >
+                  <QrCode className="w-3.5 h-3.5 text-blue-600" />
+                  <span>توليد رمز استجابة (QR)</span>
+                </button>
+
+                <button
+                  onClick={() => {
+                    insertHTMLAtCursor(`
+                      <div class="my-4 inline-block p-3 border-2 border-amber-500 rounded-xl bg-gradient-to-br from-amber-50 to-amber-100/50 text-amber-900 text-center shadow-xs">
+                        <div class="text-xs font-extrabold uppercase tracking-widest text-amber-800">★ وثيقة سيادية معتمدة ★</div>
+                        <div class="text-[10px] text-amber-700 mt-0.5">SOVEREIGN SUITE VERIFIED • ${new Date().toLocaleDateString('ar-EG')}</div>
+                      </div>
+                      <p><br></p>
+                    `);
+                    onContentChange?.();
+                    setShowAddinsMenu(false);
+                  }}
+                  className="w-full flex items-center gap-2 px-2 py-1 hover:bg-amber-50 rounded text-xs text-slate-700 text-right"
+                >
+                  <Award className="w-3.5 h-3.5 text-amber-600" />
+                  <span>ختم اعتماد رسمي ذهبي</span>
+                </button>
+
+                <button
+                  onClick={() => {
+                    insertHTMLAtCursor(`
+                      <div class="my-4 p-3 bg-slate-50 border border-slate-300 rounded-lg max-w-md">
+                        <div class="flex items-center gap-1.5 font-bold text-xs text-slate-800 mb-1">
+                          <span class="text-blue-600">🌐</span>
+                          <span>مرجع توثيقي من الموسوعة</span>
+                        </div>
+                        <p class="text-xs text-slate-600 leading-relaxed">
+                          نظام إدارة المستندات (EDMS) هو حل برمجي متكامل يهدف إلى أرشفة وتأمين وحوكمة الوثائق الإلكترونية وفق أعلى معايير الخصوصية.
+                        </p>
+                      </div>
+                      <p><br></p>
+                    `);
+                    onContentChange?.();
+                    setShowAddinsMenu(false);
+                  }}
+                  className="w-full flex items-center gap-2 px-2 py-1 hover:bg-slate-100 rounded text-xs text-slate-700 text-right"
+                >
+                  <Globe className="w-3.5 h-3.5 text-indigo-600" />
+                  <span>بطاقة توثيق معرفية</span>
+                </button>
+              </div>
+            )}
+          </div>
+
           <button
             onClick={insertOnlineVideo}
             className="flex items-center gap-1 px-1.5 py-0.5 hover:bg-slate-200 rounded text-[10px]"
@@ -317,7 +429,10 @@ export const InsertTab: React.FC<InsertTabProps> = ({
           <button
             onClick={() => {
               const name = prompt('اسم الإشارة المرجعية (Bookmark name):', 'نقطة_هامة');
-              if (name) insertHTMLAtCursor(`<a id="${name}" class="bookmark text-slate-400 text-xs">🔖</a>`);
+              if (name) {
+                insertHTMLAtCursor(`<a id="${name}" class="bookmark text-slate-400 text-xs">🔖</a>`);
+                onContentChange?.();
+              }
             }}
             className="flex items-center gap-1 px-1.5 py-0.5 hover:bg-slate-200 rounded text-[10px]"
           >
@@ -344,6 +459,7 @@ export const InsertTab: React.FC<InsertTabProps> = ({
               if (h) {
                 const headEl = document.getElementById('doc-header-text');
                 if (headEl) headEl.innerText = h;
+                onContentChange?.();
               }
             }}
             className="flex items-center gap-1 px-1.5 py-0.5 hover:bg-slate-200 rounded text-[10px]"
@@ -357,6 +473,7 @@ export const InsertTab: React.FC<InsertTabProps> = ({
               if (f) {
                 const footEl = document.getElementById('doc-footer-text');
                 if (footEl) footEl.innerText = f;
+                onContentChange?.();
               }
             }}
             className="flex items-center gap-1 px-1.5 py-0.5 hover:bg-slate-200 rounded text-[10px]"
@@ -365,8 +482,19 @@ export const InsertTab: React.FC<InsertTabProps> = ({
             <span>تذييل الصفحة</span>
           </button>
           <button
-            onClick={() => alert('أرقام الصفحات مفعلة تلقائياً في أسفل كل صفحة')}
+            onClick={() => {
+              insertHTMLAtCursor(`
+                <div class="my-4 text-center select-none" contenteditable="false">
+                  <span class="inline-block px-3 py-1 bg-slate-100 border border-slate-300 rounded-full text-xs font-mono font-bold text-slate-700 shadow-2xs">
+                    📄 صفحة 1 من 1
+                  </span>
+                </div>
+                <p><br></p>
+              `);
+              onContentChange?.();
+            }}
             className="flex items-center gap-1 px-1.5 py-0.5 hover:bg-slate-200 rounded text-[10px]"
+            title="إدراج رقم الصفحة الحالي"
           >
             <Hash className="w-3.5 h-3.5 text-slate-600" />
             <span>رقم الصفحة</span>

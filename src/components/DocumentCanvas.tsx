@@ -27,6 +27,9 @@ interface DocumentCanvasProps {
   showGridlines: boolean;
   zoom: number;
   onOpenCommentForSelection: (snippet: string) => void;
+  isSplitView?: boolean;
+  onToggleSplitView?: () => void;
+  onViewModeChange?: (mode: ViewMode) => void;
 }
 
 export const DocumentCanvas: React.FC<DocumentCanvasProps> = ({
@@ -40,6 +43,9 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = ({
   showGridlines,
   zoom,
   onOpenCommentForSelection,
+  isSplitView = false,
+  onToggleSplitView,
+  onViewModeChange,
 }) => {
   const [miniToolbarPos, setMiniToolbarPos] = useState<{ x: number; y: number } | null>(null);
   const [selectedSnippet, setSelectedSnippet] = useState('');
@@ -78,6 +84,22 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = ({
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  // Track and save caret/selection inside document editor for Ribbon paste & commands
+  useEffect(() => {
+    const handleSelectionChange = () => {
+      const sel = window.getSelection();
+      const editor = editorRef?.current || document.getElementById('document-editor');
+      if (sel && sel.rangeCount > 0 && editor) {
+        const r = sel.getRangeAt(0);
+        if (editor.contains(r.commonAncestorContainer)) {
+          (window as any).__lastWordEditorRange = r.cloneRange();
+        }
+      }
+    };
+    document.addEventListener('selectionchange', handleSelectionChange);
+    return () => document.removeEventListener('selectionchange', handleSelectionChange);
+  }, [editorRef]);
 
   // Determine paper dimensions based on orientation and size
   const isLandscape = pageSetup.orientation === 'landscape';
@@ -157,6 +179,22 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = ({
         </div>
       )}
 
+      {/* Reading Mode Exit Banner */}
+      {viewMode === 'read' && (
+        <div className="sticky top-0 z-40 bg-slate-900/90 text-white px-5 py-2 rounded-full shadow-xl flex items-center justify-between text-xs max-w-md mx-auto mb-4 backdrop-blur-xs select-none">
+          <div className="flex items-center gap-2">
+            <span className="text-base">📖</span>
+            <span className="font-semibold">وضع القراءة المركز (Reading View)</span>
+          </div>
+          <button 
+            onClick={() => onViewModeChange?.('print')}
+            className="bg-blue-600 hover:bg-blue-500 text-white px-3 py-1 rounded text-xs font-bold transition-colors cursor-pointer"
+          >
+            العودة للتحرير ✕
+          </button>
+        </div>
+      )}
+
       {/* Centered Document Paper Container with Zoom scale */}
       <div 
         className="mx-auto transition-transform origin-top flex flex-col items-center"
@@ -169,8 +207,8 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = ({
           style={{
             width: viewMode === 'web' ? '100%' : paperWidth,
             minHeight: viewMode === 'web' ? 'auto' : paperMinHeight,
-            paddingTop: padTop,
-            paddingBottom: padBottom,
+            paddingTop: viewMode === 'draft' ? '20px' : padTop,
+            paddingBottom: viewMode === 'draft' ? '20px' : padBottom,
             paddingLeft: padLeft,
             paddingRight: padRight,
             backgroundColor: pageColor || '#ffffff',
@@ -180,6 +218,18 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = ({
           }}
           dir="rtl"
         >
+          {/* Line Numbers Gutter */}
+          {pageSetup.lineNumbers && (
+            <div 
+              className="absolute -right-8 top-16 bottom-16 w-6 select-none pointer-events-none text-left font-mono text-[10px] text-slate-400 flex flex-col justify-around" 
+              aria-hidden="true"
+            >
+              {Array.from({ length: 25 }, (_, i) => (
+                <span key={i}>{i + 1}</span>
+              ))}
+            </div>
+          )}
+
           {/* Watermark Overlay */}
           {watermark.type !== 'none' && watermark.text && (
             <div 
@@ -199,26 +249,30 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = ({
           )}
 
           {/* Header Zone (Header) */}
-          <div 
-            className="border-b border-slate-200/80 pb-2 mb-6 flex items-center justify-between text-xs text-slate-400 select-none"
-            contentEditable={false}
-          >
-            <span id="doc-header-text" className="font-medium text-slate-500">
-              مستند عمل رسمي • جمهورية مصر العربية
-            </span>
-            <span className="font-mono text-[10px] text-slate-400">
-              {new Date().toLocaleDateString('ar-EG')}
-            </span>
-          </div>
+          {viewMode !== 'draft' && (
+            <div 
+              className="border-b border-slate-200/80 pb-2 mb-6 flex items-center justify-between text-xs text-slate-400 select-none"
+              contentEditable={false}
+            >
+              <span id="doc-header-text" className="font-medium text-slate-500">
+                مستند عمل رسمي • جمهورية مصر العربية
+              </span>
+              <span className="font-mono text-[10px] text-slate-400">
+                {new Date().toLocaleDateString('ar-EG')}
+              </span>
+            </div>
+          )}
 
           {/* Real Editable Document Body */}
           <div
             id="document-editor"
             ref={editorRef}
-            contentEditable
+            contentEditable={viewMode !== 'read'}
             suppressContentEditableWarning
             onInput={onContentChange}
-            className="word-editor relative z-10 text-base leading-relaxed text-slate-800 focus:outline-none min-h-[700px] select-text"
+            className={`word-editor relative z-10 text-base leading-relaxed text-slate-800 focus:outline-none min-h-[700px] select-text ${
+              viewMode === 'outline' ? 'outline-mode' : ''
+            }`}
             style={columnStyle}
           >
             <h1 className="text-3xl font-extrabold text-[#2b579a] mb-3 pb-1 border-b-2 border-[#2b579a]/20">
@@ -291,14 +345,38 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = ({
           </div>
 
           {/* Footer Zone (Footer) */}
-          <div 
-            className="border-t border-slate-200/80 pt-3 mt-8 flex items-center justify-between text-xs text-slate-400 select-none"
-            contentEditable={false}
-          >
-            <span id="doc-footer-text">وثيقة معتمدة ومحمية بموجب حقوق النشر</span>
-            <span className="font-mono">صفحة 1 من 1</span>
-          </div>
+          {viewMode !== 'draft' && (
+            <div 
+              className="border-t border-slate-200/80 pt-3 mt-8 flex items-center justify-between text-xs text-slate-400 select-none"
+              contentEditable={false}
+            >
+              <span id="doc-footer-text">وثيقة معتمدة ومحمية بموجب حقوق النشر</span>
+              <span className="font-mono">صفحة 1 من 1</span>
+            </div>
+          )}
         </div>
+
+        {/* Real Split View Secondary Reading & Comparison Window */}
+        {isSplitView && (
+          <div className="w-full max-w-5xl mt-6 border-2 border-dashed border-blue-400 bg-white rounded-lg p-5 shadow-lg">
+            <div className="flex items-center justify-between text-xs text-[#2b579a] font-bold mb-3 pb-2 border-b border-blue-200 select-none">
+              <span className="flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-full bg-blue-600 animate-pulse"></span>
+                إطار العرض المنقسم (Split Window) - مراجعة وتصفح مواضع متعددة في المستند ذاته
+              </span>
+              <button 
+                onClick={onToggleSplitView}
+                className="text-red-600 hover:text-red-700 hover:bg-red-50 px-2 py-0.5 rounded border border-red-200 text-[11px] transition-colors cursor-pointer"
+              >
+                إغلاق التقسيم ✕
+              </button>
+            </div>
+            <div 
+              className="max-h-72 overflow-y-auto p-4 bg-slate-50/70 rounded border border-slate-200 text-sm leading-relaxed"
+              dangerouslySetInnerHTML={{ __html: editorRef.current?.innerHTML || '<p class="text-slate-400">جاري تحميل المحتوى المنقسم...</p>' }}
+            />
+          </div>
+        )}
       </div>
     </div>
   );
