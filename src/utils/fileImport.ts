@@ -1,6 +1,6 @@
 import * as XLSX from 'xlsx';
 import JSZip from 'jszip';
-import { SheetData, SlideItem, DbTable, DbField } from '../types';
+import { SheetData, SheetCell, ExcelSheetRecord, SlideItem, DbTable, DbField } from '../types';
 
 /**
  * Parses real binary .docx file and converts to high-fidelity styled HTML with fonts, colors, images, tables, headings, and formatting
@@ -212,9 +212,61 @@ export async function parseDocxFile(file: File): Promise<string> {
 }
 
 /**
+ * Standard Office Theme Colors (Theme 0 to 9 with tints)
+ */
+const EXCEL_THEME_COLORS = [
+  '#ffffff', // 0: Background 1 (Light 1)
+  '#000000', // 1: Text 1 (Dark 1)
+  '#e7e6e6', // 2: Background 2 (Light 2)
+  '#44546a', // 3: Text 2 (Dark 2)
+  '#107c41', // 4: Accent 1 (Excel Green)
+  '#ed7d31', // 5: Accent 2 (Orange)
+  '#a5a5a5', // 6: Accent 3 (Gray)
+  '#ffc000', // 7: Accent 4 (Gold)
+  '#4472c4', // 8: Accent 5 (Blue)
+  '#70ad47', // 9: Accent 6 (Green)
+];
+
+function applyTint(hex: string, tint: number): string {
+  if (!tint) return hex;
+  const clean = hex.replace('#', '');
+  let r = parseInt(clean.substring(0, 2), 16) || 0;
+  let g = parseInt(clean.substring(2, 4), 16) || 0;
+  let b = parseInt(clean.substring(4, 6), 16) || 0;
+
+  if (tint > 0) {
+    r = Math.round(r + (255 - r) * tint);
+    g = Math.round(g + (255 - g) * tint);
+    b = Math.round(b + (255 - b) * tint);
+  } else if (tint < 0) {
+    r = Math.round(r * (1 + tint));
+    g = Math.round(g * (1 + tint));
+    b = Math.round(b * (1 + tint));
+  }
+
+  const toHex = (n: number) => Math.max(0, Math.min(255, n)).toString(16).padStart(2, '0');
+  return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+}
+
+interface ParsedXlsxStyle {
+  bg?: string;
+  color?: string;
+  bold?: boolean;
+  italic?: boolean;
+  underline?: boolean;
+  fontSize?: number;
+  align?: 'left' | 'center' | 'right';
+  verticalAlign?: 'top' | 'middle' | 'bottom';
+  wrapText?: boolean;
+  border?: SheetCell['border'];
+  borderColor?: string;
+  borderStyle?: 'solid' | 'dashed' | 'dotted' | 'double' | 'thick';
+}
+
+/**
  * Parses real binary .xlsx, .xls, or .csv files into Sheets with all formatting, formulas, cell styles, merges, and dimensions
  */
-export async function parseExcelFile(file: File): Promise<Record<string, { label: string; data: SheetData }>> {
+export async function parseExcelFile(file: File): Promise<Record<string, { label: string; data: SheetData; colWidths?: Record<string, number>; rowHeights?: Record<number, number>; isRTL?: boolean }>> {
   const arrayBuffer = await file.arrayBuffer();
   const workbook = XLSX.read(arrayBuffer, {
     type: 'array',
@@ -224,11 +276,249 @@ export async function parseExcelFile(file: File): Promise<Record<string, { label
     cellDates: true,
   });
 
-  const resultSheets: Record<string, { label: string; data: SheetData }> = {};
+  // 1. Try to read deeper XML styles, theme colors, column widths and row heights from the ZIP structure
+  let xmlStyles: ParsedXlsxStyle[] = [];
+  const sheetDimensions: Record<number, { colWidths: Record<string, number>; rowHeights: Record<number, number>; isRTL: boolean; cellStyleIndices: Record<string, number> }> = {};
+
+  try {
+    const zip = await JSZip.loadAsync(arrayBuffer);
+    const stylesFile = zip.file('xl/styles.xml');
+
+    if (stylesFile) {
+      const stylesXml = await stylesFile.async('text');
+      const parser = new DOMParser();
+      const sDoc = parser.parseFromString(stylesXml, 'application/xml');
+
+      // A. Extract Fonts
+      const fonts: Array<{ bold?: boolean; italic?: boolean; underline?: boolean; color?: string; size?: number }> = [];
+      const fontNodes = sDoc.getElementsByTagName('font');
+      for (const fn of Array.from(fontNodes)) {
+        const b = fn.getElementsByTagName('b').length > 0;
+        const i = fn.getElementsByTagName('i').length > 0;
+        const u = fn.getElementsByTagName('u').length > 0;
+        const sz = fn.getElementsByTagName('sz')[0]?.getAttribute('val');
+        const colorEl = fn.getElementsByTagName('color')[0];
+        let colorHex: string | undefined = undefined;
+
+        if (colorEl) {
+          const rgb = colorEl.getAttribute('rgb');
+          const theme = colorEl.getAttribute('theme');
+          const tint = parseFloat(colorEl.getAttribute('tint') || '0');
+
+          if (rgb) {
+            colorHex = `#${rgb.length === 8 ? rgb.substring(2) : rgb}`;
+          } else if (theme !== null && theme !== undefined) {
+            const tIdx = parseInt(theme, 10);
+            if (!isNaN(tIdx) && EXCEL_THEME_COLORS[tIdx]) {
+              colorHex = applyTint(EXCEL_THEME_COLORS[tIdx], tint);
+            }
+          }
+        }
+
+        fonts.push({
+          bold: b || undefined,
+          italic: i || undefined,
+          underline: u || undefined,
+          size: sz ? parseInt(sz, 10) : undefined,
+          color: colorHex,
+        });
+      }
+
+      // B. Extract Fills
+      const fills: Array<{ bg?: string }> = [];
+      const fillNodes = sDoc.getElementsByTagName('fill');
+      for (const fl of Array.from(fillNodes)) {
+        const pattern = fl.getElementsByTagName('patternFill')[0];
+        let bgHex: string | undefined = undefined;
+
+        if (pattern) {
+          const fg = pattern.getElementsByTagName('fgColor')[0];
+          if (fg) {
+            const rgb = fg.getAttribute('rgb');
+            const theme = fg.getAttribute('theme');
+            const tint = parseFloat(fg.getAttribute('tint') || '0');
+
+            if (rgb) {
+              bgHex = `#${rgb.length === 8 ? rgb.substring(2) : rgb}`;
+            } else if (theme !== null && theme !== undefined) {
+              const tIdx = parseInt(theme, 10);
+              if (!isNaN(tIdx) && EXCEL_THEME_COLORS[tIdx]) {
+                bgHex = applyTint(EXCEL_THEME_COLORS[tIdx], tint);
+              }
+            }
+          }
+        }
+        fills.push({ bg: bgHex });
+      }
+
+      // C. Extract Borders
+      const borders: Array<{ border?: SheetCell['border']; borderColor?: string; borderStyle?: SheetCell['borderStyle'] }> = [];
+      const borderNodes = sDoc.getElementsByTagName('border');
+      for (const bd of Array.from(borderNodes)) {
+        const left = bd.getElementsByTagName('left')[0]?.getAttribute('style');
+        const right = bd.getElementsByTagName('right')[0]?.getAttribute('style');
+        const top = bd.getElementsByTagName('top')[0]?.getAttribute('style');
+        const bottom = bd.getElementsByTagName('bottom')[0]?.getAttribute('style');
+
+        let bType: SheetCell['border'] = undefined;
+        let bStyle: SheetCell['borderStyle'] = undefined;
+
+        if (left && right && top && bottom) {
+          bType = 'all';
+          if (bottom === 'thick' || bottom === 'medium') bStyle = 'thick';
+          else if (bottom === 'double') bStyle = 'double';
+        } else if (top && bottom) {
+          bType = bottom === 'double' ? 'top-double-bottom' : (bottom === 'thick' ? 'top-thick-bottom' : 'top-bottom');
+        } else if (bottom) {
+          bType = bottom === 'double' ? 'double-bottom' : (bottom === 'thick' || bottom === 'medium' ? 'thick-bottom' : 'bottom');
+        } else if (top) {
+          bType = 'top';
+        } else if (left || right) {
+          bType = 'outside';
+        }
+
+        borders.push({ border: bType, borderColor: '#d4d4d4', borderStyle: bStyle });
+      }
+
+      // D. Extract cellXfs
+      const cellXfs = sDoc.getElementsByTagName('cellXfs')[0];
+      if (cellXfs) {
+        const xfNodes = cellXfs.getElementsByTagName('xf');
+        xmlStyles = Array.from(xfNodes).map((xf) => {
+          const fontId = parseInt(xf.getAttribute('fontId') || '-1', 10);
+          const fillId = parseInt(xf.getAttribute('fillId') || '-1', 10);
+          const borderId = parseInt(xf.getAttribute('borderId') || '-1', 10);
+          const alignEl = xf.getElementsByTagName('alignment')[0];
+
+          const font = fonts[fontId] || {};
+          const fill = fills[fillId] || {};
+          const border = borders[borderId] || {};
+
+          let align: 'left' | 'center' | 'right' | undefined = undefined;
+          let verticalAlign: 'top' | 'middle' | 'bottom' | undefined = undefined;
+          let wrapText: boolean | undefined = undefined;
+
+          if (alignEl) {
+            const h = alignEl.getAttribute('horizontal');
+            if (h === 'center') align = 'center';
+            else if (h === 'left') align = 'left';
+            else if (h === 'right') align = 'right';
+
+            const v = alignEl.getAttribute('vertical');
+            if (v === 'top') verticalAlign = 'top';
+            else if (v === 'center') verticalAlign = 'middle';
+            else if (v === 'bottom') verticalAlign = 'bottom';
+
+            if (alignEl.getAttribute('wrapText') === '1' || alignEl.getAttribute('wrapText') === 'true') {
+              wrapText = true;
+            }
+          }
+
+          return {
+            bg: fill.bg,
+            color: font.color,
+            bold: font.bold,
+            italic: font.italic,
+            underline: font.underline,
+            fontSize: font.size,
+            align,
+            verticalAlign,
+            wrapText,
+            border: border.border,
+            borderColor: border.borderColor,
+            borderStyle: border.borderStyle,
+          };
+        });
+      }
+    }
+
+    // E. Extract worksheet XML attributes (sheetView rightToLeft, cols custom width, rows custom height, cell style links)
+    const sheetFiles = Object.keys(zip.files).filter((k) => k.startsWith('xl/worksheets/sheet') && k.endsWith('.xml'));
+    sheetFiles.sort();
+
+    for (let sIdx = 0; sIdx < sheetFiles.length; sIdx++) {
+      const sFile = zip.file(sheetFiles[sIdx]);
+      if (!sFile) continue;
+      const sXml = await sFile.async('text');
+      const sDoc = new DOMParser().parseFromString(sXml, 'application/xml');
+
+      const colWidths: Record<string, number> = {};
+      const rowHeights: Record<number, number> = {};
+      const cellStyleIndices: Record<string, number> = {};
+
+      // Check RTL
+      const sheetView = sDoc.getElementsByTagName('sheetView')[0];
+      const isRTL = sheetView?.getAttribute('rightToLeft') === '1';
+
+      // Parse <cols><col min="1" max="1" width="55" customWidth="1"/></cols>
+      const colNodes = sDoc.getElementsByTagName('col');
+      for (const cNode of Array.from(colNodes)) {
+        const min = parseInt(cNode.getAttribute('min') || '1', 10);
+        const max = parseInt(cNode.getAttribute('max') || '1', 10);
+        const w = parseFloat(cNode.getAttribute('width') || '10');
+        const px = Math.round(w > 1 ? w * 7.5 + 5 : w * 12);
+
+        for (let colNum = min; colNum <= max; colNum++) {
+          const letter = COLS_REF[colNum - 1] || 'A';
+          colWidths[letter] = px;
+        }
+      }
+
+      // Parse <row r="2" ht="36" customHeight="1">
+      const rowNodes = sDoc.getElementsByTagName('row');
+      for (const rNode of Array.from(rowNodes)) {
+        const rNum = parseInt(rNode.getAttribute('r') || '1', 10);
+        const ht = parseFloat(rNode.getAttribute('ht') || '0');
+        if (ht > 0) {
+          rowHeights[rNum] = Math.round(ht * 1.33);
+        }
+
+        // Map cells to style index: <c r="D3" s="4">
+        const cEls = rNode.getElementsByTagName('c');
+        for (const cEl of Array.from(cEls)) {
+          const addr = cEl.getAttribute('r');
+          const s = cEl.getAttribute('s');
+          if (addr && s) {
+            cellStyleIndices[addr] = parseInt(s, 10);
+          }
+        }
+      }
+
+      sheetDimensions[sIdx] = { colWidths, rowHeights, isRTL, cellStyleIndices };
+    }
+  } catch (err) {
+    console.warn('Could not extract advanced XML styles from .xlsx archive:', err);
+  }
+
+  const resultSheets: Record<string, { label: string; data: SheetData; colWidths?: Record<string, number>; rowHeights?: Record<number, number>; isRTL?: boolean }> = {};
 
   workbook.SheetNames.forEach((sheetName, sIdx) => {
     const worksheet = workbook.Sheets[sheetName];
     const sheetData: SheetData = {};
+
+    const dims = sheetDimensions[sIdx] || { colWidths: {}, rowHeights: {}, isRTL: false, cellStyleIndices: {} };
+    const colWidths = { ...dims.colWidths };
+    const rowHeights = { ...dims.rowHeights };
+
+    // Also merge column widths from SheetJS if available
+    if (worksheet['!cols'] && Array.isArray(worksheet['!cols'])) {
+      worksheet['!cols'].forEach((c, idx) => {
+        if (c && !colWidths[COLS_REF[idx]]) {
+          const px = c.wpx || (c.wch ? Math.round(c.wch * 8) : (c.width ? Math.round(c.width * 7.5 + 5) : undefined));
+          if (px) colWidths[COLS_REF[idx]] = px;
+        }
+      });
+    }
+
+    // Merge row heights from SheetJS if available
+    if (worksheet['!rows'] && Array.isArray(worksheet['!rows'])) {
+      worksheet['!rows'].forEach((r, idx) => {
+        if (r && !rowHeights[idx + 1]) {
+          const px = r.hpx || (r.hpt ? Math.round(r.hpt * 1.33) : undefined);
+          if (px) rowHeights[idx + 1] = px;
+        }
+      });
+    }
 
     const range = XLSX.utils.decode_range(worksheet['!ref'] || 'A1:Z50');
 
@@ -249,14 +539,23 @@ export async function parseExcelFile(file: File): Promise<Record<string, { label
             else format = 'number';
           }
 
-          // Extract Cell Styles from XLSX if present
-          let bold = R === 0;
-          let italic = false;
-          let underline = false;
-          let bg: string | undefined = undefined;
-          let color: string | undefined = undefined;
-          let align: 'right' | 'center' | 'left' = typeof cell.v === 'number' ? 'center' : 'right';
+          // Read style from XML or fallback
+          const sIdxFromXml = dims.cellStyleIndices[cellAddress];
+          const xmlStyle = sIdxFromXml !== undefined && xmlStyles[sIdxFromXml] ? xmlStyles[sIdxFromXml] : undefined;
 
+          let bold = xmlStyle?.bold;
+          let italic = xmlStyle?.italic;
+          let underline = xmlStyle?.underline;
+          let bg: string | undefined = xmlStyle?.bg;
+          let color: string | undefined = xmlStyle?.color;
+          let align: 'right' | 'center' | 'left' = xmlStyle?.align || (typeof cell.v === 'number' ? 'right' : (dims.isRTL ? 'right' : 'left'));
+          let border: SheetCell['border'] = xmlStyle?.border;
+          let borderColor = xmlStyle?.borderColor;
+          let borderStyle = xmlStyle?.borderStyle;
+          let fontSize = xmlStyle?.fontSize;
+          let wrapText = xmlStyle?.wrapText;
+
+          // Fallback to SheetJS community style object if present
           if (cell.s) {
             const s = cell.s;
             if (s.font) {
@@ -283,10 +582,14 @@ export async function parseExcelFile(file: File): Promise<Record<string, { label
             bold: bold,
             italic: italic,
             underline: underline,
-            bg: bg || (R === 0 ? '#107c41' : undefined),
-            color: color || (R === 0 ? '#ffffff' : '#0f172a'),
+            fontSize: fontSize,
+            bg: bg,
+            color: color || '#1e293b',
             align: align,
-            border: 'all',
+            border: border,
+            borderColor: borderColor,
+            borderStyle: borderStyle,
+            wrapText: wrapText,
           };
         }
       }
@@ -322,11 +625,22 @@ export async function parseExcelFile(file: File): Promise<Record<string, { label
     resultSheets[key] = {
       label: sheetName || `ورقة ${sIdx + 1}`,
       data: sheetData,
+      colWidths: Object.keys(colWidths).length > 0 ? colWidths : undefined,
+      rowHeights: Object.keys(rowHeights).length > 0 ? rowHeights : undefined,
+      isRTL: dims.isRTL,
     };
   });
 
   return Object.keys(resultSheets).length > 0 ? resultSheets : {};
 }
+
+const COLS_REF = (() => {
+  const list: string[] = [];
+  for (let i = 0; i < 26; i++) list.push(String.fromCharCode(65 + i));
+  for (let i = 0; i < 26; i++) list.push('A' + String.fromCharCode(65 + i));
+  return list;
+})();
+
 
 /**
  * Parses .pptx file with high-fidelity formatting, background wallpapers, card frames, and typography
