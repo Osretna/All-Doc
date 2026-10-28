@@ -81,6 +81,14 @@ export interface SheetCell {
   mergeRowSpan?: number;
   mergedWith?: string;
   decimalPlaces?: number;
+  dateFormat?: string;
+  currencySymbol?: string;
+  negativeFormat?: 'minus' | 'red' | 'parens' | 'red-parens';
+  customFormat?: string;
+  locked?: boolean;
+  hidden?: boolean;
+  shrinkToFit?: boolean;
+  textDirection?: 'context' | 'ltr' | 'rtl';
   image?: string;
 }
 
@@ -145,3 +153,13 @@ export interface HostingPlan {
   priceMonthly: number;
   popular?: boolean;
 }
+
+export interface DocumentTabItem {
+  id: string;
+  appId: OfficeAppId;
+  title: string;
+  content?: any;
+  isModified?: boolean;
+  createdAt: number;
+}
+

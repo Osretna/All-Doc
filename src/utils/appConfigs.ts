@@ -3,7 +3,7 @@ import { OfficeAppId, AppThemeConfig } from '../types';
 export const APP_CONFIGS: Record<OfficeAppId, AppThemeConfig> = {
   docs: {
     id: 'docs',
-    name: 'Infinity Docs',
+    name: 'Word (المستندات)',
     nameEn: 'Word',
     msEquivalent: 'Microsoft Word',
     primaryColor: '#0078d4', // Classic Office Word Blue
@@ -15,7 +15,7 @@ export const APP_CONFIGS: Record<OfficeAppId, AppThemeConfig> = {
   },
   sheets: {
     id: 'sheets',
-    name: 'Infinity Sheets',
+    name: 'Excel (الجداول)',
     nameEn: 'Excel',
     msEquivalent: 'Microsoft Excel',
     primaryColor: '#107c41', // Classic Office Excel Green
@@ -27,7 +27,7 @@ export const APP_CONFIGS: Record<OfficeAppId, AppThemeConfig> = {
   },
   slides: {
     id: 'slides',
-    name: 'Infinity Slides',
+    name: 'PowerPoint (العروض)',
     nameEn: 'PowerPoint',
     msEquivalent: 'Microsoft PowerPoint',
     primaryColor: '#d83b01', // PowerPoint Orange-Red
@@ -39,7 +39,7 @@ export const APP_CONFIGS: Record<OfficeAppId, AppThemeConfig> = {
   },
   notes: {
     id: 'notes',
-    name: 'Infinity Notes',
+    name: 'OneNote (الملاحظات)',
     nameEn: 'OneNote',
     msEquivalent: 'Microsoft OneNote',
     primaryColor: '#7719aa', // OneNote Purple
@@ -51,7 +51,7 @@ export const APP_CONFIGS: Record<OfficeAppId, AppThemeConfig> = {
   },
   base: {
     id: 'base',
-    name: 'Infinity Base',
+    name: 'Access (قواعد البيانات)',
     nameEn: 'Access',
     msEquivalent: 'Microsoft Access',
     primaryColor: '#a4373a', // Access Crimson
@@ -63,7 +63,7 @@ export const APP_CONFIGS: Record<OfficeAppId, AppThemeConfig> = {
   },
   pdf: {
     id: 'pdf',
-    name: 'Infinity PDF Studio',
+    name: 'PDF Studio (المستندات الرقمية)',
     nameEn: 'Acrobat',
     msEquivalent: 'Adobe Acrobat Pro',
     primaryColor: '#e81123', // PDF Scarlet
@@ -75,7 +75,7 @@ export const APP_CONFIGS: Record<OfficeAppId, AppThemeConfig> = {
   },
   photo: {
     id: 'photo',
-    name: 'Infinity Photo Studio',
+    name: 'Photo Studio (محرر الصور)',
     nameEn: 'Photoshop Lite',
     msEquivalent: 'Photo Studio',
     primaryColor: '#002050', // Photo Navy

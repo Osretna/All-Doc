@@ -5,7 +5,8 @@ import {
   RibbonTab as SuiteRibbonTab,
   SheetData, 
   SlideItem, 
-  DbTable 
+  DbTable,
+  DocumentTabItem
 } from './types';
 import { 
   RibbonTab as WordRibbonTab, 
@@ -18,6 +19,7 @@ import {
   ViewMode 
 } from './types/word';
 import { TitleBar } from './components/layout/TitleBar';
+import { DocumentTabsBar } from './components/layout/DocumentTabsBar';
 import { RibbonBar } from './components/layout/RibbonBar';
 import { Ribbon as WordRibbon } from './components/Ribbon';
 import { Ruler } from './components/Ruler';
@@ -72,12 +74,62 @@ export default function App() {
   // Navigation & Suite State (persisted across browser refresh so active app & data never get lost)
   const [activeSection, setActiveSectionState] = useState<MainNavSection>(() => localVault.get('infinity_office_active_section', 'office'));
   const [activeApp, setActiveAppState] = useState<OfficeAppId>(() => localVault.get(localVault.KEYS.ACTIVE_APP, 'sheets'));
-  const [documentTitle, setDocumentTitleState] = useState<string>(() => localVault.get('infinity_office_doc_title', 'مصنف إكسيل 1 - Excel'));
+  const [documentTitle, setDocumentTitleState] = useState<string>(() => localVault.get('infinity_office_doc_title', 'مصنف 1 - فارغ'));
   const [isBackstageOpen, setIsBackstageOpen] = useState<boolean>(false);
+
+  // Multi-Document Tabs System
+  const [tabs, setTabs] = useState<DocumentTabItem[]>(() => {
+    const saved = localVault.get<DocumentTabItem[]>('infinity_office_tabs', []);
+    if (saved && saved.length > 0) return saved;
+    return [
+      {
+        id: 'tab_sheets_1',
+        appId: 'sheets',
+        title: 'مصنف 1 - فارغ',
+        content: undefined,
+        createdAt: Date.now(),
+      },
+    ];
+  });
+
+  const [activeTabId, setActiveTabId] = useState<string>(() => {
+    return localVault.get('infinity_office_active_tab_id', 'tab_sheets_1');
+  });
+
+  const [wordInitialHtml, setWordInitialHtml] = useState<string>('<p><br></p>');
+
+  useEffect(() => {
+    localVault.set('infinity_office_tabs', tabs);
+  }, [tabs]);
 
   const setActiveApp = (app: OfficeAppId) => {
     setActiveAppState(app);
     localVault.set(localVault.KEYS.ACTIVE_APP, app);
+
+    // Per-app tab activation
+    const appTabs = tabs.filter((t) => t.appId === app);
+    if (appTabs.length > 0) {
+      setActiveTabId(appTabs[0].id);
+      setDocumentTitle(appTabs[0].title);
+    } else {
+      const defaultName =
+        app === 'docs' ? 'مستند 1 - فارغ' :
+        app === 'sheets' ? 'مصنف 1 - فارغ' :
+        app === 'slides' ? 'عرض تقديمي 1 - فارغ' :
+        app === 'base' ? 'قاعدة بيانات 1 - فارغة' :
+        app === 'notes' ? 'دفتر ملاحظات 1' :
+        app === 'pdf' ? 'مستند PDF جديد.pdf' : 'لوحة تصميم جديدة';
+      const newTabId = `tab_${app}_${Date.now()}`;
+      const newTab: DocumentTabItem = {
+        id: newTabId,
+        appId: app,
+        title: defaultName,
+        createdAt: Date.now(),
+      };
+      setTabs((prev) => [...prev, newTab]);
+      setActiveTabId(newTabId);
+      setDocumentTitle(defaultName);
+    }
   };
 
   const setActiveSection = (sec: MainNavSection) => {
@@ -114,18 +166,21 @@ export default function App() {
     setExcelDataState(data);
     if (data) localVault.set(localVault.KEYS.SHEETS_DATA, data);
     setIsSaved(false);
+    setTabs(prev => prev.map(t => t.id === activeTabId && t.appId === 'sheets' ? { ...t, content: data, isModified: true } : t));
   };
 
   const setSlidesData = (data: SlideItem[] | undefined) => {
     setSlidesDataState(data);
     if (data) localVault.set(localVault.KEYS.SLIDES_DATA, data);
     setIsSaved(false);
+    setTabs(prev => prev.map(t => t.id === activeTabId && t.appId === 'slides' ? { ...t, content: data, isModified: true } : t));
   };
 
   const setAccessData = (data: DbTable[] | undefined) => {
     setAccessDataState(data);
     if (data) localVault.set(localVault.KEYS.BASE_DATA, data);
     setIsSaved(false);
+    setTabs(prev => prev.map(t => t.id === activeTabId && t.appId === 'base' ? { ...t, content: data, isModified: true } : t));
   };
 
   const addNotification = (text: string, type: 'success' | 'info' | 'error' = 'info') => {
@@ -138,6 +193,209 @@ export default function App() {
     setTimeout(() => {
       setToasts(prev => prev.filter(t => t.id !== newToast.id));
     }, 4000);
+  };
+
+  // Tab Selection
+  const handleSelectTab = (tabId: string) => {
+    const targetTab = tabs.find(t => t.id === tabId);
+    if (!targetTab) return;
+
+    setActiveTabId(tabId);
+    localVault.set('infinity_office_active_tab_id', tabId);
+
+    if (activeApp !== targetTab.appId) {
+      setActiveAppState(targetTab.appId);
+      localVault.set(localVault.KEYS.ACTIVE_APP, targetTab.appId);
+    }
+    setActiveSectionState('office');
+    localVault.set('infinity_office_active_section', 'office');
+    setDocumentTitleState(targetTab.title);
+    localVault.set('infinity_office_doc_title', targetTab.title);
+
+    // Load content into target application workspace
+    if (targetTab.appId === 'docs') {
+      const html = typeof targetTab.content === 'string' ? targetTab.content : '<p><br></p>';
+      setWordInitialHtml(html);
+      if (editorRef.current) {
+        editorRef.current.innerHTML = html;
+        handleContentChange();
+      }
+    } else if (targetTab.appId === 'sheets') {
+      setExcelDataState(targetTab.content || undefined);
+    } else if (targetTab.appId === 'slides') {
+      setSlidesDataState(targetTab.content || undefined);
+    } else if (targetTab.appId === 'base') {
+      setAccessDataState(targetTab.content || undefined);
+    } else if (targetTab.appId === 'pdf') {
+      setPdfFile(targetTab.content instanceof File ? targetTab.content : null);
+    }
+  };
+
+  // Tab Creation
+  const handleNewTab = (specificApp?: OfficeAppId) => {
+    const targetApp = specificApp || activeApp;
+    const sameAppTabs = tabs.filter(t => t.appId === targetApp);
+    const count = sameAppTabs.length + 1;
+
+    let defaultTitle = '';
+    let initialContent: any = undefined;
+
+    switch (targetApp) {
+      case 'docs':
+        defaultTitle = `مستند ${count} - فارغ`;
+        initialContent = '<p><br></p>';
+        break;
+      case 'sheets':
+        defaultTitle = `مصنف ${count} - فارغ`;
+        initialContent = { sheet1: { label: 'ورقة 1', data: {} } };
+        break;
+      case 'slides':
+        defaultTitle = `عرض تقديمي ${count} - فارغ`;
+        initialContent = [
+          {
+            id: 's1',
+            title: '',
+            subtitle: '',
+            body: [],
+            layout: 'title',
+            notes: '',
+            theme: 'blue',
+            transition: 'none',
+          },
+        ];
+        break;
+      case 'base':
+        defaultTitle = `قاعدة بيانات ${count} - فارغة`;
+        initialContent = [
+          {
+            id: 'tbl_1',
+            name: 'جدول1',
+            label: 'جدول 1',
+            fields: [
+              { name: 'ID', label: 'المعرف', type: 'number', primaryKey: true },
+              { name: 'حقل1', label: 'حقل 1', type: 'text' },
+            ],
+            records: [],
+          },
+        ];
+        break;
+      case 'pdf':
+        defaultTitle = `مستند PDF جديد ${count}.pdf`;
+        initialContent = null;
+        break;
+      case 'notes':
+        defaultTitle = `ملاحظة جديدة ${count}`;
+        initialContent = '';
+        break;
+      case 'photo':
+        defaultTitle = `تصميم جديد ${count}`;
+        initialContent = null;
+        break;
+      default:
+        defaultTitle = `ملف جديد ${count}`;
+    }
+
+    const newTab: DocumentTabItem = {
+      id: `tab_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      appId: targetApp,
+      title: defaultTitle,
+      content: initialContent,
+      createdAt: Date.now(),
+    };
+
+    setTabs(prev => [...prev, newTab]);
+    setActiveTabId(newTab.id);
+    localVault.set('infinity_office_active_tab_id', newTab.id);
+
+    setActiveAppState(targetApp);
+    localVault.set(localVault.KEYS.ACTIVE_APP, targetApp);
+    setActiveSectionState('office');
+    localVault.set('infinity_office_active_section', 'office');
+    setDocumentTitleState(defaultTitle);
+    localVault.set('infinity_office_doc_title', defaultTitle);
+
+    // Reset workspace to clean blank
+    if (targetApp === 'docs') {
+      setWordInitialHtml('<p><br></p>');
+      if (editorRef.current) {
+        editorRef.current.innerHTML = '<p><br></p>';
+        handleContentChange();
+      }
+    } else if (targetApp === 'sheets') {
+      setExcelDataState(initialContent);
+    } else if (targetApp === 'slides') {
+      setSlidesDataState(initialContent);
+    } else if (targetApp === 'base') {
+      setAccessDataState(initialContent);
+    } else if (targetApp === 'pdf') {
+      setPdfFile(null);
+    } else if (targetApp === 'notes') {
+      setNotesSignal(s => s + 1);
+    } else if (targetApp === 'photo') {
+      setPhotoSignal(s => s + 1);
+    }
+
+    addNotification(`تم إنشاء تبويب جديد فارغ: ${defaultTitle}`, 'success');
+  };
+
+  // Tab Close
+  const handleCloseTab = (tabId: string) => {
+    if (tabs.length <= 1) {
+      const current = tabs[0];
+      const blankTitle = current.appId === 'docs' ? 'مستند 1 - فارغ' : current.appId === 'sheets' ? 'مصنف 1 - فارغ' : current.appId === 'slides' ? 'عرض تقديمي 1 - فارغ' : 'ملف فارغ';
+      const resetTab: DocumentTabItem = {
+        ...current,
+        title: blankTitle,
+        content: current.appId === 'sheets' ? { sheet1: { label: 'ورقة 1', data: {} } } : undefined,
+      };
+      setTabs([resetTab]);
+      setDocumentTitleState(blankTitle);
+      if (current.appId === 'docs') {
+        setWordInitialHtml('<p><br></p>');
+        if (editorRef.current) {
+          editorRef.current.innerHTML = '<p><br></p>';
+          handleContentChange();
+        }
+      } else if (current.appId === 'sheets') {
+        setExcelDataState({ sheet1: { label: 'ورقة 1', data: {} } });
+      } else if (current.appId === 'slides') {
+        setSlidesDataState([{ id: 's1', title: '', subtitle: '', body: [], layout: 'title', notes: '', theme: 'blue', transition: 'none' }]);
+      } else if (current.appId === 'pdf') {
+        setPdfFile(null);
+      }
+      addNotification('تم إغلاق الملف وإعادة ضبط التبويب إلى مستند فارغ', 'info');
+      return;
+    }
+
+    const index = tabs.findIndex(t => t.id === tabId);
+    const remaining = tabs.filter(t => t.id !== tabId);
+    setTabs(remaining);
+
+    if (tabId === activeTabId) {
+      const nextTab = remaining[Math.max(0, index - 1)];
+      handleSelectTab(nextTab.id);
+    }
+    addNotification('تم إغلاق التبويب بنجاح', 'info');
+  };
+
+  // Tab Rename
+  const handleRenameTab = (tabId: string, newTitle: string) => {
+    setTabs(prev => prev.map(t => t.id === tabId ? { ...t, title: newTitle } : t));
+    if (tabId === activeTabId) {
+      setDocumentTitle(newTitle);
+    }
+  };
+
+  // Switch App from TitleBar
+  const handleSwitchApp = (app: OfficeAppId) => {
+    setActiveApp(app);
+    setActiveSection('office');
+    const existing = tabs.find(t => t.appId === app);
+    if (existing) {
+      handleSelectTab(existing.id);
+    } else {
+      handleNewTab(app);
+    }
   };
 
   // Common typography & zoom
@@ -195,30 +453,18 @@ export default function App() {
 
   const [pageColor, setPageColor] = useState<string>('#ffffff');
 
-  const [comments, setComments] = useState<DocumentComment[]>([
-    {
-      id: 'c1',
-      author: 'المدير التنفيذي',
-      date: 'منذ ساعتين',
-      text: 'يرجى مراجعة مؤشرات الأداء وجدول الميزانية قبل الاعتماد النهائي.',
-      selectedTextSnippet: 'تقرير استراتيجي شامل',
-      resolved: false,
-    },
-  ]);
+  const [comments, setComments] = useState<DocumentComment[]>([]);
 
   const [stats, setStats] = useState<DocumentStats>({
     pages: 1,
-    words: 140,
-    charactersNoSpaces: 720,
-    charactersWithSpaces: 860,
-    paragraphs: 6,
-    lines: 18,
+    words: 0,
+    charactersNoSpaces: 0,
+    charactersWithSpaces: 0,
+    paragraphs: 0,
+    lines: 0,
   });
 
-  const [headings, setHeadings] = useState<{ id: string; text: string; level: number }[]>([
-    { id: 'h1', text: '1. المقدمة والأهداف العامة', level: 1 },
-    { id: 'h2', text: '2. جدول مؤشرات الأداء والنتائج', level: 1 },
-  ]);
+  const [headings, setHeadings] = useState<{ id: string; text: string; level: number }[]>([]);
 
   // Recalculate Word statistics dynamically & track save state
   const handleContentChange = useCallback(() => {
@@ -246,7 +492,8 @@ export default function App() {
       });
     });
     setHeadings(newHeadings);
-  }, []);
+    setTabs(prev => prev.map(t => t.id === activeTabId && t.appId === 'docs' ? { ...t, content: html, isModified: true } : t));
+  }, [activeTabId]);
 
   // Quick Manual Save (When clicking the Save button with green/orange dot)
   const handleQuickSave = useCallback(() => {
@@ -330,20 +577,53 @@ export default function App() {
           const raw = await file.text();
           html = raw.includes('<p') ? raw : `<p style="white-space: pre-wrap;">${raw}</p>`;
         }
-        handleApplyTemplate(html, fileName);
-        setActiveApp('docs');
-        setActiveSection('office');
-        addNotification(`تم فتح مستند Word "${fileName}" بنجاح مع كافة التنسيقات والجداول والفقرات!`, 'success');
+        
+        const newTab: DocumentTabItem = {
+          id: `tab_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+          appId: 'docs',
+          title: fileName,
+          content: html,
+          createdAt: Date.now(),
+        };
+        setTabs(prev => [...prev, newTab]);
+        setActiveTabId(newTab.id);
+        localVault.set('infinity_office_active_tab_id', newTab.id);
+        setActiveAppState('docs');
+        localVault.set(localVault.KEYS.ACTIVE_APP, 'docs');
+        setActiveSectionState('office');
+        localVault.set('infinity_office_active_section', 'office');
+        setDocumentTitleState(fileName);
+        localVault.set('infinity_office_doc_title', fileName);
+        setWordInitialHtml(html);
+        if (editorRef.current) {
+          editorRef.current.innerHTML = html;
+          handleContentChange();
+        }
+        addNotification(`تم فتح مستند Word "${fileName}" في تبويب مستقل بنجاح بكافة التنسيقات والخطوط!`, 'success');
       } else if (ext === 'xlsx' || ext === 'xls' || (ext === 'csv' && activeApp !== 'base')) {
         addNotification(`جاري قراءة وتحليل مصنف Excel "${fileName}"...`, 'info');
         const parsedSheets = await parseExcelFile(file);
         if (parsedSheets && Object.keys(parsedSheets).length > 0) {
-          setExcelData(parsedSheets);
+          const newTab: DocumentTabItem = {
+            id: `tab_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+            appId: 'sheets',
+            title: fileName,
+            content: parsedSheets,
+            createdAt: Date.now(),
+          };
+          setTabs(prev => [...prev, newTab]);
+          setActiveTabId(newTab.id);
+          localVault.set('infinity_office_active_tab_id', newTab.id);
+          setExcelDataState(parsedSheets);
           localVault.set(localVault.KEYS.SHEETS_DATA, parsedSheets);
-          setDocumentTitle(fileName);
-          setActiveApp('sheets');
-          setActiveSection('office');
-          addNotification(`تم فتح ملف Excel "${fileName}" بنجاح بكافة أوراق العمل والصيغ الحسابية!`, 'success');
+          setActiveAppState('sheets');
+          localVault.set(localVault.KEYS.ACTIVE_APP, 'sheets');
+          setActiveSectionState('office');
+          localVault.set('infinity_office_active_section', 'office');
+          setDocumentTitleState(fileName);
+          localVault.set('infinity_office_doc_title', fileName);
+          setIsSaved(false);
+          addNotification(`تم فتح ملف Excel "${fileName}" في تبويب مستقل بنجاح بكافة الجداول والصيغ والتنسيقات!`, 'success');
         } else {
           addNotification('تعذر استخراج أوراق العمل من ملف Excel', 'error');
         }
@@ -351,12 +631,26 @@ export default function App() {
         addNotification(`جاري استخراج شرائح عرض PowerPoint "${fileName}"...`, 'info');
         const parsedSlides = await parsePptxFile(file);
         if (parsedSlides && parsedSlides.length > 0) {
-          setSlidesData(parsedSlides);
+          const newTab: DocumentTabItem = {
+            id: `tab_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+            appId: 'slides',
+            title: fileName,
+            content: parsedSlides,
+            createdAt: Date.now(),
+          };
+          setTabs(prev => [...prev, newTab]);
+          setActiveTabId(newTab.id);
+          localVault.set('infinity_office_active_tab_id', newTab.id);
+          setSlidesDataState(parsedSlides);
           localVault.set(localVault.KEYS.SLIDES_DATA, parsedSlides);
-          setDocumentTitle(fileName);
-          setActiveApp('slides');
-          setActiveSection('office');
-          addNotification(`تم فتح عرض PowerPoint "${fileName}" بنجاح مع استخراج (${parsedSlides.length}) شريحة بتنسيقاتها!`, 'success');
+          setActiveAppState('slides');
+          localVault.set(localVault.KEYS.ACTIVE_APP, 'slides');
+          setActiveSectionState('office');
+          localVault.set('infinity_office_active_section', 'office');
+          setDocumentTitleState(fileName);
+          localVault.set('infinity_office_doc_title', fileName);
+          setIsSaved(false);
+          addNotification(`تم فتح عرض PowerPoint "${fileName}" في تبويب مستقل بنجاح (${parsedSlides.length} شريحة)!`, 'success');
         } else {
           addNotification('تعذر استخراج شرائح العرض من ملف PowerPoint', 'error');
         }
@@ -364,29 +658,75 @@ export default function App() {
         addNotification(`جاري قراءة واستيراد قاعدة بيانات Access "${fileName}"...`, 'info');
         const tables = await parseAccessFile(file);
         if (tables && tables.length > 0) {
-          setAccessData(tables);
+          const newTab: DocumentTabItem = {
+            id: `tab_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+            appId: 'base',
+            title: fileName,
+            content: tables,
+            createdAt: Date.now(),
+          };
+          setTabs(prev => [...prev, newTab]);
+          setActiveTabId(newTab.id);
+          localVault.set('infinity_office_active_tab_id', newTab.id);
+          setAccessDataState(tables);
           localVault.set(localVault.KEYS.BASE_DATA, tables);
-          setDocumentTitle(fileName);
-          setActiveApp('base');
-          setActiveSection('office');
-          addNotification(`تم فتح قاعدة بيانات Access "${fileName}" بنجاح مع استيراد الجداول والسجلات!`, 'success');
+          setActiveAppState('base');
+          localVault.set(localVault.KEYS.ACTIVE_APP, 'base');
+          setActiveSectionState('office');
+          localVault.set('infinity_office_active_section', 'office');
+          setDocumentTitleState(fileName);
+          localVault.set('infinity_office_doc_title', fileName);
+          setIsSaved(false);
+          addNotification(`تم فتح قاعدة بيانات Access "${fileName}" في تبويب مستقل بنجاح!`, 'success');
         } else {
           addNotification('تعذر قراءة الجداول من ملف Access', 'error');
         }
       } else if (ext === 'pdf') {
         addNotification(`جاري فتح مستند PDF "${fileName}"...`, 'info');
+        const newTab: DocumentTabItem = {
+          id: `tab_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+          appId: 'pdf',
+          title: fileName,
+          content: file,
+          createdAt: Date.now(),
+        };
+        setTabs(prev => [...prev, newTab]);
+        setActiveTabId(newTab.id);
+        localVault.set('infinity_office_active_tab_id', newTab.id);
         setPdfFile(file);
-        setDocumentTitle(fileName);
-        setActiveApp('pdf');
-        setActiveSection('office');
-        addNotification(`تم فتح مستند PDF "${fileName}" بنجاح مع تفعيل أدوات التوقيع والأختام!`, 'success');
+        setActiveAppState('pdf');
+        localVault.set(localVault.KEYS.ACTIVE_APP, 'pdf');
+        setActiveSectionState('office');
+        localVault.set('infinity_office_active_section', 'office');
+        setDocumentTitleState(fileName);
+        localVault.set('infinity_office_doc_title', fileName);
+        addNotification(`تم فتح مستند PDF "${fileName}" في تبويب مستقل بنجاح!`, 'success');
       } else {
         // Fallback: try as Word text
         const text = await file.text();
-        handleApplyTemplate(`<p style="white-space: pre-wrap;">${text}</p>`, fileName);
-        setActiveApp('docs');
-        setActiveSection('office');
-        addNotification(`تم استيراد الملف "${fileName}" بنجاح`, 'info');
+        const html = `<p style="white-space: pre-wrap;">${text}</p>`;
+        const newTab: DocumentTabItem = {
+          id: `tab_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+          appId: 'docs',
+          title: fileName,
+          content: html,
+          createdAt: Date.now(),
+        };
+        setTabs(prev => [...prev, newTab]);
+        setActiveTabId(newTab.id);
+        localVault.set('infinity_office_active_tab_id', newTab.id);
+        setActiveAppState('docs');
+        localVault.set(localVault.KEYS.ACTIVE_APP, 'docs');
+        setActiveSectionState('office');
+        localVault.set('infinity_office_active_section', 'office');
+        setDocumentTitleState(fileName);
+        localVault.set('infinity_office_doc_title', fileName);
+        setWordInitialHtml(html);
+        if (editorRef.current) {
+          editorRef.current.innerHTML = html;
+          handleContentChange();
+        }
+        addNotification(`تم استيراد الملف "${fileName}" في تبويب مستقل بنجاح`, 'info');
       }
     } catch (err: unknown) {
       console.error('Error in handleFileUpload:', err);
@@ -509,7 +849,7 @@ export default function App() {
         // Fallback for other apps (Notes, Photo)
         const res = await saveFileDirectlyToDevice({
           filename: documentTitle,
-          data: 'Infinity Office Sovereign Document',
+          data: 'MY-DOC Office Sovereign Document',
           mimeType: 'text/plain',
           primaryExtension: activeApp === 'photo' ? 'png' : 'txt',
           description: 'مستند سيادي',
@@ -859,14 +1199,11 @@ export default function App() {
       {/* 1. Master Suite Launcher & Title Bar */}
       <TitleBar
         activeApp={activeApp}
-        setActiveApp={(app) => {
-          setActiveApp(app);
-          setActiveSection('office');
-        }}
+        setActiveApp={handleSwitchApp}
         activeSection={activeSection}
         setActiveSection={setActiveSection}
         documentTitle={documentTitle}
-        setDocumentTitle={setDocumentTitle}
+        setDocumentTitle={(t) => handleRenameTab(activeTabId, t)}
         onOpenBackstage={() => setIsBackstageOpen(true)}
         onUploadFile={handleFileUpload}
         onSaveToDevice={handleSaveToDevice}
@@ -874,6 +1211,18 @@ export default function App() {
         isSaved={isSaved}
         autoSaveCountdown={autoSaveCountdown}
         onQuickSave={handleQuickSave}
+      />
+
+      {/* 2. Persistent Multi-Document Tabs Bar */}
+      <DocumentTabsBar
+        activeApp={activeApp}
+        tabs={tabs}
+        activeTabId={activeTabId}
+        onSelectTab={handleSelectTab}
+        onCloseTab={handleCloseTab}
+        onNewTab={() => handleNewTab()}
+        onUploadFile={handleFileUpload}
+        onRenameTab={handleRenameTab}
       />
 
       {/* 2. Main Workspace Body */}
@@ -955,6 +1304,7 @@ export default function App() {
                   isSplitView={isSplitView}
                   onToggleSplitView={() => setIsSplitView(!isSplitView)}
                   onViewModeChange={setViewMode}
+                  initialHtml={wordInitialHtml}
                   onOpenCommentForSelection={(snippet) => {
                     setShowCommentsDrawer(true);
                     handleAddComment('يرجى مراجعة هذا الجزء من النص للتأكيد.', snippet);

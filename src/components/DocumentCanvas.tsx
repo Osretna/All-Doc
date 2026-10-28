@@ -15,6 +15,12 @@ import {
 } from 'lucide-react';
 import { PageSetup, WatermarkConfig, PageBorderConfig, ViewMode } from '../types/word';
 import { executeCommand, insertHTMLAtCursor } from '../utils/editorCommands';
+import { WordContextMenu } from './docs/WordContextMenu';
+import { WordFontModal } from './docs/modals/WordFontModal';
+import { WordParagraphModal } from './docs/modals/WordParagraphModal';
+import { WordSmartLookupModal } from './docs/modals/WordSmartLookupModal';
+import { WordTranslateModal } from './docs/modals/WordTranslateModal';
+import { WordHyperlinkModal } from './docs/modals/WordHyperlinkModal';
 
 interface DocumentCanvasProps {
   editorRef: React.RefObject<HTMLDivElement | null>;
@@ -30,6 +36,7 @@ interface DocumentCanvasProps {
   isSplitView?: boolean;
   onToggleSplitView?: () => void;
   onViewModeChange?: (mode: ViewMode) => void;
+  initialHtml?: string;
 }
 
 export const DocumentCanvas: React.FC<DocumentCanvasProps> = ({
@@ -46,13 +53,129 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = ({
   isSplitView = false,
   onToggleSplitView,
   onViewModeChange,
+  initialHtml,
 }) => {
   const [miniToolbarPos, setMiniToolbarPos] = useState<{ x: number; y: number } | null>(null);
   const [selectedSnippet, setSelectedSnippet] = useState('');
   const containerRef = useRef<HTMLDivElement>(null);
+  const savedRangeRef = useRef<Range | null>(null);
+
+  // Word Selection Right-Click Context Menu states
+  const [contextMenuPos, setContextMenuPos] = useState<{ x: number; y: number } | null>(null);
+  const [contextSelectedText, setContextSelectedText] = useState('');
+
+  // Modals triggered from Word Context Menu
+  const [isFontModalOpen, setIsFontModalOpen] = useState(false);
+  const [isParagraphModalOpen, setIsParagraphModalOpen] = useState(false);
+  const [isSmartLookupOpen, setIsSmartLookupOpen] = useState(false);
+  const [isTranslateOpen, setIsTranslateOpen] = useState(false);
+  const [isHyperlinkOpen, setIsHyperlinkOpen] = useState(false);
+
+  // Format Painter state
+  const [formatPainterStyle, setFormatPainterStyle] = useState<{
+    fontFamily: string;
+    fontSize: string;
+    fontWeight: string;
+    fontStyle: string;
+    color: string;
+    backgroundColor: string;
+  } | null>(null);
+
+  useEffect(() => {
+    if (editorRef.current && initialHtml !== undefined) {
+      editorRef.current.innerHTML = initialHtml || '<p><br></p>';
+      onContentChange();
+    }
+  }, [initialHtml]);
+
+  // Save current selection range helper
+  const captureCurrentRange = () => {
+    const sel = window.getSelection();
+    if (sel && sel.rangeCount > 0) {
+      savedRangeRef.current = sel.getRangeAt(0).cloneRange();
+      const txt = sel.toString();
+      setContextSelectedText(txt);
+      return { sel, range: savedRangeRef.current, text: txt };
+    }
+    return null;
+  };
+
+  // Restore saved selection range helper
+  const restoreRange = () => {
+    if (savedRangeRef.current) {
+      const sel = window.getSelection();
+      if (sel) {
+        sel.removeAllRanges();
+        sel.addRange(savedRangeRef.current);
+      }
+    }
+  };
+
+  // Handle right-click context menu (onContextMenu)
+  const handleContextMenu = (e: React.MouseEvent) => {
+    e.preventDefault();
+    const sel = window.getSelection();
+    let txt = sel ? sel.toString().trim() : '';
+
+    // If no text was explicitly highlighted, try selecting the word under the cursor
+    if (!txt && (document as any).caretRangeFromPoint) {
+      const caretRange = (document as any).caretRangeFromPoint(e.clientX, e.clientY);
+      if (caretRange && editorRef.current?.contains(caretRange.startContainer)) {
+        sel?.removeAllRanges();
+        sel?.addRange(caretRange);
+        try {
+          (sel as any)?.modify?.('move', 'backward', 'word');
+          (sel as any)?.modify?.('extend', 'forward', 'word');
+          txt = sel?.toString().trim() || '';
+        } catch {
+          // ignore
+        }
+      }
+    }
+
+    if (sel && sel.rangeCount > 0) {
+      savedRangeRef.current = sel.getRangeAt(0).cloneRange();
+    }
+    setContextSelectedText(txt);
+    setSelectedSnippet(txt);
+    setMiniToolbarPos(null); // Full context menu already includes the top mini toolbar
+    setContextMenuPos({ x: e.clientX, y: e.clientY });
+  };
 
   // Handle selection for floating mini-toolbar
   const handleMouseUp = () => {
+    captureCurrentRange();
+
+    // If Format Painter is primed, apply it to newly selected text!
+    if (formatPainterStyle) {
+      const sel = window.getSelection();
+      if (sel && !sel.isCollapsed && sel.rangeCount > 0) {
+        const span = document.createElement('span');
+        span.style.fontFamily = formatPainterStyle.fontFamily;
+        span.style.fontSize = formatPainterStyle.fontSize;
+        span.style.fontWeight = formatPainterStyle.fontWeight;
+        span.style.fontStyle = formatPainterStyle.fontStyle;
+        span.style.color = formatPainterStyle.color;
+        if (formatPainterStyle.backgroundColor && formatPainterStyle.backgroundColor !== 'rgba(0, 0, 0, 0)') {
+          span.style.backgroundColor = formatPainterStyle.backgroundColor;
+        }
+
+        const range = sel.getRangeAt(0);
+        try {
+          range.surroundContents(span);
+        } catch {
+          document.execCommand('fontName', false, formatPainterStyle.fontFamily);
+          document.execCommand('foreColor', false, formatPainterStyle.color);
+        }
+        setFormatPainterStyle(null);
+        onContentChange();
+        return;
+      }
+    }
+
+    // Don't show standalone mini toolbar if context menu is active
+    if (contextMenuPos) return;
+
     const selection = window.getSelection();
     if (!selection || selection.isCollapsed || !selection.toString().trim()) {
       setMiniToolbarPos(null);
@@ -69,6 +192,170 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = ({
         x: rect.left + rect.width / 2,
         y: Math.max(10, rect.top - 45),
       });
+    }
+  };
+
+  // Execute formatting command safely on current or saved range
+  const handleExecCommand = (cmd: string, val: string = '') => {
+    restoreRange();
+    try {
+      document.execCommand(cmd, false, val);
+      onContentChange();
+    } catch (err) {
+      console.error(`Command error ${cmd}:`, err);
+    }
+  };
+
+  // Replace selected text with a new string (e.g. from Synonyms or Translate)
+  const handleReplaceSelectedText = (newText: string) => {
+    restoreRange();
+    const sel = window.getSelection();
+    if (sel && sel.rangeCount > 0) {
+      const range = sel.getRangeAt(0);
+      range.deleteContents();
+      const textNode = document.createTextNode(newText);
+      range.insertNode(textNode);
+      range.setStartAfter(textNode);
+      range.collapse(true);
+      sel.removeAllRanges();
+      sel.addRange(range);
+      onContentChange();
+    } else {
+      document.execCommand('insertText', false, newText);
+      onContentChange();
+    }
+  };
+
+  // Arm Format Painter
+  const handleArmFormatPainter = () => {
+    const sel = window.getSelection();
+    if (sel && sel.anchorNode) {
+      const parentEl =
+        sel.anchorNode.nodeType === Node.ELEMENT_NODE
+          ? (sel.anchorNode as HTMLElement)
+          : sel.anchorNode.parentElement;
+      if (parentEl) {
+        const computed = window.getComputedStyle(parentEl);
+        setFormatPainterStyle({
+          fontFamily: computed.fontFamily,
+          fontSize: computed.fontSize,
+          fontWeight: computed.fontWeight,
+          fontStyle: computed.fontStyle,
+          color: computed.color,
+          backgroundColor: computed.backgroundColor,
+        });
+      }
+    }
+    setContextMenuPos(null);
+  };
+
+  // Apply Font Modal options
+  const handleApplyFont = (cfg: {
+    fontFamily: string;
+    fontSize: string;
+    isBold: boolean;
+    isItalic: boolean;
+    color: string;
+    underline: boolean;
+    strikethrough: boolean;
+    superscript: boolean;
+    subscript: boolean;
+  }) => {
+    restoreRange();
+    const sel = window.getSelection();
+    if (sel && sel.rangeCount > 0) {
+      const span = document.createElement('span');
+      span.style.fontFamily = cfg.fontFamily;
+      span.style.fontSize = `${cfg.fontSize}px`;
+      span.style.fontWeight = cfg.isBold ? 'bold' : 'normal';
+      span.style.fontStyle = cfg.isItalic ? 'italic' : 'normal';
+      span.style.color = cfg.color;
+      span.style.textDecoration = `${cfg.underline ? 'underline' : ''} ${
+        cfg.strikethrough ? 'line-through' : ''
+      }`.trim() || 'none';
+      span.style.verticalAlign = cfg.superscript ? 'super' : cfg.subscript ? 'sub' : 'baseline';
+
+      try {
+        const range = sel.getRangeAt(0);
+        range.surroundContents(span);
+      } catch {
+        document.execCommand('fontName', false, cfg.fontFamily);
+        document.execCommand('foreColor', false, cfg.color);
+        if (cfg.isBold) document.execCommand('bold');
+        if (cfg.isItalic) document.execCommand('italic');
+        if (cfg.underline) document.execCommand('underline');
+        if (cfg.strikethrough) document.execCommand('strikeThrough');
+      }
+      onContentChange();
+    }
+  };
+
+  // Apply Paragraph Modal options
+  const handleApplyParagraph = (cfg: {
+    alignment: 'right' | 'center' | 'left' | 'justify';
+    lineSpacing: string;
+    indentLeft: number;
+    indentRight: number;
+    spaceBefore: number;
+    spaceAfter: number;
+    direction: 'rtl' | 'ltr';
+  }) => {
+    restoreRange();
+    const sel = window.getSelection();
+    let targetBlock: HTMLElement | null = null;
+
+    if (sel && sel.anchorNode) {
+      let curr: Node | null = sel.anchorNode;
+      while (curr && curr !== editorRef.current) {
+        if (
+          curr.nodeType === Node.ELEMENT_NODE &&
+          ['P', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'DIV', 'LI', 'BLOCKQUOTE'].includes(
+            (curr as HTMLElement).tagName
+          )
+        ) {
+          targetBlock = curr as HTMLElement;
+          break;
+        }
+        curr = curr.parentNode;
+      }
+    }
+
+    if (targetBlock) {
+      targetBlock.style.textAlign = cfg.alignment;
+      targetBlock.style.lineHeight = cfg.lineSpacing;
+      targetBlock.style.marginRight = `${cfg.indentRight}px`;
+      targetBlock.style.marginLeft = `${cfg.indentLeft}px`;
+      targetBlock.style.marginTop = `${cfg.spaceBefore}px`;
+      targetBlock.style.marginBottom = `${cfg.spaceAfter}px`;
+      targetBlock.style.direction = cfg.direction;
+      onContentChange();
+    } else {
+      document.execCommand('justify' + cfg.alignment.charAt(0).toUpperCase() + cfg.alignment.slice(1));
+      onContentChange();
+    }
+  };
+
+  // Apply Hyperlink Modal options
+  const handleApplyHyperlink = (url: string, display: string) => {
+    restoreRange();
+    const sel = window.getSelection();
+    if (sel && sel.rangeCount > 0) {
+      const range = sel.getRangeAt(0);
+      const a = document.createElement('a');
+      a.href = url.startsWith('http') ? url : `https://${url}`;
+      a.target = '_blank';
+      a.rel = 'noopener noreferrer';
+      a.innerText = display || contextSelectedText || url;
+      a.style.color = '#0078d7';
+      a.style.textDecoration = 'underline';
+
+      range.deleteContents();
+      range.insertNode(a);
+      range.setStartAfter(a);
+      range.collapse(true);
+      sel.removeAllRanges();
+      sel.addRange(range);
+      onContentChange();
     }
   };
 
@@ -126,9 +413,46 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = ({
         showGridlines ? 'show-gridlines' : ''
       }`}
       onMouseUp={handleMouseUp}
+      onContextMenu={handleContextMenu}
     >
-      {/* Floating Mini Toolbar */}
-      {miniToolbarPos && (
+      {/* Word Right-Click Context Menu with Mini Toolbar */}
+      {contextMenuPos && (
+        <WordContextMenu
+          position={contextMenuPos}
+          selectedText={contextSelectedText}
+          onClose={() => setContextMenuPos(null)}
+          onExecCommand={handleExecCommand}
+          onOpenFontModal={() => {
+            setContextMenuPos(null);
+            setIsFontModalOpen(true);
+          }}
+          onOpenParagraphModal={() => {
+            setContextMenuPos(null);
+            setIsParagraphModalOpen(true);
+          }}
+          onOpenSmartLookup={() => {
+            setContextMenuPos(null);
+            setIsSmartLookupOpen(true);
+          }}
+          onOpenTranslate={() => {
+            setContextMenuPos(null);
+            setIsTranslateOpen(true);
+          }}
+          onOpenHyperlink={() => {
+            setContextMenuPos(null);
+            setIsHyperlinkOpen(true);
+          }}
+          onOpenNewComment={() => {
+            setContextMenuPos(null);
+            onOpenCommentForSelection(contextSelectedText || selectedSnippet);
+          }}
+          onReplaceSelectedText={handleReplaceSelectedText}
+          onFormatPainter={handleArmFormatPainter}
+        />
+      )}
+
+      {/* Floating Mini Toolbar (shown on simple text highlight when context menu is closed) */}
+      {miniToolbarPos && !contextMenuPos && (
         <div 
           className="mini-toolbar fixed z-50 bg-white border border-slate-300 rounded-lg shadow-xl px-2 py-1 flex items-center gap-1 -translate-x-1/2 animate-in fade-in zoom-in-95 duration-100"
           style={{ top: `${miniToolbarPos.y}px`, left: `${miniToolbarPos.x}px` }}
@@ -270,69 +594,15 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = ({
             contentEditable={viewMode !== 'read'}
             suppressContentEditableWarning
             onInput={onContentChange}
+            onContextMenu={handleContextMenu}
             className={`word-editor relative z-10 text-base leading-relaxed text-slate-800 focus:outline-none min-h-[700px] select-text ${
               viewMode === 'outline' ? 'outline-mode' : ''
             }`}
             style={columnStyle}
           >
-            <h1 className="text-3xl font-extrabold text-[#2b579a] mb-3 pb-1 border-b-2 border-[#2b579a]/20">
-              تقرير استراتيجي شامل: تطوير منظومة الأعمال الرقمية
-            </h1>
-            <p className="text-slate-500 font-medium mb-4 text-sm">
-              وثيقة تنظيمية موحدة صادرة بتاريخ {new Date().toLocaleDateString('ar-EG')}
-            </p>
-
-            <h2 className="text-xl font-bold text-slate-800 mt-4 mb-2">
-              1. المقدمة والأهداف العامة
-            </h2>
-            <p className="mb-3 text-justify leading-loose">
-              يهدف هذا المستند إلى استعراض أحدث المعايير في تنظيم وإدارة المستندات الرقمية باستخدام أدوات مايكروسوفت وورد المتطورة. يتيح التطبيق تحكماً كاملاً في تنسيقات الخطوط، الفقرات، الجداول التفاعلية، الرسوم البيانية، وإدراج الوسائط مع دعم كامل للطباعة والتصدير بجودة عالية.
-            </p>
-
-            <h2 className="text-xl font-bold text-slate-800 mt-5 mb-2">
-              2. جدول مؤشرات الأداء والنتائج
-            </h2>
-            
-            <div className="my-4 overflow-x-auto" contentEditable="true">
-              <table className="w-full border-collapse border border-slate-300 text-sm">
-                <thead>
-                  <tr className="bg-[#2b579a] text-white font-bold">
-                    <th className="border border-slate-300 p-2.5 text-right">المرحلة</th>
-                    <th className="border border-slate-300 p-2.5 text-right">المستهدف</th>
-                    <th className="border border-slate-300 p-2.5 text-right">نسبة الإنجاز</th>
-                    <th className="border border-slate-300 p-2.5 text-right">الحالة</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr className="hover:bg-blue-50/40">
-                    <td className="border border-slate-300 p-2">التصميم والواجهة Ribbon</td>
-                    <td className="border border-slate-300 p-2">100% مطابقة لمعايير Office</td>
-                    <td className="border border-slate-300 p-2 font-mono font-bold text-emerald-600">100%</td>
-                    <td className="border border-slate-300 p-2 text-emerald-700 font-bold">مكتمل بنجاح</td>
-                  </tr>
-                  <tr className="bg-slate-50/50 hover:bg-blue-50/40">
-                    <td className="border border-slate-300 p-2">أدوات التحرير والخطوط</td>
-                    <td className="border border-slate-300 p-2">دعم كامل لجميع التنسيقات</td>
-                    <td className="border border-slate-300 p-2 font-mono font-bold text-emerald-600">100%</td>
-                    <td className="border border-slate-300 p-2 text-emerald-700 font-bold">مكتمل بنجاح</td>
-                  </tr>
-                  <tr className="hover:bg-blue-50/40">
-                    <td className="border border-slate-300 p-2">التصدير والطباعة</td>
-                    <td className="border border-slate-300 p-2">تصدير Word و PDF</td>
-                    <td className="border border-slate-300 p-2 font-mono font-bold text-emerald-600">100%</td>
-                    <td className="border border-slate-300 p-2 text-emerald-700 font-bold">مكتمل بنجاح</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-
-            <blockquote className="p-3 my-4 bg-blue-50/70 border-r-4 border-[#2b579a] text-slate-700 italic text-sm rounded-l">
-              &ldquo;التفاصيل الدقيقة والالتزام بأعلى معايير تجربة المستخدم هي التي تجعل أداة التحرير تجربة سلسة وملهمة.&rdquo;
-            </blockquote>
-
-            <p className="mb-3 text-justify leading-loose">
-              يمكنك البدء مباشرة في الكتابة، تحرير النصوص، إضافة جداول، تغيير اتجاه الورقة إلى أفقي أو عمودي من تبويب تخطيط، أو إضافة علامة مائية وحدود أنيقة من تبويب تصميم.
-            </p>
+            {initialHtml !== undefined ? null : (
+              <p><br /></p>
+            )}
           </div>
 
           {/* Footnotes Zone */}
@@ -378,6 +648,45 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = ({
           </div>
         )}
       </div>
+
+      {/* Context Menu Modals */}
+      <WordFontModal
+        isOpen={isFontModalOpen}
+        onClose={() => setIsFontModalOpen(false)}
+        onApply={handleApplyFont}
+        initialValues={{
+          fontFamily: 'Cairo',
+          fontSize: '14',
+          color: '#0f172a',
+        }}
+      />
+
+      <WordParagraphModal
+        isOpen={isParagraphModalOpen}
+        onClose={() => setIsParagraphModalOpen(false)}
+        onApply={handleApplyParagraph}
+      />
+
+      <WordSmartLookupModal
+        isOpen={isSmartLookupOpen}
+        onClose={() => setIsSmartLookupOpen(false)}
+        selectedText={contextSelectedText}
+        onInsertText={handleReplaceSelectedText}
+      />
+
+      <WordTranslateModal
+        isOpen={isTranslateOpen}
+        onClose={() => setIsTranslateOpen(false)}
+        selectedText={contextSelectedText}
+        onReplaceText={handleReplaceSelectedText}
+      />
+
+      <WordHyperlinkModal
+        isOpen={isHyperlinkOpen}
+        onClose={() => setIsHyperlinkOpen(false)}
+        selectedText={contextSelectedText}
+        onInsertLink={handleApplyHyperlink}
+      />
     </div>
   );
 };

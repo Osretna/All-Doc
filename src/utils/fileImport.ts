@@ -3,7 +3,7 @@ import JSZip from 'jszip';
 import { SheetData, SlideItem, DbTable, DbField } from '../types';
 
 /**
- * Parses real binary .docx file and converts to styled HTML with images, tables, headings, and formatting
+ * Parses real binary .docx file and converts to high-fidelity styled HTML with fonts, colors, images, tables, headings, and formatting
  */
 export async function parseDocxFile(file: File): Promise<string> {
   try {
@@ -23,16 +23,24 @@ export async function parseDocxFile(file: File): Promise<string> {
       return `<p>${escapeHtml(text)}</p>`;
     }
 
-    // 1. Extract embedded media images
+    // 1. Extract embedded media images (jpg, png, svg, gif, webp, emf)
     const mediaMap: Record<string, string> = {};
     const mediaFiles = Object.keys(zip.files).filter((n) => n.startsWith('word/media/'));
     for (const mPath of mediaFiles) {
       const fileData = await zip.file(mPath)!.async('base64');
       const ext = mPath.split('.').pop()?.toLowerCase() || 'png';
-      const mime = ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : ext === 'gif' ? 'image/gif' : 'image/png';
+      const mime =
+        ext === 'jpg' || ext === 'jpeg'
+          ? 'image/jpeg'
+          : ext === 'gif'
+          ? 'image/gif'
+          : ext === 'svg'
+          ? 'image/svg+xml'
+          : 'image/png';
       const fileName = mPath.split('/').pop() || '';
-      mediaMap[fileName] = `data:${mime};base64,${fileData}`;
-      mediaMap[mPath] = `data:${mime};base64,${fileData}`;
+      const dataUri = `data:${mime};base64,${fileData}`;
+      mediaMap[fileName] = dataUri;
+      mediaMap[mPath] = dataUri;
     }
 
     // 2. Read relationships to map rId -> media file
@@ -67,14 +75,18 @@ export async function parseDocxFile(file: File): Promise<string> {
       if (node.nodeName === 'w:p') {
         let pText = '';
         let isHeading = false;
+        let headingLevel = 2;
         let align = 'right';
 
         const pPr = node.getElementsByTagName('w:pPr')[0];
         if (pPr) {
           const pStyle = pPr.getElementsByTagName('w:pStyle')[0];
           const val = pStyle?.getAttribute('w:val') || '';
-          if (val.includes('Heading') || val.includes('Title') || val === '1' || val === '2') {
+          if (val.includes('Heading') || val.includes('Title') || val === '1' || val === '2' || val === '3') {
             isHeading = true;
+            if (val.includes('1')) headingLevel = 1;
+            else if (val.includes('2')) headingLevel = 2;
+            else if (val.includes('3')) headingLevel = 3;
           }
           const jc = pPr.getElementsByTagName('w:jc')[0];
           if (jc) {
@@ -82,6 +94,7 @@ export async function parseDocxFile(file: File): Promise<string> {
             if (jcVal === 'center') align = 'center';
             else if (jcVal === 'left') align = 'left';
             else if (jcVal === 'right') align = 'right';
+            else if (jcVal === 'both') align = 'justify';
           }
         }
 
@@ -90,7 +103,7 @@ export async function parseDocxFile(file: File): Promise<string> {
         for (const blip of Array.from(blips)) {
           const embedId = blip.getAttribute('r:embed');
           if (embedId && relsMap[embedId]) {
-            pText += `<div style="text-align: ${align}; margin: 12px 0;"><img src="${relsMap[embedId]}" style="max-width: 90%; max-height: 400px; border-radius: 6px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);" /></div>`;
+            pText += `<div style="text-align: ${align}; margin: 16px 0;"><img src="${relsMap[embedId]}" style="max-width: 95%; max-height: 450px; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.12); display: inline-block;" /></div>`;
           }
         }
 
@@ -100,7 +113,13 @@ export async function parseDocxFile(file: File): Promise<string> {
           const b = rPr?.getElementsByTagName('w:b')[0];
           const i = rPr?.getElementsByTagName('w:i')[0];
           const u = rPr?.getElementsByTagName('w:u')[0];
-          const color = rPr?.getElementsByTagName('w:color')[0]?.getAttribute('w:val');
+          const strike = rPr?.getElementsByTagName('w:strike')[0];
+          const colorAttr = rPr?.getElementsByTagName('w:color')[0]?.getAttribute('w:val');
+          const highlightAttr = rPr?.getElementsByTagName('w:highlight')[0]?.getAttribute('w:val');
+          const rFonts = rPr?.getElementsByTagName('w:rFonts')[0];
+          const fontName = rFonts?.getAttribute('w:cs') || rFonts?.getAttribute('w:ascii');
+          const szAttr = rPr?.getElementsByTagName('w:sz')[0]?.getAttribute('w:val');
+          const fontSize = szAttr ? Math.round(parseInt(szAttr, 10) / 2) : undefined;
 
           let runText = '';
           const tTags = run.getElementsByTagName('w:t');
@@ -113,25 +132,47 @@ export async function parseDocxFile(file: File): Promise<string> {
             if (b) formatted = `<strong>${formatted}</strong>`;
             if (i) formatted = `<em>${formatted}</em>`;
             if (u) formatted = `<u>${formatted}</u>`;
-            if (color) formatted = `<span style="color: #${color};">${formatted}</span>`;
+            if (strike) formatted = `<s>${formatted}</s>`;
+
+            let styles: string[] = [];
+            if (colorAttr && colorAttr !== 'auto') {
+              styles.push(`color: #${colorAttr};`);
+            }
+            if (highlightAttr) {
+              const hlColor = highlightAttr === 'yellow' ? '#fef08a' : highlightAttr === 'green' ? '#bbf7d0' : '#e2e8f0';
+              styles.push(`background-color: ${hlColor}; padding: 0 2px;`);
+            }
+            if (fontName) {
+              styles.push(`font-family: '${fontName}', sans-serif;`);
+            }
+            if (fontSize) {
+              styles.push(`font-size: ${fontSize}pt;`);
+            }
+
+            if (styles.length > 0) {
+              formatted = `<span style="${styles.join(' ')}">${formatted}</span>`;
+            }
+
             pText += formatted;
           }
         }
 
         if (pText.trim()) {
           if (isHeading) {
-            html += `<h2 style="color: #0078d4; margin: 18px 0 8px 0; font-weight: 800; text-align: ${align};">${pText}</h2>\n`;
+            const color = headingLevel === 1 ? '#0078d4' : '#1e293b';
+            const size = headingLevel === 1 ? '1.5em' : '1.25em';
+            html += `<h${headingLevel} style="color: ${color}; font-size: ${size}; margin: 20px 0 10px 0; font-weight: 800; text-align: ${align}; line-height: 1.4;">${pText}</h${headingLevel}>\n`;
           } else {
             html += `<p style="line-height: 1.8; margin-bottom: 12px; text-align: ${align};">${pText}</p>\n`;
           }
         }
       } else if (node.nodeName === 'w:tbl') {
-        html += '<table border="1" style="width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13px;">\n';
+        html += '<table border="1" style="width: 100%; border-collapse: collapse; margin: 18px 0; font-size: 13px; border: 1px solid #cbd5e1;">\n';
         const rows = node.getElementsByTagName('w:tr');
         for (let r = 0; r < rows.length; r++) {
           const row = rows[r];
           const isHeader = r === 0;
-          html += `<tr style="${isHeader ? 'background-color: #f3f4f6; font-weight: bold;' : ''}">\n`;
+          html += `<tr style="${isHeader ? 'background-color: #f1f5f9; font-weight: bold; border-bottom: 2px solid #0078d4;' : ''}">\n`;
           const cells = row.getElementsByTagName('w:tc');
           for (const cell of Array.from(cells)) {
             let cellText = '';
@@ -139,8 +180,15 @@ export async function parseDocxFile(file: File): Promise<string> {
             for (const p of Array.from(pTags)) {
               cellText += p.textContent || '';
             }
+
+            // Cell Shading
+            const shd = cell.getElementsByTagName('w:shd')[0];
+            const shdFill = shd?.getAttribute('w:fill');
+            const cellBg = shdFill && shdFill !== 'auto' ? `#${shdFill}` : undefined;
+
             const tag = isHeader ? 'th' : 'td';
-            html += `  <${tag} style="padding: 8px 12px; border: 1px solid #d1d5db;">${escapeHtml(cellText)}</${tag}>\n`;
+            const bgStyle = cellBg ? `background-color: ${cellBg};` : '';
+            html += `  <${tag} style="padding: 8px 12px; border: 1px solid #cbd5e1; ${bgStyle}">${escapeHtml(cellText)}</${tag}>\n`;
           }
           html += '</tr>\n';
         }
@@ -164,11 +212,17 @@ export async function parseDocxFile(file: File): Promise<string> {
 }
 
 /**
- * Parses real binary .xlsx, .xls, or .csv files into Sheets
+ * Parses real binary .xlsx, .xls, or .csv files into Sheets with all formatting, formulas, cell styles, merges, and dimensions
  */
 export async function parseExcelFile(file: File): Promise<Record<string, { label: string; data: SheetData }>> {
   const arrayBuffer = await file.arrayBuffer();
-  const workbook = XLSX.read(arrayBuffer, { type: 'array', cellFormula: true, cellStyles: true });
+  const workbook = XLSX.read(arrayBuffer, {
+    type: 'array',
+    cellFormula: true,
+    cellStyles: true,
+    cellNF: true,
+    cellDates: true,
+  });
 
   const resultSheets: Record<string, { label: string; data: SheetData }> = {};
 
@@ -176,16 +230,18 @@ export async function parseExcelFile(file: File): Promise<Record<string, { label
     const worksheet = workbook.Sheets[sheetName];
     const sheetData: SheetData = {};
 
-    const range = XLSX.utils.decode_range(worksheet['!ref'] || 'A1:A1');
+    const range = XLSX.utils.decode_range(worksheet['!ref'] || 'A1:Z50');
 
-    for (let R = range.s.r; R <= Math.min(range.e.r, 50); ++R) {
-      for (let C = range.s.c; C <= Math.min(range.e.c, 26); ++C) {
+    // Parse all rows without artificial limits!
+    for (let R = range.s.r; R <= range.e.r; ++R) {
+      for (let C = range.s.c; C <= range.e.c; ++C) {
         const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
         const cell = worksheet[cellAddress];
         if (cell) {
           const val = cell.w !== undefined ? String(cell.w) : (cell.v !== undefined ? String(cell.v) : '');
           const formula = cell.f ? `=${cell.f}` : undefined;
 
+          // Determine Format
           let format: any = 'text';
           if (typeof cell.v === 'number') {
             if (val.includes('%')) format = 'percent';
@@ -193,15 +249,71 @@ export async function parseExcelFile(file: File): Promise<Record<string, { label
             else format = 'number';
           }
 
+          // Extract Cell Styles from XLSX if present
+          let bold = R === 0;
+          let italic = false;
+          let underline = false;
+          let bg: string | undefined = undefined;
+          let color: string | undefined = undefined;
+          let align: 'right' | 'center' | 'left' = typeof cell.v === 'number' ? 'center' : 'right';
+
+          if (cell.s) {
+            const s = cell.s;
+            if (s.font) {
+              if (s.font.bold || s.font.b) bold = true;
+              if (s.font.italic || s.font.i) italic = true;
+              if (s.font.underline || s.font.u) underline = true;
+              if (s.font.color?.rgb) color = `#${s.font.color.rgb}`;
+            }
+            if (s.fill) {
+              if (s.fill.fgColor?.rgb) bg = `#${s.fill.fgColor.rgb}`;
+              else if (s.fill.bgColor?.rgb) bg = `#${s.fill.bgColor.rgb}`;
+            }
+            if (s.alignment) {
+              if (s.alignment.horizontal === 'center') align = 'center';
+              else if (s.alignment.horizontal === 'left') align = 'left';
+              else if (s.alignment.horizontal === 'right') align = 'right';
+            }
+          }
+
           sheetData[cellAddress] = {
             value: val,
             formula: formula,
             format: format,
-            bold: R === 0 || R === 2,
-            bg: R === 0 ? '#107c41' : (R % 2 === 0 ? '#f8fafc' : '#ffffff'),
-            color: R === 0 ? '#ffffff' : '#0f172a',
-            align: typeof cell.v === 'number' ? 'center' : 'right',
+            bold: bold,
+            italic: italic,
+            underline: underline,
+            bg: bg || (R === 0 ? '#107c41' : undefined),
+            color: color || (R === 0 ? '#ffffff' : '#0f172a'),
+            align: align,
+            border: 'all',
           };
+        }
+      }
+    }
+
+    // Parse Worksheet Merged Cells (!merges)
+    if (worksheet['!merges'] && Array.isArray(worksheet['!merges'])) {
+      for (const m of worksheet['!merges']) {
+        const parentAddr = XLSX.utils.encode_cell({ r: m.s.r, c: m.s.c });
+        const colSpan = m.e.c - m.s.c + 1;
+        const rowSpan = m.e.r - m.s.r + 1;
+
+        if (!sheetData[parentAddr]) {
+          sheetData[parentAddr] = { value: '' };
+        }
+        sheetData[parentAddr].isMergeParent = true;
+        sheetData[parentAddr].mergeColSpan = colSpan;
+        sheetData[parentAddr].mergeRowSpan = rowSpan;
+
+        // Mark child merged cells
+        for (let r = m.s.r; r <= m.e.r; r++) {
+          for (let c = m.s.c; c <= m.e.c; c++) {
+            if (r === m.s.r && c === m.s.c) continue;
+            const childAddr = XLSX.utils.encode_cell({ r, c });
+            if (!sheetData[childAddr]) sheetData[childAddr] = { value: '' };
+            sheetData[childAddr].mergedWith = parentAddr;
+          }
         }
       }
     }
@@ -323,7 +435,7 @@ export async function parsePptxFile(file: File): Promise<SlideItem[]> {
         for (const sf of Array.from(solidFills)) {
           const srgb = sf.getElementsByTagName('a:srgbClr')[0];
           const val = srgb?.getAttribute('val')?.toLowerCase();
-          if (val === 'ffffff' || val === 'f8fafc' || val === 'ffffff') {
+          if (val === 'ffffff' || val === 'f8fafc') {
             hasCardFrame = true;
             cardBg = '#ffffff';
           }
@@ -335,7 +447,6 @@ export async function parsePptxFile(file: File): Promise<SlideItem[]> {
         }
       }
 
-      // In title slides with wallpaper (like the user uploaded screenshot), card frame is standard
       if (backgroundImage && (i === 0 || hasCardFrame)) {
         hasCardFrame = true;
       }

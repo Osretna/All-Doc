@@ -60,7 +60,7 @@ export const PWAInstallButton: React.FC<Props> = ({ variant = 'compact' }) => {
                   <div className="w-8 h-8 rounded-lg bg-blue-100 text-blue-600 flex items-center justify-center font-bold">
                     ∞
                   </div>
-                  <h3 className="text-base font-bold text-gray-900">تثبيت Infinity Office على iOS</h3>
+                  <h3 className="text-base font-bold text-gray-900">تثبيت MY-DOC Office على iOS</h3>
                 </div>
                 <button
                   onClick={() => setShowIOSGuide(false)}
@@ -132,7 +132,7 @@ export const PWAInstallButton: React.FC<Props> = ({ variant = 'compact' }) => {
 
             <div className="mt-4 space-y-3 text-sm text-gray-700">
               <p className="text-gray-600 text-xs leading-relaxed">
-                تطبيق Infinity Office مصمم كـ <strong>Progressive Web App (PWA)</strong> مكتبي كامل، يمكن تشغيله كبرنامج مستقل على نظام Windows أو macOS أو Linux وكذلك أندرويد و iOS:
+                تطبيق MY-DOC Office مصمم كـ <strong>Progressive Web App (PWA)</strong> مكتبي كامل، يمكن تشغيله كبرنامج مستقل على نظام Windows أو macOS أو Linux وكذلك أندرويد و iOS:
               </p>
 
               <div className="p-3 bg-gray-50 rounded-lg border border-gray-200 space-y-2 text-xs">
