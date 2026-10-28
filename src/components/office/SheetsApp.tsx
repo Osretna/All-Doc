@@ -15,6 +15,7 @@ import { ChartModal, ChartDefinition } from './excel/ChartModal';
 import { ExcelFindReplaceModal } from './excel/ExcelFindReplaceModal';
 import { TextToColumnsModal } from './excel/TextToColumnsModal';
 import { GoalSeekModal } from './excel/GoalSeekModal';
+import { ExcelContextMenu } from './excel/ExcelContextMenu';
 import { 
   Plus, 
   FileUp, 
@@ -238,16 +239,150 @@ export const SheetsApp: React.FC<Props> = ({
   ]);
   const [visibleRowCount, setVisibleRowCount] = useState<number>(100);
   const [tableNotification, setTableNotification] = useState<string | null>(null);
-  const [activeCharts, setActiveCharts] = useState<ChartDefinition[]>(() => {
-    return localVault.get('infinity_office_excel_charts_' + activeSheetKey, []);
-  });
   const imageInputRef = useRef<HTMLInputElement>(null);
+  const floatingImageInputRef = useRef<HTMLInputElement>(null);
 
-  // Sync active charts when activeSheetKey changes
+  // Column and Row Drag Selection state
+  const [isDraggingColHeader, setIsDraggingColHeader] = useState<boolean>(false);
+  const [colDragStartIdx, setColDragStartIdx] = useState<number | null>(null);
+  const [isDraggingRowHeader, setIsDraggingRowHeader] = useState<boolean>(false);
+  const [rowDragStartNum, setRowDragStartNum] = useState<number | null>(null);
+
+  // Hidden Rows, Hidden Cols, Custom Heights & Widths
+  const [hiddenRows, setHiddenRows] = useState<Set<number>>(new Set());
+  const [hiddenCols, setHiddenCols] = useState<Set<string>>(new Set());
+  const [rowHeights, setRowHeights] = useState<Record<number, number>>({});
+  const [colWidths, setColWidths] = useState<Record<string, number>>({});
+
+  // Context Menu state (Excel 365 style with Mini Toolbar)
+  const [contextMenu, setContextMenu] = useState<{
+    visible: boolean;
+    type: 'cell' | 'row' | 'col';
+    x: number;
+    y: number;
+    cellId: string;
+    rowNum?: number;
+    colName?: string;
+  } | null>(null);
+
+  // Office 365 Movable Floating Objects (Charts, Shapes, Images)
+  const [floatingObjects, setFloatingObjects] = useState<Array<{
+    id: string;
+    type: 'chart' | 'shape' | 'image';
+    shapeType?: 'rect' | 'rounded-rect' | 'circle' | 'arrow-right' | 'arrow-left' | 'callout' | 'star' | 'diamond';
+    title?: string;
+    text?: string;
+    imageSrc?: string;
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    chartDef?: ChartDefinition;
+    bg?: string;
+    color?: string;
+  }>>(() => {
+    const saved = localVault.get<any[]>('infinity_office_excel_floating_' + activeSheetKey, []);
+    if (saved && saved.length > 0) return saved;
+    const legacyCharts = localVault.get<ChartDefinition[]>('infinity_office_excel_charts_' + activeSheetKey, []);
+    if (legacyCharts && legacyCharts.length > 0) {
+      return legacyCharts.map((ch, idx) => ({
+        id: ch.id,
+        type: 'chart' as const,
+        title: ch.title,
+        x: 60 + idx * 30,
+        y: 80 + idx * 30,
+        width: 460,
+        height: 280,
+        chartDef: ch,
+      }));
+    }
+    return [];
+  });
+  const [selectedFloatingId, setSelectedFloatingId] = useState<string | null>(null);
+  const [editingShapeTextId, setEditingShapeTextId] = useState<string | null>(null);
+  const [draggingObjId, setDraggingObjId] = useState<string | null>(null);
+  const [resizingObjId, setResizingObjId] = useState<string | null>(null);
+  const dragStartRef = useRef<{ mouseX: number; mouseY: number; startX: number; startY: number }>({ mouseX: 0, mouseY: 0, startX: 0, startY: 0 });
+  const resizeStartRef = useRef<{ mouseX: number; mouseY: number; startW: number; startH: number }>({ mouseX: 0, mouseY: 0, startW: 0, startH: 0 });
+
+  // Sync floating objects when activeSheetKey changes
   useEffect(() => {
-    const saved = localVault.get<ChartDefinition[]>('infinity_office_excel_charts_' + activeSheetKey, []);
-    setActiveCharts(saved);
+    const saved = localVault.get<any[]>('infinity_office_excel_floating_' + activeSheetKey, []);
+    if (saved && saved.length > 0) {
+      setFloatingObjects(saved);
+    } else {
+      const legacyCharts = localVault.get<ChartDefinition[]>('infinity_office_excel_charts_' + activeSheetKey, []);
+      if (legacyCharts && legacyCharts.length > 0) {
+        setFloatingObjects(legacyCharts.map((ch, idx) => ({
+          id: ch.id,
+          type: 'chart' as const,
+          title: ch.title,
+          x: 60 + idx * 30,
+          y: 80 + idx * 30,
+          width: 460,
+          height: 280,
+          chartDef: ch,
+        })));
+      } else {
+        setFloatingObjects([]);
+      }
+    }
   }, [activeSheetKey]);
+
+  // Window listeners for dragging and resizing floating objects
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      const scale = zoom / 100;
+      if (draggingObjId) {
+        const dx = (e.clientX - dragStartRef.current.mouseX) / scale;
+        const dy = (e.clientY - dragStartRef.current.mouseY) / scale;
+        const newX = Math.max(0, Math.round(dragStartRef.current.startX + dx));
+        const newY = Math.max(0, Math.round(dragStartRef.current.startY + dy));
+        setFloatingObjects((prev) =>
+          prev.map((obj) => (obj.id === draggingObjId ? { ...obj, x: newX, y: newY } : obj))
+        );
+      } else if (resizingObjId) {
+        const dx = (e.clientX - resizeStartRef.current.mouseX) / scale;
+        const dy = (e.clientY - resizeStartRef.current.mouseY) / scale;
+        const newW = Math.max(100, Math.round(resizeStartRef.current.startW + dx));
+        const newH = Math.max(60, Math.round(resizeStartRef.current.startH + dy));
+        setFloatingObjects((prev) =>
+          prev.map((obj) => (obj.id === resizingObjId ? { ...obj, width: newW, height: newH } : obj))
+        );
+      }
+    };
+
+    const handleMouseUp = () => {
+      if (draggingObjId || resizingObjId) {
+        setDraggingObjId(null);
+        setResizingObjId(null);
+        setFloatingObjects((current) => {
+          localVault.set('infinity_office_excel_floating_' + activeSheetKey, current);
+          return current;
+        });
+      }
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [draggingObjId, resizingObjId, zoom, activeSheetKey]);
+
+  // Global mouseup to release column/row header and cell range drag
+  useEffect(() => {
+    const handleGlobalMouseUp = () => {
+      setIsDraggingRange(false);
+      setIsDraggingColHeader(false);
+      setColDragStartIdx(null);
+      setIsDraggingRowHeader(false);
+      setRowDragStartNum(null);
+    };
+    window.addEventListener('mouseup', handleGlobalMouseUp);
+    return () => window.removeEventListener('mouseup', handleGlobalMouseUp);
+  }, []);
 
   // Active sheet & cell
   const currentSheet = sheets[activeSheetKey] || sheets[Object.keys(sheets)[0]];
@@ -475,11 +610,26 @@ export const SheetsApp: React.FC<Props> = ({
     const colSpan = maxColIdx - minColIdx + 1;
     const rowSpan = maxRow - minRow + 1;
 
+    // Pick content: if parent is empty, grab the first non-empty cell in range so data is not lost
+    let preservedValue = data[parentCellId]?.value ?? '';
+    let preservedFormula = data[parentCellId]?.formula;
+    if (!preservedValue) {
+      for (const cid of selectedRange) {
+        if (data[cid]?.value) {
+          preservedValue = data[cid].value;
+          preservedFormula = data[cid].formula;
+          break;
+        }
+      }
+    }
+
     const nextData = { ...data };
     selectedRange.forEach((cid) => {
       if (cid === parentCellId) {
         nextData[cid] = {
-          ...(nextData[cid] || { value: '' }),
+          ...(nextData[cid] || {}),
+          value: preservedValue,
+          formula: preservedFormula,
           isMergeParent: true,
           mergeColSpan: colSpan,
           mergeRowSpan: rowSpan,
@@ -488,8 +638,10 @@ export const SheetsApp: React.FC<Props> = ({
         };
       } else {
         nextData[cid] = {
-          ...(nextData[cid] || { value: '' }),
+          ...(nextData[cid] || {}),
           mergedWith: parentCellId,
+          value: '',
+          formula: undefined,
         };
       }
     });
@@ -502,6 +654,7 @@ export const SheetsApp: React.FC<Props> = ({
       },
     };
     saveSheets(updatedSheets);
+    setSelectedCell(parentCellId);
   };
 
   // Number format
@@ -517,9 +670,8 @@ export const SheetsApp: React.FC<Props> = ({
   };
 
   // Insert Row
-  const handleInsertRow = () => {
-    const coord = parseCellCoord(selectedCell);
-    const targetRow = coord.row;
+  const handleInsertRow = (targetRowParam?: number) => {
+    const targetRow = targetRowParam !== undefined ? targetRowParam : parseCellCoord(selectedCell).row;
     const nextData: SheetData = {};
 
     Object.keys(data).forEach((cid) => {
@@ -542,9 +694,9 @@ export const SheetsApp: React.FC<Props> = ({
   };
 
   // Insert Column
-  const handleInsertCol = () => {
-    const coord = parseCellCoord(selectedCell);
-    const targetColIdx = coord.colIdx;
+  const handleInsertCol = (targetColParam?: string) => {
+    const targetColIdx = targetColParam ? COLS.indexOf(targetColParam) : parseCellCoord(selectedCell).colIdx;
+    if (targetColIdx === -1) return;
     const nextData: SheetData = {};
 
     Object.keys(data).forEach((cid) => {
@@ -567,9 +719,8 @@ export const SheetsApp: React.FC<Props> = ({
   };
 
   // Delete Row
-  const handleDeleteRow = () => {
-    const coord = parseCellCoord(selectedCell);
-    const targetRow = coord.row;
+  const handleDeleteRow = (targetRowParam?: number) => {
+    const targetRow = targetRowParam !== undefined ? targetRowParam : parseCellCoord(selectedCell).row;
     const nextData: SheetData = {};
 
     Object.keys(data).forEach((cid) => {
@@ -592,9 +743,9 @@ export const SheetsApp: React.FC<Props> = ({
   };
 
   // Delete Column
-  const handleDeleteCol = () => {
-    const coord = parseCellCoord(selectedCell);
-    const targetColIdx = coord.colIdx;
+  const handleDeleteCol = (targetColParam?: string) => {
+    const targetColIdx = targetColParam ? COLS.indexOf(targetColParam) : parseCellCoord(selectedCell).colIdx;
+    if (targetColIdx === -1) return;
     const nextData: SheetData = {};
 
     Object.keys(data).forEach((cid) => {
@@ -614,6 +765,111 @@ export const SheetsApp: React.FC<Props> = ({
       },
     };
     saveSheets(updatedSheets);
+  };
+
+  // Select Entire Sheet (Top-corner button)
+  const handleSelectAllSheet = () => {
+    const allCells: string[] = [];
+    for (let r = 1; r <= visibleRowCount; r++) {
+      for (const col of COLS) {
+        allCells.push(`${col}${r}`);
+      }
+    }
+    setSelectedCell('A1');
+    setSelectedRange(allCells);
+  };
+
+  // Column Header selection and drag
+  const handleColHeaderMouseDown = (cIdx: number, e: React.MouseEvent) => {
+    const col = COLS[cIdx];
+    if (e.button === 2) {
+      e.preventDefault();
+      setContextMenu({
+        visible: true,
+        type: 'col',
+        x: e.clientX,
+        y: e.clientY,
+        cellId: `${col}1`,
+        colName: col,
+      });
+      return;
+    }
+    if (e.button !== 0) return;
+
+    setIsDraggingColHeader(true);
+    setColDragStartIdx(cIdx);
+    const colCells: string[] = [];
+    for (let r = 1; r <= visibleRowCount; r++) {
+      colCells.push(`${col}${r}`);
+    }
+    setSelectedCell(`${col}1`);
+    setSelectedRange(colCells);
+  };
+
+  const handleColHeaderMouseEnter = (cIdx: number) => {
+    if (!isDraggingColHeader || colDragStartIdx === null) return;
+    const minC = Math.min(colDragStartIdx, cIdx);
+    const maxC = Math.max(colDragStartIdx, cIdx);
+    const cells: string[] = [];
+    for (let r = 1; r <= visibleRowCount; r++) {
+      for (let c = minC; c <= maxC; c++) {
+        cells.push(`${COLS[c]}${r}`);
+      }
+    }
+    setSelectedRange(cells);
+  };
+
+  // Row Header selection and drag
+  const handleRowHeaderMouseDown = (rowNum: number, e: React.MouseEvent) => {
+    if (e.button === 2) {
+      e.preventDefault();
+      setContextMenu({
+        visible: true,
+        type: 'row',
+        x: e.clientX,
+        y: e.clientY,
+        cellId: `A${rowNum}`,
+        rowNum,
+      });
+      return;
+    }
+    if (e.button !== 0) return;
+
+    setIsDraggingRowHeader(true);
+    setRowDragStartNum(rowNum);
+    const rowCells: string[] = [];
+    for (const col of COLS) {
+      rowCells.push(`${col}${rowNum}`);
+    }
+    setSelectedCell(`A${rowNum}`);
+    setSelectedRange(rowCells);
+  };
+
+  const handleRowHeaderMouseEnter = (rowNum: number) => {
+    if (!isDraggingRowHeader || rowDragStartNum === null) return;
+    const minR = Math.min(rowDragStartNum, rowNum);
+    const maxR = Math.max(rowDragStartNum, rowNum);
+    const cells: string[] = [];
+    for (let r = minR; r <= maxR; r++) {
+      for (const col of COLS) {
+        cells.push(`${col}${r}`);
+      }
+    }
+    setSelectedRange(cells);
+  };
+
+  // Get unique values in a column for "Pick From Drop-down List..."
+  const getColumnUniqueValues = (cellId: string): string[] => {
+    const coord = parseCellCoord(cellId);
+    const col = COLS[coord.colIdx];
+    const set = new Set<string>();
+    for (let r = 1; r <= visibleRowCount; r++) {
+      const val = data[`${col}${r}`]?.value;
+      if (val !== undefined && val !== null && String(val).trim() !== '') {
+        set.add(String(val).trim());
+      }
+    }
+    return Array.from(set);
   };
 
   // AutoSum
@@ -747,9 +1003,69 @@ export const SheetsApp: React.FC<Props> = ({
       if (data[cid]) clipped[cid] = { ...data[cid] };
     });
     setClipboard({ cells: clipped, baseCell: targets[0] });
+
+    // Write TSV to system clipboard so user can paste outside or across sheets
+    try {
+      const { minColIdx, maxColIdx, minRow, maxRow } = rangeBounds;
+      const rows: string[] = [];
+      for (let r = minRow; r <= maxRow; r++) {
+        const rowVals: string[] = [];
+        for (let c = minColIdx; c <= maxColIdx; c++) {
+          const cid = `${COLS[c]}${r}`;
+          rowVals.push(data[cid]?.value ?? '');
+        }
+        rows.push(rowVals.join('\t'));
+      }
+      navigator.clipboard?.writeText(rows.join('\n'));
+    } catch {
+      // ignore
+    }
   };
 
-  const handlePaste = () => {
+  const handlePaste = async () => {
+    // 1. Try reading from system clipboard first
+    try {
+      if (navigator.clipboard && navigator.clipboard.readText) {
+        const text = await navigator.clipboard.readText();
+        if (text && text.trim().length > 0) {
+          const rawLines = text.replace(/\r\n/g, '\n').split('\n');
+          const rows = rawLines.map((l) => l.split('\t'));
+          const startP = parseCellCoord(selectedCell);
+          const nextData = { ...data };
+
+          rows.forEach((rowCells, rOffset) => {
+            const targetRow = startP.row + rOffset;
+            if (targetRow <= MAX_EXCEL_ROWS) {
+              rowCells.forEach((val, cOffset) => {
+                const targetColIdx = startP.colIdx + cOffset;
+                if (targetColIdx < COLS.length) {
+                  const targetCid = `${COLS[targetColIdx]}${targetRow}`;
+                  const isFormula = val.startsWith('=');
+                  const computedVal = isFormula
+                    ? evaluateExcelFormula(val, nextData, sheets)
+                    : val;
+                  nextData[targetCid] = {
+                    ...(nextData[targetCid] || { value: '' }),
+                    value: computedVal,
+                    formula: isFormula ? val : undefined,
+                  };
+                }
+              });
+            }
+          });
+
+          const fullyComputed = recalculateSheet(nextData);
+          saveSheets({ ...sheets, [activeSheetKey]: { ...currentSheet, data: fullyComputed } });
+          setTableNotification(`تم لصق البيانات (${rows.length} صفوف) بنجاح من الحافظة!`);
+          setTimeout(() => setTableNotification(null), 3500);
+          return;
+        }
+      }
+    } catch (err) {
+      console.warn('System clipboard read fallback:', err);
+    }
+
+    // 2. Fallback to internal clipboard
     if (!clipboard) return;
     const baseP = parseCellCoord(clipboard.baseCell);
     const targetP = parseCellCoord(selectedCell);
@@ -776,6 +1092,8 @@ export const SheetsApp: React.FC<Props> = ({
       },
     };
     saveSheets(updatedSheets);
+    setTableNotification('تم لصق الخلايا بنجاح!');
+    setTimeout(() => setTableNotification(null), 3000);
   };
 
   const handlePasteSpecial = (type: 'values' | 'formats' | 'formulas') => {
@@ -933,19 +1251,94 @@ export const SheetsApp: React.FC<Props> = ({
     e.target.value = '';
   };
 
-  // Insert Chart Handler
+  // Insert Movable Floating Chart Handler (Office 365)
   const handleInsertChart = (chart: ChartDefinition) => {
-    const updated = [...activeCharts, chart];
-    setActiveCharts(updated);
-    localVault.set('infinity_office_excel_charts_' + activeSheetKey, updated);
-    setTableNotification(`تم إدراج المخطط "${chart.title}" في ورقة العمل بنجاح!`);
-    setTimeout(() => setTableNotification(null), 4500);
+    const newFloatingChart = {
+      id: chart.id || 'chart_' + Date.now(),
+      type: 'chart' as const,
+      title: chart.title,
+      x: 80,
+      y: 90,
+      width: 480,
+      height: 290,
+      chartDef: chart,
+    };
+    const updated = [...floatingObjects, newFloatingChart];
+    setFloatingObjects(updated);
+    setSelectedFloatingId(newFloatingChart.id);
+    localVault.set('infinity_office_excel_floating_' + activeSheetKey, updated);
+    setTableNotification(`تم إدراج المخطط البياني "${chart.title}" كعنصر حر عائم في ورقة العمل بنجاح! يمكنك نقله بحرية بالماوس إلى أي مكان.`);
+    setTimeout(() => setTableNotification(null), 5000);
   };
 
-  const handleDeleteChart = (chartId: string) => {
-    const updated = activeCharts.filter((c) => c.id !== chartId);
-    setActiveCharts(updated);
-    localVault.set('infinity_office_excel_charts_' + activeSheetKey, updated);
+  // Insert Movable Floating Shape Handler (Office 365)
+  const handleInsertShape = (shapeType: 'rect' | 'rounded-rect' | 'circle' | 'arrow-right' | 'arrow-left' | 'callout' | 'star' | 'diamond') => {
+    const shapeLabels: Record<string, string> = {
+      'rect': 'مستطيل توضيحي',
+      'rounded-rect': 'مستطيل مستدير',
+      'circle': 'دائرة بيانية',
+      'diamond': 'معين شرطي',
+      'arrow-right': 'مؤشر للأمام',
+      'arrow-left': 'مؤشر للخلف',
+      'callout': 'ملاحظة توضيحية',
+      'star': 'نجمة تميز',
+    };
+    const newShape = {
+      id: 'shape_' + Date.now(),
+      type: 'shape' as const,
+      shapeType,
+      title: shapeLabels[shapeType] || 'شكل',
+      text: shapeLabels[shapeType] || 'شكل توضيحي',
+      x: 120,
+      y: 110,
+      width: 180,
+      height: 90,
+      bg: shapeType === 'circle' ? '#0284c7' : (shapeType === 'diamond' ? '#7c3aed' : '#107c41'),
+      color: '#ffffff',
+    };
+    const updated = [...floatingObjects, newShape];
+    setFloatingObjects(updated);
+    setSelectedFloatingId(newShape.id);
+    localVault.set('infinity_office_excel_floating_' + activeSheetKey, updated);
+    setTableNotification(`تم إدراج الشكل (${newShape.title}) بنجاح! يمكنك سحبه بالماوس أو تحريكه وتغيير أبعاده بحرية.`);
+    setTimeout(() => setTableNotification(null), 5000);
+  };
+
+  // Floating Image File Upload
+  const handleFloatingImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const dataUrl = event.target?.result as string;
+      if (dataUrl) {
+        const newImgObj = {
+          id: 'image_' + Date.now(),
+          type: 'image' as const,
+          title: file.name.replace(/\.[^/.]+$/, ''),
+          imageSrc: dataUrl,
+          x: 100,
+          y: 90,
+          width: 280,
+          height: 190,
+        };
+        const updated = [...floatingObjects, newImgObj];
+        setFloatingObjects(updated);
+        setSelectedFloatingId(newImgObj.id);
+        localVault.set('infinity_office_excel_floating_' + activeSheetKey, updated);
+        setTableNotification(`تم إدراج الصورة الحرة بنجاح! يمكنك سحبها ونقلها لأي موضع تريده في ورقة العمل.`);
+        setTimeout(() => setTableNotification(null), 5000);
+      }
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';
+  };
+
+  const handleDeleteFloatingObject = (objId: string) => {
+    const updated = floatingObjects.filter((c) => c.id !== objId);
+    setFloatingObjects(updated);
+    if (selectedFloatingId === objId) setSelectedFloatingId(null);
+    localVault.set('infinity_office_excel_floating_' + activeSheetKey, updated);
   };
 
   // Mouse Drag selection
@@ -1423,6 +1816,14 @@ export const SheetsApp: React.FC<Props> = ({
           setCurrentFunctionSyntax(null);
           return;
         }
+      } else if (val.trim() === '=') {
+        const popular = ['SUM', 'AVERAGE', 'IF', 'VLOOKUP', 'COUNT', 'MAX', 'MIN', 'ROUND', 'CONCAT'];
+        const filtered = EXCEL_FUNCTIONS.filter((f) => popular.includes(f.name));
+        setMatchingFunctions(filtered);
+        setSelectedFunctionIndex(0);
+        setShowAutocomplete(true);
+        setCurrentFunctionSyntax(null);
+        return;
       }
 
       const funcCallMatch = val.match(/([A-Z]+)\s*\([^)]*$/i);
@@ -1445,18 +1846,27 @@ export const SheetsApp: React.FC<Props> = ({
 
   const handleSelectFunction = (fn: ExcelFunctionDef) => {
     const currentVal = formulaInput.startsWith('=') ? formulaInput : `=${formulaInput}`;
-    const newVal = currentVal.replace(/(?:=|[+\-*/,(])\s*([A-Za-z]+)$/, (m) => {
-      const leadingChar = m.charAt(0);
-      return leadingChar === '=' || leadingChar === '+' || leadingChar === '-' || leadingChar === '*' || leadingChar === '/' || leadingChar === '(' || leadingChar === ','
-        ? `${leadingChar}${fn.name}(`
-        : `=${fn.name}(`;
-    });
+    let newVal = currentVal;
+    if (/(?:=|[+\-*/,(])\s*([A-Za-z]+)$/.test(currentVal)) {
+      newVal = currentVal.replace(/(?:=|[+\-*/,(])\s*([A-Za-z]+)$/, (m) => {
+        const leadingChar = m.charAt(0);
+        return ['=', '+', '-', '*', '/', '(', ','].includes(leadingChar)
+          ? `${leadingChar}${fn.name}(`
+          : `=${fn.name}(`;
+      });
+    } else if (currentVal.trim() === '=') {
+      newVal = `=${fn.name}(`;
+    } else {
+      newVal = `${currentVal}${fn.name}(`;
+    }
 
     setFormulaInput(newVal);
     handleCellChange(selectedCell, newVal);
     setShowAutocomplete(false);
     setCurrentFunctionSyntax(`${fn.syntax} — ${fn.desc}`);
-    formulaInputRef.current?.focus();
+    if (!isEditingCell) {
+      formulaInputRef.current?.focus();
+    }
   };
 
   // Open Real Excel File (.xlsx, .csv)
@@ -1588,6 +1998,8 @@ export const SheetsApp: React.FC<Props> = ({
         onSetZoomLevel={setZoom}
         onRecalculateAll={handleRecalculateAll}
         onInsertImage={() => imageInputRef.current?.click()}
+        onInsertFloatingImage={() => floatingImageInputRef.current?.click()}
+        onInsertShape={(shapeType) => handleInsertShape(shapeType)}
         onCreateTable={handleCreateTable}
       />
 
@@ -1628,6 +2040,25 @@ export const SheetsApp: React.FC<Props> = ({
               value={formulaInput}
               onChange={(e) => handleFormulaInputChange(e.target.value)}
               onKeyDown={(e) => {
+                if (showAutocomplete && matchingFunctions.length > 0) {
+                  if (e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    setSelectedFunctionIndex((i) => Math.min(matchingFunctions.length - 1, i + 1));
+                    return;
+                  } else if (e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    setSelectedFunctionIndex((i) => Math.max(0, i - 1));
+                    return;
+                  } else if (e.key === 'Tab' || (e.key === 'Enter' && selectedFunctionIndex >= 0)) {
+                    e.preventDefault();
+                    handleSelectFunction(matchingFunctions[selectedFunctionIndex]);
+                    return;
+                  } else if (e.key === 'Escape') {
+                    setShowAutocomplete(false);
+                    return;
+                  }
+                }
+
                 if (e.key === 'Enter') {
                   e.preventDefault();
                   let finalFormula = formulaInput.trim();
@@ -1731,58 +2162,7 @@ export const SheetsApp: React.FC<Props> = ({
         </div>
       )}
 
-      {/* Embedded Active Charts Gallery */}
-      {activeCharts.length > 0 && (
-        <div className="bg-gray-50 border-b border-gray-300 p-2.5 flex flex-wrap gap-3 items-start shrink-0 z-10 max-h-72 overflow-y-auto">
-          {activeCharts.map((ch) => {
-            const maxVal = Math.max(...ch.items.map((i) => i.val), 1);
-            return (
-              <div key={ch.id} className="bg-white border-2 border-[#107c41]/50 rounded-lg shadow-md p-2.5 w-80 sm:w-88 flex flex-col gap-1.5 relative">
-                <div className="flex items-center justify-between border-b border-gray-100 pb-1.5">
-                  <div className="flex items-center gap-1.5 font-bold text-xs text-gray-800">
-                    <BarChart2 className="w-4 h-4 text-[#107c41]" />
-                    <span className="truncate">{ch.title}</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 font-semibold">{ch.type}</span>
-                    <button
-                      onClick={() => handleDeleteChart(ch.id)}
-                      className="p-1 hover:bg-red-50 text-red-500 rounded cursor-pointer"
-                      title="حذف المخطط"
-                    >
-                      <X className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                </div>
-
-                {/* Live Mini Chart Preview */}
-                <div className="h-28 pt-1 flex items-end justify-between gap-1 border-b border-gray-200 pb-1">
-                  {ch.items.slice(0, 8).map((it, idx) => {
-                    const heightPercent = Math.max(10, Math.round((it.val / maxVal) * 90));
-                    return (
-                      <div key={idx} className="flex-1 flex flex-col items-center h-full justify-end group">
-                        <span className="text-[9px] font-mono text-gray-600 font-bold mb-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                          {it.val}
-                        </span>
-                        <div
-                          className="w-full bg-[#107c41] rounded-t-xs hover:bg-emerald-500 transition-all cursor-pointer shadow-xs"
-                          style={{ height: `${heightPercent}%` }}
-                          title={`${it.label}: ${it.val}`}
-                        />
-                        <span className="text-[8px] text-gray-500 truncate w-full text-center mt-1" title={it.label}>
-                          {it.label}
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      {/* 3. Main Spreadsheet Grid */}
+      {/* 3. Main Spreadsheet Grid & Floating Objects Canvas (Excel 365) */}
       <div 
         ref={gridContainerRef}
         tabIndex={0}
@@ -1797,32 +2177,345 @@ export const SheetsApp: React.FC<Props> = ({
         className="flex-1 overflow-auto bg-gray-100 p-1 relative outline-none focus:ring-0"
         style={{ transform: `scale(${zoom / 100})`, transformOrigin: isRTL ? 'top right' : 'top left' }}
       >
+        {/* Office 365 Movable Floating Objects Layer (Charts, Shapes, Images) */}
+        {floatingObjects.map((obj) => {
+          const isSelected = selectedFloatingId === obj.id;
+          return (
+            <div
+              key={obj.id}
+              onClick={(e) => {
+                e.stopPropagation();
+                setSelectedFloatingId(obj.id);
+              }}
+              style={{
+                position: 'absolute',
+                left: `${obj.x}px`,
+                top: `${obj.y}px`,
+                width: `${obj.width}px`,
+                height: `${obj.height}px`,
+                zIndex: isSelected ? 40 : 25,
+              }}
+              className={`select-none rounded-lg transition-shadow ${
+                isSelected
+                  ? 'ring-2 ring-[#107c41] shadow-2xl bg-white'
+                  : 'hover:ring-1 hover:ring-gray-400 shadow-lg bg-white/95'
+              }`}
+            >
+              {/* Top Drag Handle Bar (Office 365 Header) */}
+              <div
+                onMouseDown={(e) => {
+                  if (e.button !== 0) return;
+                  e.stopPropagation();
+                  setDraggingObjId(obj.id);
+                  setSelectedFloatingId(obj.id);
+                  dragStartRef.current = {
+                    mouseX: e.clientX,
+                    mouseY: e.clientY,
+                    startX: obj.x,
+                    startY: obj.y,
+                  };
+                }}
+                className={`px-2 py-1.5 flex items-center justify-between border-b cursor-move rounded-t-lg ${
+                  isSelected ? 'bg-emerald-50 border-emerald-300' : 'bg-gray-100/90 border-gray-200'
+                }`}
+                title="اسحب بالماوس لتحريك العنصر ونقله إلى أي مكان في ورقة العمل"
+              >
+                <div className="flex items-center gap-1.5 text-xs font-bold text-gray-800 truncate">
+                  {obj.type === 'chart' && <BarChart2 className="w-3.5 h-3.5 text-[#107c41]" />}
+                  {obj.type === 'shape' && <span className="text-xs">🔷</span>}
+                  {obj.type === 'image' && <span className="text-xs">🖼️</span>}
+                  <span className="truncate">{obj.title || 'عنصر عائم'}</span>
+                </div>
+
+                <div className="flex items-center gap-1">
+                  {obj.type === 'chart' && obj.chartDef && (
+                    <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-100 text-[#107c41] font-bold">
+                      {obj.chartDef.type}
+                    </span>
+                  )}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDeleteFloatingObject(obj.id);
+                    }}
+                    className="p-1 hover:bg-red-50 text-red-500 rounded cursor-pointer transition"
+                    title="حذف العنصر من ورقة العمل"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Object Body */}
+              <div className="p-2 w-full h-[calc(100%-34px)] overflow-hidden flex flex-col justify-center items-center">
+                {/* 1. CHART RENDERER */}
+                {obj.type === 'chart' && obj.chartDef && (
+                  <div className="w-full h-full flex flex-col justify-between">
+                    {obj.chartDef.type === 'pie' ? (
+                      <div className="w-full h-full flex items-center justify-around gap-2 p-1">
+                        <svg viewBox="0 0 100 100" className="w-28 h-28 shrink-0">
+                          {(() => {
+                            const total = obj.chartDef.items.reduce((s, i) => s + (i.val || 0), 0) || 1;
+                            const colors = ['#107c41', '#0284c7', '#f59e0b', '#ec4899', '#8b5cf6', '#14b8a6', '#64748b'];
+                            let accumulatedPercent = 0;
+                            return obj.chartDef.items.slice(0, 6).map((item, idx) => {
+                              const percent = (item.val || 0) / total;
+                              const startAngle = accumulatedPercent * 2 * Math.PI;
+                              accumulatedPercent += percent;
+                              const endAngle = accumulatedPercent * 2 * Math.PI;
+                              const x1 = 50 + 40 * Math.sin(startAngle);
+                              const y1 = 50 - 40 * Math.cos(startAngle);
+                              const x2 = 50 + 40 * Math.sin(endAngle);
+                              const y2 = 50 - 40 * Math.cos(endAngle);
+                              const largeArc = percent > 0.5 ? 1 : 0;
+                              const pathData = `M 50 50 L ${x1} ${y1} A 40 40 0 ${largeArc} 1 ${x2} ${y2} Z`;
+                              return (
+                                <path
+                                  key={idx}
+                                  d={pathData}
+                                  fill={colors[idx % colors.length]}
+                                  stroke="#ffffff"
+                                  strokeWidth="1.5"
+                                  className="hover:opacity-85 transition-opacity"
+                                />
+                              );
+                            });
+                          })()}
+                        </svg>
+                        <div className="flex flex-col gap-1 overflow-y-auto max-h-full text-[10px]">
+                          {obj.chartDef.items.slice(0, 5).map((it, idx) => {
+                            const colors = ['#107c41', '#0284c7', '#f59e0b', '#ec4899', '#8b5cf6', '#14b8a6', '#64748b'];
+                            return (
+                              <div key={idx} className="flex items-center gap-1.5">
+                                <span className="w-2.5 h-2.5 rounded-xs shrink-0" style={{ backgroundColor: colors[idx % colors.length] }} />
+                                <span className="truncate max-w-[80px] font-semibold text-gray-700">{it.label}:</span>
+                                <span className="font-mono text-gray-900 font-bold">{it.val}</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ) : obj.chartDef.type === 'line' || obj.chartDef.type === 'area' ? (
+                      <div className="w-full h-full flex flex-col justify-between p-2">
+                        <svg viewBox="0 0 300 120" className="w-full h-full">
+                          {(() => {
+                            const maxVal = Math.max(...obj.chartDef.items.map((i) => i.val), 1);
+                            const pts = obj.chartDef.items.slice(0, 10).map((it, idx, arr) => {
+                              const x = arr.length > 1 ? (idx / (arr.length - 1)) * 280 + 10 : 150;
+                              const y = 110 - (it.val / maxVal) * 90;
+                              return { x, y, label: it.label, val: it.val };
+                            });
+                            const polylinePts = pts.map((p) => `${p.x},${p.y}`).join(' ');
+                            return (
+                              <>
+                                {obj.chartDef.type === 'area' && (
+                                  <polygon
+                                    points={`10,115 ${polylinePts} 290,115`}
+                                    fill="#107c41"
+                                    fillOpacity="0.2"
+                                  />
+                                )}
+                                <polyline
+                                  fill="none"
+                                  stroke="#107c41"
+                                  strokeWidth="3"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  points={polylinePts}
+                                />
+                                {pts.map((p, idx) => (
+                                  <g key={idx}>
+                                    <circle cx={p.x} cy={p.y} r="4" fill="#ffffff" stroke="#107c41" strokeWidth="2" />
+                                    <text x={p.x} y={p.y - 7} fontSize="9" textAnchor="middle" fill="#107c41" fontWeight="bold">
+                                      {p.val}
+                                    </text>
+                                  </g>
+                                ))}
+                              </>
+                            );
+                          })()}
+                        </svg>
+                        <div className="flex justify-between text-[9px] text-gray-500 border-t border-gray-200 pt-1">
+                          {obj.chartDef.items.slice(0, 6).map((it, idx) => (
+                            <span key={idx} className="truncate max-w-[50px] text-center" title={it.label}>{it.label}</span>
+                          ))}
+                        </div>
+                      </div>
+                    ) : (
+                      /* Column / Bar Chart */
+                      <div className="w-full h-full flex items-end justify-between gap-1.5 pt-2 pb-1 border-b border-gray-200">
+                        {(() => {
+                          const maxVal = Math.max(...obj.chartDef.items.map((i) => i.val), 1);
+                          return obj.chartDef.items.slice(0, 10).map((it, idx) => {
+                            const heightPercent = Math.max(10, Math.round((it.val / maxVal) * 88));
+                            return (
+                              <div key={idx} className="flex-1 flex flex-col items-center h-full justify-end group">
+                                <span className="text-[9px] font-mono text-gray-700 font-bold mb-0.5">
+                                  {it.val}
+                                </span>
+                                <div
+                                  className="w-full bg-[#107c41] rounded-t-xs hover:bg-emerald-500 transition-all cursor-pointer shadow-xs"
+                                  style={{ height: `${heightPercent}%` }}
+                                  title={`${it.label}: ${it.val}`}
+                                />
+                                <span className="text-[8.5px] text-gray-600 truncate w-full text-center mt-1 font-medium" title={it.label}>
+                                  {it.label}
+                                </span>
+                              </div>
+                            );
+                          });
+                        })()}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* 2. SHAPE RENDERER */}
+                {obj.type === 'shape' && (
+                  <div
+                    onDoubleClick={() => setEditingShapeTextId(obj.id)}
+                    style={{ backgroundColor: obj.bg || '#107c41', color: obj.color || '#ffffff' }}
+                    className={`w-full h-full flex items-center justify-center p-3 text-center font-bold text-xs shadow-md transition ${
+                      obj.shapeType === 'rounded-rect'
+                        ? 'rounded-2xl'
+                        : obj.shapeType === 'circle'
+                        ? 'rounded-full'
+                        : obj.shapeType === 'diamond'
+                        ? 'rounded-xs rotate-45 scale-75'
+                        : 'rounded-sm'
+                    }`}
+                  >
+                    <div className={obj.shapeType === 'diamond' ? '-rotate-45' : ''}>
+                      {editingShapeTextId === obj.id ? (
+                        <input
+                          autoFocus
+                          type="text"
+                          defaultValue={obj.text || ''}
+                          onBlur={(e) => {
+                            const val = e.target.value;
+                            setFloatingObjects((prev) =>
+                              prev.map((o) => (o.id === obj.id ? { ...o, text: val } : o))
+                            );
+                            setEditingShapeTextId(null);
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              (e.target as HTMLInputElement).blur();
+                            }
+                          }}
+                          className="bg-white/90 text-gray-900 text-xs px-2 py-1 rounded outline-none border border-white text-center font-bold"
+                        />
+                      ) : (
+                        <span>{obj.text || obj.title || 'شكل'}</span>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* 3. IMAGE RENDERER */}
+                {obj.type === 'image' && obj.imageSrc && (
+                  <img
+                    src={obj.imageSrc}
+                    alt={obj.title || 'صورة'}
+                    className="w-full h-full object-contain pointer-events-none rounded select-none"
+                  />
+                )}
+              </div>
+
+              {/* Office 365 Resize Handle at Bottom-Right Corner */}
+              {isSelected && (
+                <>
+                  <div
+                    onMouseDown={(e) => {
+                      if (e.button !== 0) return;
+                      e.stopPropagation();
+                      setResizingObjId(obj.id);
+                      resizeStartRef.current = {
+                        mouseX: e.clientX,
+                        mouseY: e.clientY,
+                        startW: obj.width,
+                        startH: obj.height,
+                      };
+                    }}
+                    className="absolute -bottom-2 -left-2 w-4 h-4 bg-white border-2 border-[#107c41] rounded-xs cursor-sw-resize shadow-md hover:scale-125 transition-transform z-50"
+                    title="تغيير أبعاد وحجم العنصر"
+                  />
+                  <div
+                    onMouseDown={(e) => {
+                      if (e.button !== 0) return;
+                      e.stopPropagation();
+                      setResizingObjId(obj.id);
+                      resizeStartRef.current = {
+                        mouseX: e.clientX,
+                        mouseY: e.clientY,
+                        startW: obj.width,
+                        startH: obj.height,
+                      };
+                    }}
+                    className="absolute -bottom-2 -right-2 w-4 h-4 bg-white border-2 border-[#107c41] rounded-xs cursor-se-resize shadow-md hover:scale-125 transition-transform z-50"
+                    title="تغيير أبعاد وحجم العنصر"
+                  />
+                </>
+              )}
+            </div>
+          );
+        })}
         <table className={`border-collapse bg-white shadow-xs min-w-full ${isRTL ? 'text-right' : 'text-left'}`}>
           {showHeadings && (
             <thead className={freezeState === 'row' || freezeState === 'both' ? 'sticky top-0 z-20 shadow-xs' : ''}>
               <tr className="bg-[#f3f2f1] text-gray-600 font-semibold text-[11px]">
-                <th className={`w-10 p-1 border border-gray-300 text-center bg-[#eae8e6] ${
-                  (freezeState === 'col' || freezeState === 'both') ? 'sticky right-0 z-30' : ''
-                }`}>
-                  #
+                {/* Excel Top-Corner Select All Button */}
+                <th 
+                  onClick={handleSelectAllSheet}
+                  className={`w-10 p-1 border border-gray-300 text-center bg-[#eae8e6] hover:bg-emerald-100 cursor-pointer transition-colors select-none ${
+                    (freezeState === 'col' || freezeState === 'both') ? 'sticky right-0 z-30' : ''
+                  }`}
+                  title="تحديد المصنف بالكامل (Select All)"
+                >
+                  <div className="w-full h-full flex items-center justify-center">
+                    <svg className="w-3 h-3 text-gray-500 hover:text-[#107c41]" viewBox="0 0 16 16" fill="currentColor">
+                      <polygon points="2,14 14,14 14,2" />
+                    </svg>
+                  </div>
                 </th>
                 {COLS.map((col, cIdx) => {
+                  if (hiddenCols.has(col)) return null;
                   const isColInRange = cIdx >= rangeBounds.minColIdx && cIdx <= rangeBounds.maxColIdx;
+                  const colW = colWidths[col] || 110;
                   return (
                     <th 
                       key={col} 
-                      className={`p-1 border border-gray-300 text-center min-w-[110px] w-28 transition-colors ${
-                        isColInRange ? 'bg-emerald-100 text-[#107c41] font-bold border-b-2 border-b-[#107c41]' : 'bg-[#f3f2f1]'
+                      onMouseDown={(e) => handleColHeaderMouseDown(cIdx, e)}
+                      onMouseEnter={() => handleColHeaderMouseEnter(cIdx)}
+                      onContextMenu={(e) => {
+                        e.preventDefault();
+                        setContextMenu({
+                          visible: true,
+                          type: 'col',
+                          x: e.clientX,
+                          y: e.clientY,
+                          cellId: `${col}1`,
+                          colName: col,
+                        });
+                      }}
+                      className={`p-1 border border-gray-300 text-center select-none transition-colors ${
+                        isColInRange ? 'bg-emerald-100 text-[#107c41] font-bold border-b-2 border-b-[#107c41]' : 'bg-[#f3f2f1] hover:bg-gray-200 text-gray-700'
                       } ${
                         (freezeState === 'col' || freezeState === 'both') && cIdx === 0 ? 'sticky right-10 z-20 shadow-xs' : ''
                       }`}
+                      style={{
+                        width: `${colW}px`,
+                        minWidth: `${colW}px`,
+                        cursor: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16'%3E%3Cpath fill='%23000' d='M8 13L2 6h12z'/%3E%3C/svg%3E\") 8 13, pointer",
+                      }}
+                      title={`تحديد وتظليل العمود ${col} بالكامل (انقر أو اسحب لتحديد عدة أعمدة)`}
                     >
                       <div className="flex items-center justify-center gap-1">
                         <span>{col}</span>
                         {showFilterActive && (
                           <button
                             onClick={() => handleSort('asc')}
-                            className="text-[9px] text-emerald-800 bg-white border border-gray-300 rounded px-1 hover:bg-emerald-50"
+                            className="text-[9px] text-emerald-800 bg-white border border-gray-300 rounded px-1 hover:bg-emerald-50 cursor-pointer"
                             title="تصفية وفرز العمود"
                           >
                             ▼
@@ -1838,18 +2531,41 @@ export const SheetsApp: React.FC<Props> = ({
           <tbody>
             {Array.from({ length: visibleRowCount }).map((_, rIdx) => {
               const rowNum = rIdx + 1;
+              if (hiddenRows.has(rowNum)) return null;
               const isRowInRange = rowNum >= rangeBounds.minRow && rowNum <= rangeBounds.maxRow;
 
               return (
-                <tr key={rowNum} className="hover:bg-emerald-50/20">
+                <tr 
+                  key={rowNum} 
+                  className="hover:bg-emerald-50/20"
+                  style={{ height: rowHeights[rowNum] ? `${rowHeights[rowNum]}px` : undefined }}
+                >
                   {/* Row Header */}
                   {showHeadings && (
                     <td 
-                      className={`p-1 border border-gray-300 text-center text-gray-500 font-mono text-[10px] transition-colors ${
-                        isRowInRange ? 'bg-emerald-100 text-[#107c41] font-bold border-r-2 border-r-[#107c41]' : 'bg-[#f3f2f1]'
+                      onMouseDown={(e) => handleRowHeaderMouseDown(rowNum, e)}
+                      onMouseEnter={() => handleRowHeaderMouseEnter(rowNum)}
+                      onContextMenu={(e) => {
+                        e.preventDefault();
+                        setContextMenu({
+                          visible: true,
+                          type: 'row',
+                          x: e.clientX,
+                          y: e.clientY,
+                          cellId: `A${rowNum}`,
+                          rowNum,
+                        });
+                      }}
+                      className={`p-1 border border-gray-300 text-center text-gray-500 font-mono text-[10px] select-none transition-colors ${
+                        isRowInRange ? 'bg-emerald-100 text-[#107c41] font-bold border-r-2 border-r-[#107c41]' : 'bg-[#f3f2f1] hover:bg-gray-200'
                       } ${
                         (freezeState === 'col' || freezeState === 'both') ? 'sticky right-0 z-10 bg-[#f3f2f1]' : ''
                       }`}
+                      style={{
+                        cursor: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16'%3E%3Cpath fill='%23000' d='M13 8L6 2v12z'/%3E%3C/svg%3E\") 13 8, pointer",
+                        height: rowHeights[rowNum] ? `${rowHeights[rowNum]}px` : undefined,
+                      }}
+                      title={`تحديد الصف ${rowNum} بالكامل (انقر أو اسحب لتحديد عدة صفوف)`}
                     >
                       {rowNum}
                     </td>
@@ -1901,12 +2617,35 @@ export const SheetsApp: React.FC<Props> = ({
 
                     const isStickyCol = (freezeState === 'col' || freezeState === 'both') && cIdx === 0;
 
+                    const effectiveAlign = cell?.align || (isRTL ? 'right' : 'left');
+                    const flexJustify = effectiveAlign === 'center' ? 'center' : (effectiveAlign === 'right' ? 'flex-end' : 'flex-start');
+
                     return (
                       <td
                         key={cellId}
                         colSpan={cell?.mergeColSpan || 1}
                         rowSpan={cell?.mergeRowSpan || 1}
-                        onMouseDown={(e) => handleGridCellMouseDown(cellId, e)}
+                        onContextMenu={(e) => {
+                          e.preventDefault();
+                          if (!selectedRange.includes(cellId)) {
+                            setSelectedCell(cellId);
+                            setSelectedRange([cellId]);
+                          }
+                          setContextMenu({
+                            visible: true,
+                            type: 'cell',
+                            x: e.clientX,
+                            y: e.clientY,
+                            cellId,
+                          });
+                        }}
+                        onMouseDown={(e) => {
+                          if (e.button === 2) {
+                            e.preventDefault();
+                            return;
+                          }
+                          handleGridCellMouseDown(cellId, e);
+                        }}
                         onMouseEnter={() => handleGridCellMouseEnter(cellId)}
                         className={`p-1 relative transition-all select-none ${
                           showGridlines ? 'border border-gray-300' : 'border border-transparent'
@@ -1924,7 +2663,7 @@ export const SheetsApp: React.FC<Props> = ({
                             cell?.underline ? 'underline' : '',
                             cell?.strikethrough ? 'line-through' : '',
                           ].filter(Boolean).join(' ') || undefined,
-                          textAlign: cell?.align || (isRTL ? 'right' : 'left'),
+                          textAlign: effectiveAlign,
                           verticalAlign: cell?.verticalAlign || 'middle',
                           fontFamily: cell?.fontFamily || fontFamily,
                           fontSize: cell?.fontSize ? `${cell.fontSize}px` : undefined,
@@ -1946,7 +2685,10 @@ export const SheetsApp: React.FC<Props> = ({
                             <span className="text-[10px] text-emerald-800 font-mono font-bold">Sparkline</span>
                           </div>
                         ) : (
-                          <div className="relative w-full h-full flex items-center">
+                          <div 
+                            className="relative w-full h-full flex items-center"
+                            style={{ justifyContent: flexJustify }}
+                          >
                             {isSelected && isEditingCell ? (
                               <input
                                 ref={(el) => {
@@ -2029,16 +2771,19 @@ export const SheetsApp: React.FC<Props> = ({
                                     setTimeout(() => gridContainerRef.current?.focus(), 0);
                                   }
                                 }}
-                                className={`w-full bg-white border border-[#107c41] outline-none text-xs px-1 text-gray-900 font-mono shadow-xs z-30 ${
-                                  isRTL ? 'text-right' : 'text-left'
-                                }`}
+                                className={`w-full bg-white border border-[#107c41] outline-none text-xs px-1 text-gray-900 font-mono shadow-xs z-30`}
+                                style={{
+                                  textAlign: effectiveAlign,
+                                }}
                               />
                             ) : (
                               <div
                                 onDoubleClick={() => setIsEditingCell(true)}
-                                className={`w-full px-1 truncate text-xs select-none flex items-center gap-1.5 ${
-                                  isRTL ? 'text-right' : 'text-left'
-                                }`}
+                                className={`w-full px-1 truncate text-xs select-none flex items-center gap-1.5`}
+                                style={{
+                                  textAlign: effectiveAlign,
+                                  justifyContent: flexJustify,
+                                }}
                               >
                                 {cell?.image && (
                                   <img
@@ -2048,7 +2793,16 @@ export const SheetsApp: React.FC<Props> = ({
                                     title="صورة مدرجة في الخلية"
                                   />
                                 )}
-                                <span className="truncate">{showFormulasMode && cell?.formula ? cell.formula : formatCellValue(cell)}</span>
+                                <span 
+                                  className="truncate"
+                                  style={{
+                                    textAlign: effectiveAlign,
+                                    width: effectiveAlign === 'center' ? '100%' : undefined,
+                                    display: 'inline-block',
+                                  }}
+                                >
+                                  {showFormulasMode && cell?.formula ? cell.formula : formatCellValue(cell)}
+                                </span>
                               </div>
                             )}
 
@@ -2196,6 +2950,13 @@ export const SheetsApp: React.FC<Props> = ({
         type="file"
         accept="image/*"
         onChange={handleImageFileUpload}
+        className="hidden"
+      />
+      <input
+        ref={floatingImageInputRef}
+        type="file"
+        accept="image/*"
+        onChange={handleFloatingImageUpload}
         className="hidden"
       />
 
@@ -2394,6 +3155,58 @@ export const SheetsApp: React.FC<Props> = ({
           handleCellChange(targetCell, String(val));
         }}
       />
+
+      {/* 6. Excel 365 Right-Click Context Menu + Mini Toolbar */}
+      {contextMenu && contextMenu.visible && (
+        <ExcelContextMenu
+          type={contextMenu.type}
+          x={contextMenu.x}
+          y={contextMenu.y}
+          cellId={contextMenu.cellId}
+          rowNum={contextMenu.rowNum}
+          colName={contextMenu.colName}
+          cellData={data[contextMenu.cellId]}
+          columnUniqueValues={getColumnUniqueValues(contextMenu.cellId)}
+          onClose={() => setContextMenu(null)}
+          onCut={handleCut}
+          onCopy={handleCopy}
+          onPaste={handlePaste}
+          onPasteSpecial={handlePasteSpecial}
+          onClearContents={() => handleClear('contents')}
+          onInsertRow={(r) => handleInsertRow(r)}
+          onDeleteRow={(r) => handleDeleteRow(r)}
+          onInsertCol={(c) => handleInsertCol(c)}
+          onDeleteCol={(c) => handleDeleteCol(c)}
+          onFormatRange={handleFormatRange}
+          onSetAlignment={handleSetAlignment}
+          onSort={handleSort}
+          onFilterByValue={(val) => {
+            if (!val) {
+              setShowFilterActive(false);
+              return;
+            }
+            setShowFilterActive(true);
+            setTableNotification(`تم تطبيق التصفية على القيمة "${val}" بنجاح!`);
+            setTimeout(() => setTableNotification(null), 3500);
+          }}
+          onInsertComment={() => {
+            const currentComment = data[contextMenu.cellId]?.comment || '';
+            const newComment = prompt('أدخل التعليق أو الملاحظة للخلية (Insert Comment):', currentComment);
+            if (newComment !== null) {
+              handleFormatRange('comment', newComment);
+            }
+          }}
+          onOpenNameManager={() => setIsNameManagerOpen(true)}
+          onOpenQuickAnalysis={() => setIsChartModalOpen(true)}
+          onSetRowHeight={(r, h) => setRowHeights((prev) => ({ ...prev, [r]: h }))}
+          onSetColWidth={(c, w) => setColWidths((prev) => ({ ...prev, [c]: w }))}
+          onHideRow={(r) => setHiddenRows((prev) => new Set(prev).add(r))}
+          onUnhideRows={() => setHiddenRows(new Set())}
+          onHideCol={(c) => setHiddenCols((prev) => new Set(prev).add(c))}
+          onUnhideCols={() => setHiddenCols(new Set())}
+          onPickDropdownValue={(val) => handleCellChange(contextMenu.cellId, val)}
+        />
+      )}
     </div>
   );
 };

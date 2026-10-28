@@ -109,6 +109,8 @@ interface Props {
   onSetZoomLevel: (zoom: number) => void;
   onRecalculateAll: () => void;
   onInsertImage?: () => void;
+  onInsertFloatingImage?: () => void;
+  onInsertShape?: (shapeType: 'rect' | 'rounded-rect' | 'circle' | 'arrow-right' | 'arrow-left' | 'callout' | 'star' | 'diamond') => void;
   onCreateTable?: () => void;
 }
 
@@ -168,6 +170,8 @@ export const ExcelRibbon: React.FC<Props> = ({
   onSetZoomLevel,
   onRecalculateAll,
   onInsertImage,
+  onInsertFloatingImage,
+  onInsertShape,
   onCreateTable,
 }) => {
   // Dropdown states
@@ -178,6 +182,8 @@ export const ExcelRibbon: React.FC<Props> = ({
   const [showClearMenu, setShowClearMenu] = useState(false);
   const [showCellStylesMenu, setShowCellStylesMenu] = useState(false);
   const [showFreezeMenu, setShowFreezeMenu] = useState(false);
+  const [showShapesMenu, setShowShapesMenu] = useState(false);
+  const [showImageMenu, setShowImageMenu] = useState(false);
   const [selectedFont, setSelectedFont] = useState('Calibri');
   const [selectedFontSize, setSelectedFontSize] = useState(11);
 
@@ -945,30 +951,126 @@ export const ExcelRibbon: React.FC<Props> = ({
             {/* Illustrations & Media */}
             <div className="flex flex-col justify-between border-l border-gray-200 pl-2">
               <div className="flex items-center gap-2">
+                {/* Images Dropdown */}
+                <div className="relative">
+                  <button
+                    onClick={() => setShowImageMenu(!showImageMenu)}
+                    className="flex flex-col items-center justify-center p-1.5 hover:bg-emerald-50 rounded text-gray-700 hover:text-[#107c41] cursor-pointer"
+                    title="إدراج صورة حرة عائمة أو داخل الخلية (Office 365)"
+                  >
+                    <span className="text-sm">🖼️</span>
+                    <span className="text-[10px] font-semibold mt-0.5">صور</span>
+                  </button>
+
+                  {showImageMenu && (
+                    <div className="absolute top-full left-0 mt-1 bg-white border border-gray-300 rounded-lg shadow-xl py-1 z-50 w-52 text-right">
+                      <button
+                        onClick={() => {
+                          setShowImageMenu(false);
+                          if (onInsertFloatingImage) onInsertFloatingImage();
+                          else if (onInsertImage) onInsertImage();
+                        }}
+                        className="w-full px-3 py-1.5 text-right hover:bg-emerald-50 text-[11px] font-bold text-gray-800 flex items-center gap-2 cursor-pointer"
+                      >
+                        <span>🪄</span>
+                        <span>إدراج صورة حرة عائمة (متحركة)</span>
+                      </button>
+                      <button
+                        onClick={() => {
+                          setShowImageMenu(false);
+                          if (onInsertImage) onInsertImage();
+                        }}
+                        className="w-full px-3 py-1.5 text-right hover:bg-gray-100 text-[11px] text-gray-700 flex items-center gap-2 cursor-pointer"
+                      >
+                        <span>📥</span>
+                        <span>إدراج صورة داخل الخلية المحددة</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {/* Shapes Dropdown (Office 365 Shapes) */}
+                <div className="relative">
+                  <button
+                    onClick={() => setShowShapesMenu(!showShapesMenu)}
+                    className="flex flex-col items-center justify-center p-1.5 hover:bg-emerald-50 rounded text-gray-700 hover:text-[#107c41] cursor-pointer"
+                    title="إدراج أشكال توضيحية عائمة قابلة للتحريك وتغيير الحجم والكتابة (Office 365)"
+                  >
+                    <span className="text-sm">🔷</span>
+                    <span className="text-[10px] font-semibold mt-0.5">أشكال</span>
+                  </button>
+
+                  {showShapesMenu && (
+                    <div className="absolute top-full left-0 mt-1 bg-white border border-gray-300 rounded-lg shadow-xl p-2 z-50 w-64 text-right">
+                      <div className="text-[10px] font-bold text-gray-500 mb-1.5">أشكال Office 365 التوضيحية:</div>
+                      <div className="grid grid-cols-2 gap-1 text-[11px]">
+                        <button
+                          onClick={() => { setShowShapesMenu(false); onInsertShape?.('rect'); }}
+                          className="flex items-center gap-1.5 p-1.5 hover:bg-emerald-50 rounded border border-gray-200 text-gray-800 hover:text-[#107c41] cursor-pointer"
+                        >
+                          <span className="w-4 h-3 bg-blue-500 rounded-xs inline-block shrink-0" />
+                          <span>مستطيل قياسي</span>
+                        </button>
+                        <button
+                          onClick={() => { setShowShapesMenu(false); onInsertShape?.('rounded-rect'); }}
+                          className="flex items-center gap-1.5 p-1.5 hover:bg-emerald-50 rounded border border-gray-200 text-gray-800 hover:text-[#107c41] cursor-pointer"
+                        >
+                          <span className="w-4 h-3 bg-emerald-600 rounded-md inline-block shrink-0" />
+                          <span>مستطيل مستدير</span>
+                        </button>
+                        <button
+                          onClick={() => { setShowShapesMenu(false); onInsertShape?.('circle'); }}
+                          className="flex items-center gap-1.5 p-1.5 hover:bg-emerald-50 rounded border border-gray-200 text-gray-800 hover:text-[#107c41] cursor-pointer"
+                        >
+                          <span className="w-3.5 h-3.5 bg-amber-500 rounded-full inline-block shrink-0" />
+                          <span>دائرة / بيضاوي</span>
+                        </button>
+                        <button
+                          onClick={() => { setShowShapesMenu(false); onInsertShape?.('diamond'); }}
+                          className="flex items-center gap-1.5 p-1.5 hover:bg-emerald-50 rounded border border-gray-200 text-gray-800 hover:text-[#107c41] cursor-pointer"
+                        >
+                          <span className="w-3.5 h-3.5 bg-purple-500 rotate-45 inline-block shrink-0" />
+                          <span>معين (Diamond)</span>
+                        </button>
+                        <button
+                          onClick={() => { setShowShapesMenu(false); onInsertShape?.('arrow-right'); }}
+                          className="flex items-center gap-1.5 p-1.5 hover:bg-emerald-50 rounded border border-gray-200 text-gray-800 hover:text-[#107c41] cursor-pointer"
+                        >
+                          <span className="text-xs text-blue-600 font-bold shrink-0">➜</span>
+                          <span>سهم أفقي</span>
+                        </button>
+                        <button
+                          onClick={() => { setShowShapesMenu(false); onInsertShape?.('arrow-left'); }}
+                          className="flex items-center gap-1.5 p-1.5 hover:bg-emerald-50 rounded border border-gray-200 text-gray-800 hover:text-[#107c41] cursor-pointer"
+                        >
+                          <span className="text-xs text-blue-600 font-bold shrink-0">⬅</span>
+                          <span>سهم عكسي</span>
+                        </button>
+                        <button
+                          onClick={() => { setShowShapesMenu(false); onInsertShape?.('callout'); }}
+                          className="flex items-center gap-1.5 p-1.5 hover:bg-emerald-50 rounded border border-gray-200 text-gray-800 hover:text-[#107c41] cursor-pointer"
+                        >
+                          <span className="text-xs text-emerald-600 font-bold shrink-0">💬</span>
+                          <span>وسيلة شرح</span>
+                        </button>
+                        <button
+                          onClick={() => { setShowShapesMenu(false); onInsertShape?.('star'); }}
+                          className="flex items-center gap-1.5 p-1.5 hover:bg-emerald-50 rounded border border-gray-200 text-gray-800 hover:text-[#107c41] cursor-pointer"
+                        >
+                          <span className="text-xs text-amber-500 font-bold shrink-0">★</span>
+                          <span>نجمة خماسية</span>
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
                 <button
                   onClick={() => {
-                    if (onInsertImage) {
-                      onInsertImage();
-                    } else {
-                      alert('إدراج صورة في الخلية النشطة');
-                    }
+                    onInsertShape?.('callout');
                   }}
-                  className="flex flex-col items-center justify-center p-1.5 hover:bg-emerald-50 rounded text-gray-700 hover:text-[#107c41] cursor-pointer"
-                  title="إدراج صورة في الخلية المحددة أو ورقة العمل"
-                >
-                  <span className="text-sm">🖼️</span>
-                  <span className="text-[10px] font-semibold mt-0.5">صور</span>
-                </button>
-                <button
-                  onClick={() => alert('إدراج أشكال توضيحية وأسهم')}
-                  className="flex flex-col items-center justify-center p-1.5 hover:bg-gray-100 rounded text-gray-700"
-                >
-                  <span className="text-sm">🔷</span>
-                  <span className="text-[10px] font-semibold mt-0.5">أشكال</span>
-                </button>
-                <button
-                  onClick={() => alert('إدراج عناصر SmartArt')}
-                  className="flex flex-col items-center justify-center p-1.5 hover:bg-gray-100 rounded text-gray-700"
+                  className="flex flex-col items-center justify-center p-1.5 hover:bg-gray-100 rounded text-gray-700 cursor-pointer"
+                  title="مخططات ورسومات توضيحية ذكية"
                 >
                   <span className="text-sm">📊</span>
                   <span className="text-[10px] font-semibold mt-0.5">SmartArt</span>
