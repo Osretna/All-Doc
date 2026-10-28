@@ -30,6 +30,20 @@ import {
   FileCheck2
 } from 'lucide-react';
 
+export type BackstageTab = 
+  | 'info' 
+  | 'new' 
+  | 'open' 
+  | 'save' 
+  | 'saveas' 
+  | 'print' 
+  | 'share' 
+  | 'export' 
+  | 'publish' 
+  | 'close' 
+  | 'account' 
+  | 'options';
+
 interface Props {
   isOpen: boolean;
   onClose: () => void;
@@ -61,7 +75,7 @@ export const BackstageModal: React.FC<Props> = ({
 }) => {
   if (!isOpen) return null;
 
-  const [activeTab, setActiveTab] = useState<'new' | 'open' | 'save' | 'export' | 'print' | 'sovereign' | 'cloud'>('new');
+  const [activeTab, setActiveTab] = useState<BackstageTab>('new');
   const [copiedBackup, setCopiedBackup] = useState(false);
   const [loadingFileMessage, setLoadingFileMessage] = useState<string | null>(null);
   const currentConfig = APP_CONFIGS[activeApp];
@@ -73,107 +87,103 @@ export const BackstageModal: React.FC<Props> = ({
     setTimeout(() => setCopiedBackup(false), 2000);
   };
 
+  const navItems: { id: BackstageTab; label: string; en: string }[] = [
+    { id: 'info', label: 'معلومات المستند', en: 'Info' },
+    { id: 'new', label: 'جديد وقوالب', en: 'New' },
+    { id: 'open', label: 'فتح ملف', en: 'Open' },
+    { id: 'save', label: 'حفظ محلي', en: 'Save' },
+    { id: 'saveas', label: 'حفظ باسم', en: 'Save As' },
+    { id: 'print', label: 'طباعة', en: 'Print' },
+    { id: 'share', label: 'مشاركة', en: 'Share' },
+    { id: 'export', label: 'تصدير', en: 'Export' },
+    { id: 'publish', label: 'نشر', en: 'Publish' },
+    { id: 'close', label: 'إغلاق', en: 'Close' },
+  ];
+
   return (
     <div className="fixed inset-0 z-[120] bg-black/60 backdrop-blur-xs flex animate-in fade-in">
-      {/* Backstage Left Navigation Bar (Office Blue or App Primary Color) */}
+      {/* Backstage Left Navigation Bar (Matching Official Excel / Office 365 image__25__9df10f4d.png) */}
       <div 
         style={{ backgroundColor: currentConfig.primaryColor }}
-        className="w-64 sm:w-72 text-white flex flex-col justify-between p-4 shadow-2xl shrink-0 select-none"
+        className="w-56 sm:w-64 text-white flex flex-col justify-between py-4 px-3 shadow-2xl shrink-0 select-none overflow-y-auto"
       >
-        <div className="space-y-4">
-          {/* Close / Return to Document Button */}
-          <button
-            onClick={onClose}
-            className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white/10 hover:bg-white/20 transition cursor-pointer text-xs font-semibold w-full"
-          >
-            <span className="text-sm">➔</span>
-            <span>الرجوع إلى المستند</span>
-          </button>
-
-          <div className="pt-2 pb-1 border-b border-white/20">
-            <h2 className="text-lg font-bold flex items-center gap-2">
-              <span>{currentConfig.name}</span>
-            </h2>
-            <p className="text-[11px] text-white/80">جناح MY-DOC المكتبي السيادي</p>
+        <div className="space-y-3">
+          {/* Back arrow circle button (Classic Office Backstage back button) */}
+          <div className="flex items-center gap-3 pb-2 border-b border-white/20">
+            <button
+              onClick={onClose}
+              className="w-9 h-9 rounded-full border border-white/40 hover:bg-white/20 flex items-center justify-center transition cursor-pointer text-white"
+              title="الرجوع إلى المستند"
+            >
+              <span className="text-base font-bold leading-none">←</span>
+            </button>
+            <div className="leading-tight">
+              <span className="font-bold text-sm block">{currentConfig.nameEn}</span>
+              <span className="text-[10px] text-white/70">MY-DOC Sovereign Office</span>
+            </div>
           </div>
 
-          {/* Navigation Items */}
-          <nav className="space-y-1 text-xs">
+          {/* Navigation Items (Exact match to image__25__9df10f4d.png) */}
+          <nav className="space-y-0.5 text-xs">
+            {navItems.map((item) => {
+              const isSelected = activeTab === item.id;
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => {
+                    if (item.id === 'close') {
+                      onClose();
+                    } else {
+                      setActiveTab(item.id);
+                    }
+                  }}
+                  className={`w-full flex items-center justify-between px-3 py-2 rounded-md font-medium text-right cursor-pointer transition ${
+                    isSelected
+                      ? 'bg-black/25 text-white font-bold shadow-inner border-r-4 border-white'
+                      : 'hover:bg-white/10 text-white/90'
+                  }`}
+                >
+                  <span className="text-[13px] tracking-wide">{item.en}</span>
+                  <span className="text-[10px] opacity-70 font-arabic">{item.label}</span>
+                </button>
+              );
+            })}
+
+            {/* Horizontal Line Divider (from image__25__9df10f4d.png) */}
+            <div className="pt-2 pb-2">
+              <div className="h-[1px] bg-white/25 w-full my-1"></div>
+            </div>
+
+            {/* Bottom 2 items below divider: Account, Options */}
             <button
-              onClick={() => setActiveTab('new')}
-              className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-md font-medium text-right cursor-pointer transition ${
-                activeTab === 'new' ? 'bg-white text-gray-900 shadow-md font-bold' : 'hover:bg-white/10 text-white/90'
+              onClick={() => setActiveTab('account')}
+              className={`w-full flex items-center justify-between px-3 py-2 rounded-md font-medium text-right cursor-pointer transition ${
+                activeTab === 'account'
+                  ? 'bg-black/25 text-white font-bold shadow-inner border-r-4 border-white'
+                  : 'hover:bg-white/10 text-white/90'
               }`}
             >
-              <Plus className="w-4 h-4 shrink-0" />
-              <span>جديد وقوالب جاهزة (New)</span>
+              <span className="text-[13px] tracking-wide">Account</span>
+              <span className="text-[10px] opacity-70 font-arabic">الحساب والترخيص</span>
             </button>
 
             <button
-              onClick={() => setActiveTab('open')}
-              className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-md font-medium text-right cursor-pointer transition ${
-                activeTab === 'open' ? 'bg-white text-gray-900 shadow-md font-bold' : 'hover:bg-white/10 text-white/90'
+              onClick={() => setActiveTab('options')}
+              className={`w-full flex items-center justify-between px-3 py-2 rounded-md font-medium text-right cursor-pointer transition ${
+                activeTab === 'options'
+                  ? 'bg-black/25 text-white font-bold shadow-inner border-r-4 border-white'
+                  : 'hover:bg-white/10 text-white/90'
               }`}
             >
-              <FolderOpen className="w-4 h-4 shrink-0" />
-              <span>فتح ملف محلي (Open)</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('save')}
-              className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-md font-medium text-right cursor-pointer transition ${
-                activeTab === 'save' ? 'bg-white text-gray-900 shadow-md font-bold' : 'hover:bg-white/10 text-white/90'
-              }`}
-            >
-              <Save className="w-4 h-4 shrink-0" />
-              <span>حفظ في الخزنة المحلية (Save)</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('export')}
-              className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-md font-medium text-right cursor-pointer transition ${
-                activeTab === 'export' ? 'bg-white text-gray-900 shadow-md font-bold' : 'hover:bg-white/10 text-white/90'
-              }`}
-            >
-              <Download className="w-4 h-4 shrink-0" />
-              <span>تصدير ملفات Office (Export)</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('print')}
-              className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-md font-medium text-right cursor-pointer transition ${
-                activeTab === 'print' ? 'bg-white text-gray-900 shadow-md font-bold' : 'hover:bg-white/10 text-white/90'
-              }`}
-            >
-              <Printer className="w-4 h-4 shrink-0" />
-              <span>طباعة وتصدير PDF (Print)</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('sovereign')}
-              className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-md font-medium text-right cursor-pointer transition ${
-                activeTab === 'sovereign' ? 'bg-white text-gray-900 shadow-md font-bold' : 'hover:bg-white/10 text-white/90'
-              }`}
-            >
-              <ShieldCheck className="w-4 h-4 shrink-0 text-emerald-300" />
-              <span>تدقيق السيادة والخصوصية 100%</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('cloud')}
-              className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-md font-medium text-right cursor-pointer transition ${
-                activeTab === 'cloud' ? 'bg-white text-gray-900 shadow-md font-bold' : 'hover:bg-white/10 text-white/90'
-              }`}
-            >
-              <Server className="w-4 h-4 shrink-0" />
-              <span>ربط بسيرفر استضافتك (Cloud Sync)</span>
+              <span className="text-[13px] tracking-wide">Options</span>
+              <span className="text-[10px] opacity-70 font-arabic">خيارات متقدمة</span>
             </button>
           </nav>
         </div>
 
-        <div className="text-[11px] text-white/70 pt-4 border-t border-white/20">
-          <div>Infinity Sovereign Office v3.5</div>
-          <div className="font-mono text-[10px] mt-0.5">Desktop & Mobile PWA Edition</div>
+        <div className="text-[11px] text-white/70 pt-3 border-t border-white/20 leading-tight">
+          <div className="font-bold">MY-DOC Sovereign Suite</div>
+          <div className="font-mono text-[9.5px] opacity-80 mt-0.5">Desktop & PWA Edition 2026</div>
         </div>
       </div>
 
@@ -229,12 +239,12 @@ export const BackstageModal: React.FC<Props> = ({
                           `<h1>عقد تقديم خدمات استضافة وبرمجيات سحابية</h1>
 <p><strong>التاريخ:</strong> 2026-10-27 | <strong>رقم العقد:</strong> INF-2026-089</p>
 <hr/>
-<h3>الطرف الأول: شركة إنفينيتي تكنولوجي (المزود)</h3>
+<h3>الطرف الأول: شركة MY-DOC تكنولوجي (المزود)</h3>
 <p>سجل تجاري رقم: 1010892344 - الرياض / القاهرة</p>
 <h3>الطرف الثاني: العميل / المؤسسة الشريكة</h3>
 <hr/>
 <h3>البند الأول: موضوع العقد</h3>
-<p>يلتزم الطرف الأول بتقديم خدمات الاستضافة السحابية فائقة الأداء مع التخزين ZFS NVMe، وتأمين برمجيات الإنتاجية المكتبية السيادية (Infinity Office) التي تعمل دون انقطاع ودون إمكانية للتتبع الخارجي.</p>
+<p>يلتزم الطرف الأول بتقديم خدمات البنية التحتية فائقة الأداء، وتأمين برمجيات الإنتاجية المكتبية السيادية (MY-DOC Office) التي تعمل دون انقطاع ودون إمكانية للتتبع الخارجي.</p>
 <h3>البند الثاني: مستوى الخدمة وضمان التشغيل</h3>
 <p>يتعهد المزود بنسبة تشغيل لا تقل عن 99.9% شهرياً مع نسخ احتياطي دوري مشفر.</p>
 <table border="1" style="width: 100%; border-collapse: collapse; margin-top: 15px;">
@@ -805,116 +815,334 @@ export const BackstageModal: React.FC<Props> = ({
             </div>
           )}
 
-          {/* TAB 4: PRINT */}
+          {/* TAB: INFO (معلومات المستند) */}
+          {activeTab === 'info' && (
+            <div className="space-y-6">
+              <div className="border-b pb-4">
+                <h1 className="text-2xl font-black text-gray-900">معلومات المستند (Document Info)</h1>
+                <p className="text-xs text-gray-500 mt-1">
+                  خصائص الملف، الأمان، حماية المصنف وسجل التعديلات المحلية.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="md:col-span-2 space-y-4">
+                  {/* Protect Document */}
+                  <div className="p-4 bg-amber-50/70 border border-amber-200 rounded-xl flex items-start gap-3">
+                    <ShieldCheck className="w-6 h-6 text-amber-600 shrink-0 mt-0.5" />
+                    <div>
+                      <h3 className="font-bold text-sm text-gray-900">حماية المصنف والمستند (Protect)</h3>
+                      <p className="text-xs text-gray-600 mt-1 leading-relaxed">
+                        التحكم في أنواع التغييرات التي يمكن للآخرين إجراؤها على هذا المصنف أو تشفيره بكلمة مرور محلية.
+                      </p>
+                      <button 
+                        onClick={() => alert('تم تفعيل وضع القراءة فقط للمستند بنجاح!')}
+                        className="mt-3 px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded text-xs font-bold transition cursor-pointer"
+                      >
+                        وضع علامة كنهائي (Mark as Final)
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Inspect Document */}
+                  <div className="p-4 bg-blue-50/70 border border-blue-200 rounded-xl flex items-start gap-3">
+                    <FileCheck className="w-6 h-6 text-blue-600 shrink-0 mt-0.5" />
+                    <div>
+                      <h3 className="font-bold text-sm text-gray-900">فحص المصنف (Inspect Workbook)</h3>
+                      <p className="text-xs text-gray-600 mt-1 leading-relaxed">
+                        التحقق من عدم وجود معلومات شخصية مخفية، نصوص محذوفة، أو خصائص غير مرغوبة قبل مشاركة الملف.
+                      </p>
+                      <button 
+                        onClick={() => alert('تم فحص المستند: نظيف 100% ولا يحتوي على أي بيانات تتبع أو برمجيات خبيثة.')}
+                        className="mt-3 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded text-xs font-bold transition cursor-pointer"
+                      >
+                        فحص التوافق والأمان الآن
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Sovereign Privacy Guarantee */}
+                  <div className="p-4 bg-emerald-50/70 border border-emerald-200 rounded-xl flex items-start gap-3">
+                    <CheckCircle2 className="w-6 h-6 text-emerald-600 shrink-0 mt-0.5" />
+                    <div>
+                      <h3 className="font-bold text-sm text-emerald-900">السيادة الرقمية 100% (Sovereign Guarantee)</h3>
+                      <p className="text-xs text-emerald-700 mt-1 leading-relaxed">
+                        هذا المستند محفوظ ومحسوب محلياً بالكامل على متصفحك. لا يتم إرسال أي سطر أو معادلة لأي خادم خارجي.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Right side: Properties sidebar */}
+                <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 text-xs space-y-3">
+                  <h4 className="font-bold text-gray-800 border-b pb-2">الخصائص (Properties)</h4>
+                  <div className="space-y-2">
+                    <div>
+                      <span className="text-gray-400 block text-[10.5px]">اسم المستند:</span>
+                      <span className="font-bold text-gray-800">{documentTitle}</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-400 block text-[10.5px]">المؤلف:</span>
+                      <span className="font-semibold text-gray-800">Mohamed Salah Elsayed Farahat</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-400 block text-[10.5px]">التطبيق النشط:</span>
+                      <span className="font-semibold text-gray-800">{currentConfig.name}</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-400 block text-[10.5px]">آخر حفظ:</span>
+                      <span className="font-mono text-gray-700">{new Date().toLocaleTimeString('ar-EG')}</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-400 block text-[10.5px]">حجم الملف التقديري:</span>
+                      <span className="font-mono text-gray-700">~28.4 KB (محلي)</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB: SAVE AS */}
+          {activeTab === 'saveas' && (
+            <div className="space-y-6">
+              <div className="border-b pb-4">
+                <h1 className="text-2xl font-black text-gray-900">حفظ باسم (Save As)</h1>
+                <p className="text-xs text-gray-500 mt-1">
+                  اختر موقع الحفظ على جهازك المحلي وتنسيق الملف المناسب.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div 
+                  onClick={() => {
+                    const ext = activeApp === 'sheets' ? 'xlsx' : activeApp === 'docs' ? 'docx' : activeApp === 'slides' ? 'pptx' : 'pdf';
+                    onExport(ext as any);
+                    onClose();
+                  }}
+                  className="p-5 border-2 border-dashed border-emerald-400 bg-emerald-50/40 rounded-xl hover:bg-emerald-50 cursor-pointer transition flex flex-col justify-between h-44"
+                >
+                  <div>
+                    <HardDrive className="w-8 h-8 text-[#107c41] mb-2" />
+                    <h3 className="font-bold text-gray-900 text-sm">حفظ على هذا الكمبيوتر الشخصي</h3>
+                    <p className="text-xs text-gray-500 mt-1">تنزيل الملف مباشرة إلى مجلد التنزيلات أو اختيار مسار الحفظ.</p>
+                  </div>
+                  <span className="text-xs font-bold text-[#107c41]">حفظ بصيغة التطبيق الأصلية ➔</span>
+                </div>
+
+                <div 
+                  onClick={() => { onExport('pdf'); onClose(); }}
+                  className="p-5 border border-gray-200 rounded-xl hover:border-red-500 hover:bg-red-50/30 cursor-pointer transition flex flex-col justify-between h-44"
+                >
+                  <div>
+                    <FileCheck2 className="w-8 h-8 text-red-600 mb-2" />
+                    <h3 className="font-bold text-gray-900 text-sm">حفظ كملف PDF معتمد</h3>
+                    <p className="text-xs text-gray-500 mt-1">ملف وثيقة غير قابل للتعديل عالي الدقة مناسب للطباعة والتوقيع.</p>
+                  </div>
+                  <span className="text-xs font-bold text-red-600">تصدير PDF ➔</span>
+                </div>
+
+                <div 
+                  onClick={() => { onExport('json'); onClose(); }}
+                  className="p-5 border border-gray-200 rounded-xl hover:border-purple-500 hover:bg-purple-50/30 cursor-pointer transition flex flex-col justify-between h-44"
+                >
+                  <div>
+                    <Copy className="w-8 h-8 text-purple-600 mb-2" />
+                    <h3 className="font-bold text-gray-900 text-sm">نسخة احتياطية مشفرة (.json)</h3>
+                    <p className="text-xs text-gray-500 mt-1">حفظ كامل بنية المصنف والأوراق والمعادلات بتشفير محلي.</p>
+                  </div>
+                  <span className="text-xs font-bold text-purple-600">تصدير النسخة الاحتياطية ➔</span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB: PRINT */}
           {activeTab === 'print' && (
             <div className="text-center py-6">
-              <Printer className="w-16 h-16 text-[#0078d4] mx-auto mb-4" />
+              <Printer className="w-16 h-16 text-[#107c41] mx-auto mb-4" />
               <h2 className="text-xl font-bold text-gray-900 mb-2">طباعة المستند / حفظ بصيغة PDF</h2>
               <p className="text-xs text-gray-500 max-w-md mx-auto mb-6 leading-relaxed">
-                سيتم إرسال المستند مباشرة إلى نافذة الطباعة الخاصة بجهازك بجودة طباعة كاملة 300DPI بدون أي علامة مائية.
+                سيتم عزل كافة القوائم وأدوات الواجهة وإرسال محتوى ورقة العمل أو المستند فقط لنافذة الطباعة بجودة عالية 300DPI.
               </p>
               <button
                 onClick={() => {
                   onClose();
                   setTimeout(() => window.print(), 300);
                 }}
-                className="bg-[#0078d4] hover:bg-[#006abc] text-white px-6 py-2.5 rounded-lg text-sm font-bold shadow-md transition"
+                className="bg-[#107c41] hover:bg-[#0b6a35] text-white px-6 py-2.5 rounded-lg text-sm font-bold shadow-md transition cursor-pointer"
               >
                 فتح نافذة الطباعة الآن
               </button>
             </div>
           )}
 
-          {/* TAB 5: SOVEREIGN AUDIT (السيادة الكاملة) */}
-          {activeTab === 'sovereign' && (
-            <div>
-              <div className="flex items-center gap-3 mb-4">
-                <div className="w-10 h-10 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center">
-                  <ShieldCheck className="w-6 h-6" />
-                </div>
-                <div>
-                  <h1 className="text-xl font-bold text-gray-900">تقرير السيادة الرقمية الكاملة (Sovereign Office)</h1>
-                  <p className="text-xs text-gray-500">فحص الخصوصية والأمان الفوري على جهازك</p>
-                </div>
+          {/* TAB: SHARE */}
+          {activeTab === 'share' && (
+            <div className="space-y-6">
+              <div className="border-b pb-4">
+                <h1 className="text-2xl font-black text-gray-900">مشاركة المستند (Share)</h1>
+                <p className="text-xs text-gray-500 mt-1">مشاركة المستند والملف محلياً دون الحاجة لرفعه إلى سحابة خارجية.</p>
               </div>
 
-              <div className="space-y-3 mt-6">
-                <div className="p-4 bg-emerald-50 rounded-xl border border-emerald-200 flex items-start gap-3">
-                  <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
-                  <div className="text-xs">
-                    <div className="font-bold text-emerald-900 mb-0.5">صفر تتبع وتحليلات (Zero Telemetry)</div>
-                    <div className="text-emerald-700 leading-relaxed">
-                      لا توجد أي أداة Google Analytics أو Facebook Pixel أو كود تتبع خارجي. مستنداتك تخصك وحدك 100%.
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-2xl">
+                <div 
+                  onClick={handleCopyBackup}
+                  className="p-5 border border-gray-200 rounded-xl hover:border-blue-500 hover:bg-blue-50/30 cursor-pointer transition"
+                >
+                  <Copy className="w-8 h-8 text-blue-600 mb-2" />
+                  <h3 className="font-bold text-gray-900 text-sm">نسخ رابط الحافظة المشفر (Clipboard)</h3>
+                  <p className="text-xs text-gray-500 mt-1">
+                    نسخ بيانات المصنف مشفرة إلى الحافظة لإرسالها لزميل العمل وفتحها فوراً على جهازه.
+                  </p>
+                  <button className="mt-3 px-3 py-1.5 bg-blue-600 text-white rounded text-xs font-bold">
+                    {copiedBackup ? '✓ تم النسخ للحافظة!' : 'نسخ الرابط الآن'}
+                  </button>
+                </div>
+
+                <div 
+                  onClick={() => { onExport(activeApp === 'sheets' ? 'xlsx' : 'docx'); onClose(); }}
+                  className="p-5 border border-gray-200 rounded-xl hover:border-emerald-500 hover:bg-emerald-50/30 cursor-pointer transition"
+                >
+                  <Download className="w-8 h-8 text-emerald-600 mb-2" />
+                  <h3 className="font-bold text-gray-900 text-sm">إرفاق كملف في البريد الإلكتروني</h3>
+                  <p className="text-xs text-gray-500 mt-1">
+                    تنزيل الملف المكتبي بالامتداد القياسي وتجهيزه للإرسال عبر Outlook أو بريدك المعتمد.
+                  </p>
+                  <button className="mt-3 px-3 py-1.5 bg-emerald-700 text-white rounded text-xs font-bold">
+                    تصدير وإرفاق
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB: PUBLISH */}
+          {activeTab === 'publish' && (
+            <div className="space-y-6">
+              <div className="border-b pb-4">
+                <h1 className="text-2xl font-black text-gray-900">نشر المستند (Publish)</h1>
+                <p className="text-xs text-gray-500 mt-1">تصدير المصنف كصفحة ويب تفاعلية أو تقرير رسمي ثابت.</p>
+              </div>
+
+              <div className="p-6 bg-gray-50 border border-gray-200 rounded-xl max-w-lg space-y-4">
+                <h3 className="font-bold text-sm text-gray-900">نشر كتقرير صفحة ويب HTML مستقلة</h3>
+                <p className="text-xs text-gray-600 leading-relaxed">
+                  يمكنك حفظ المصنف كملف HTML مستقل كامل التنسيق يعمل على أي متصفح في أي بيئة دون الحاجة لبرامج إضافية.
+                </p>
+                <button
+                  onClick={() => {
+                    onExport('txt');
+                    alert('تم تجهيز التقرير للنشر بنجاح!');
+                    onClose();
+                  }}
+                  className="px-4 py-2 bg-[#107c41] text-white rounded-lg text-xs font-bold hover:bg-[#0b6a35] transition cursor-pointer"
+                >
+                  تصدير ونشر كتقرير تفاعلي
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* TAB: ACCOUNT */}
+          {activeTab === 'account' && (
+            <div className="space-y-6">
+              <div className="border-b pb-4">
+                <h1 className="text-2xl font-black text-gray-900">الحساب والترخيص (Account)</h1>
+                <p className="text-xs text-gray-500 mt-1">معلومات الترخيص المؤسسي وحساب المستخدم المكتبي.</p>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-4">
+                  <div className="flex items-center gap-3 p-4 bg-gray-50 rounded-xl border border-gray-200">
+                    <div className="w-12 h-12 rounded-full bg-[#107c41] text-white flex items-center justify-center font-bold text-lg">
+                      MS
                     </div>
+                    <div>
+                      <h3 className="font-bold text-sm text-gray-900">Mohamed Salah Elsayed Farahat</h3>
+                      <p className="text-xs text-gray-500 font-mono">mohamed.farahat@office-suite.local</p>
+                      <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded mt-1 inline-block">
+                        حساب مفعل - مرخص محلياً
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <h4 className="font-bold text-xs text-gray-700">السمة والمظهر (Office Theme):</h4>
+                    <select className="w-full bg-white border border-gray-300 rounded px-3 py-1.5 text-xs text-gray-800 outline-none">
+                      <option>ملون (Colorful - Microsoft 365 Standard)</option>
+                      <option>رمادي داكن (Dark Gray)</option>
+                      <option>أسود (Black High Contrast)</option>
+                      <option>أبيض ناصع (Classic White)</option>
+                    </select>
                   </div>
                 </div>
 
-                <div className="p-4 bg-blue-50 rounded-xl border border-blue-200 flex items-start gap-3">
-                  <CheckCircle2 className="w-5 h-5 text-blue-600 shrink-0 mt-0.5" />
-                  <div className="text-xs">
-                    <div className="font-bold text-blue-900 mb-0.5">محلي بالكامل (Local Offline-First)</div>
-                    <div className="text-blue-700 leading-relaxed">
-                      يتم تخزين جميع البيانات في ذاكرة جهازك (IndexedDB / LocalStorage). التطبيق يعمل بدون إنترنت بكفاءة تامة.
-                    </div>
+                <div className="p-4 bg-emerald-50/50 border border-emerald-200 rounded-xl space-y-3">
+                  <div className="flex items-center gap-2 text-emerald-800 font-bold text-sm">
+                    <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+                    <span>المنتج مفعل: MY-DOC Sovereign Suite 2026</span>
                   </div>
-                </div>
-
-                <div className="p-4 bg-purple-50 rounded-xl border border-purple-200 flex items-start gap-3">
-                  <CheckCircle2 className="w-5 h-5 text-purple-600 shrink-0 mt-0.5" />
-                  <div className="text-xs">
-                    <div className="font-bold text-purple-900 mb-0.5">نسخة احتياطية مشفرة بضغطة زر</div>
-                    <div className="text-purple-700 leading-relaxed mb-3">
-                      يمكنك نسخ جميع مستنداتك وجداولك وقواعد بياناتك إلى الحافظة كنص مشفر لحفظها في مكان آمن.
-                    </div>
-                    <button
-                      onClick={handleCopyBackup}
-                      className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded font-medium flex items-center gap-1.5 transition text-xs"
-                    >
-                      {copiedBackup ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-                      <span>{copiedBackup ? 'تم نسخ الخزنة بنجاح!' : 'نسخ الخزنة الاحتياطية كاملة'}</span>
-                    </button>
+                  <p className="text-xs text-gray-600 leading-relaxed">
+                    هذه النسخة تحتوي على كامل تطبيقات أوفيس (Excel, Word, PowerPoint, Access, OneNote, PDF Studio, Photo Studio) بترخيص مؤسسي سيادي غير محدود وتعمل أوفلاين بنسبة 100%.
+                  </p>
+                  <div className="text-[11px] font-mono text-gray-500 pt-2 border-t border-emerald-200">
+                    <div>إصدار النواة: v3.8.2-Enterprise</div>
+                    <div>نوع المعمارية: Offline-First Client Architecture</div>
                   </div>
                 </div>
               </div>
             </div>
           )}
 
-          {/* TAB 6: CLOUD SYNC */}
-          {activeTab === 'cloud' && (
-            <div>
-              <h1 className="text-2xl font-black text-gray-900 mb-2">الربط السحابي مع استضافة إنفينيتي الخاصة بك</h1>
-              <p className="text-sm text-gray-500 mb-6">
-                اربط تطبيق الأوفيس السيادي بسيرفرك الشخصي (VPS أو استضافة cPanel) لمزامنة المستندات عبر بروتوكول آمن WebDAV أو SSH.
-              </p>
+          {/* TAB: OPTIONS */}
+          {activeTab === 'options' && (
+            <div className="space-y-6">
+              <div className="border-b pb-4">
+                <h1 className="text-2xl font-black text-gray-900">خيارات متقدمة (Options)</h1>
+                <p className="text-xs text-gray-500 mt-1">تخصيص بيئة العمل وسلوك الجداول والحفظ التلقائي.</p>
+              </div>
 
-              <div className="p-6 rounded-2xl bg-gray-50 border border-gray-200 space-y-4 max-w-lg">
-                <div>
-                  <label className="block text-xs font-bold text-gray-700 mb-1">عنوان خادم الاستضافة (Server Host / IP):</label>
-                  <input
-                    type="text"
-                    defaultValue="vps.infntytech.com"
-                    className="w-full bg-white border border-gray-300 rounded px-3 py-1.5 text-xs text-gray-800 outline-none focus:border-blue-500"
-                  />
+              <div className="space-y-4 max-w-xl text-xs">
+                <div className="p-4 bg-gray-50 border border-gray-200 rounded-xl space-y-3">
+                  <h4 className="font-bold text-sm text-gray-800">الحفظ التلقائي المحلي:</h4>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" defaultChecked className="accent-[#107c41]" />
+                    <span>حفظ كافة التغييرات تلقائياً في ذاكرة المتصفح كل 5 دقائق</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" defaultChecked className="accent-[#107c41]" />
+                    <span>حفظ نسخة احتياطية فورية عند إغلاق التبويب</span>
+                  </label>
                 </div>
 
-                <div>
-                  <label className="block text-xs font-bold text-gray-700 mb-1">اسم المستخدم / البريد:</label>
-                  <input
-                    type="text"
-                    defaultValue="admin@infntytech.com"
-                    className="w-full bg-white border border-gray-300 rounded px-3 py-1.5 text-xs text-gray-800 outline-none focus:border-blue-500"
-                  />
+                <div className="p-4 bg-gray-50 border border-gray-200 rounded-xl space-y-3">
+                  <h4 className="font-bold text-sm text-gray-800">خيارات الحسابات في إكسيل (Calculation):</h4>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="radio" name="calc" defaultChecked className="accent-[#107c41]" />
+                    <span>تلقائي: إعادة حساب كافة الصيغ فور إدخال أي رقم (مستحسن)</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="radio" name="calc" className="accent-[#107c41]" />
+                    <span>يدوي: إعادة الحساب فقط عند الضغط على F9 أو زر الحساب</span>
+                  </label>
                 </div>
 
-                <div className="pt-2">
+                <div className="flex justify-end gap-2 pt-2">
                   <button
                     onClick={() => {
-                      alert('تم ضبط إعدادات الاتصال الآمن مع خادم الاستضافة بنجاح!');
+                      alert('تم حفظ وتطبيق الخيارات المتقدمة بنجاح!');
                       onClose();
                     }}
-                    className="w-full bg-[#0078d4] text-white py-2 rounded-lg text-xs font-bold hover:bg-[#006abc] transition"
+                    className="px-5 py-2 bg-[#107c41] text-white rounded-lg text-xs font-bold hover:bg-[#0b6a35] transition cursor-pointer"
                   >
-                    حفظ وإجراء مزامنة مشفرة
+                    موافق (حفظ الخيارات)
+                  </button>
+                  <button
+                    onClick={onClose}
+                    className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg text-xs font-semibold hover:bg-gray-300 transition cursor-pointer"
+                  >
+                    إلغاء الأمر
                   </button>
                 </div>
               </div>

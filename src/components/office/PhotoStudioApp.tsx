@@ -233,41 +233,15 @@ export const PhotoStudioApp: React.FC<Props> = ({
       return;
     }
 
-    // Default authentic Photoshop artwork
+    // Default clean blank Photoshop canvas
     canvas.width = 820;
-    canvas.height = 520;
-
-    const grad = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
-    grad.addColorStop(0, '#0a0f1d');
-    grad.addColorStop(0.5, '#0f172a');
-    grad.addColorStop(1, '#0284c7');
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-    ctx.strokeStyle = 'rgba(56, 189, 248, 0.4)';
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    ctx.arc(canvas.width / 2, canvas.height / 2, 160, 0, Math.PI * 2);
-    ctx.stroke();
-
-    ctx.strokeStyle = 'rgba(16, 185, 129, 0.45)';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.arc(canvas.width / 2, canvas.height / 2, 100, 0, Math.PI * 2);
-    ctx.stroke();
-
-    ctx.font = 'bold 36px "Segoe UI", Cairo, sans-serif';
+    canvas.height = 540;
     ctx.fillStyle = '#ffffff';
-    ctx.textAlign = 'center';
-    ctx.fillText('MY-DOC PHOTO STUDIO', canvas.width / 2, canvas.height / 2 - 12);
-
-    ctx.font = '600 16px "Segoe UI", Cairo, sans-serif';
-    ctx.fillStyle = '#38bdf8';
-    ctx.fillText('PHOTOSHOP CC 2026 SOVEREIGN EDITION', canvas.width / 2, canvas.height / 2 + 30);
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     const initialSnapshot = ctx.getImageData(0, 0, canvas.width, canvas.height);
     const now = new Date().toLocaleTimeString('ar-EG');
-    setHistorySteps([{ name: 'بدء مستند جديد', imageData: initialSnapshot, time: now }]);
+    setHistorySteps([{ name: 'لوحة رسم جديدة فارغة', imageData: initialSnapshot, time: now }]);
     setCurrentHistoryIndex(0);
   }, []);
 

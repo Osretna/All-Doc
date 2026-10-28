@@ -92,7 +92,7 @@ export const NotesPageView: React.FC<Props> = ({
               <div key={i}>• {b}</div>
             ))}
           </div>
-          <div className="text-[9px] text-white/40">Infinity Sovereign Slides</div>
+          <div className="text-[9px] text-white/40">MY-DOC Sovereign Slides</div>
         </div>
 
         {/* Large Editable Notes Box */}

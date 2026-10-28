@@ -60,6 +60,7 @@ export interface ExcelContextMenuProps {
   onHideCol?: (col: string) => void;
   onUnhideCols?: () => void;
   onPickDropdownValue?: (val: string) => void;
+  onOpenFormatCells?: (tab?: 'number' | 'alignment' | 'font' | 'border' | 'fill' | 'protection') => void;
 }
 
 export const ExcelContextMenu: React.FC<ExcelContextMenuProps> = ({
@@ -95,6 +96,7 @@ export const ExcelContextMenu: React.FC<ExcelContextMenuProps> = ({
   onHideCol,
   onUnhideCols,
   onPickDropdownValue,
+  onOpenFormatCells,
 }) => {
   const menuRef = useRef<HTMLDivElement>(null);
   const [showFilterSubmenu, setShowFilterSubmenu] = useState(false);
@@ -411,6 +413,16 @@ export const ExcelContextMenu: React.FC<ExcelContextMenuProps> = ({
             >
               <span>Unhide</span>
             </button>
+            <button
+              onClick={() => {
+                onOpenFormatCells?.('number');
+                onClose();
+              }}
+              className="w-full px-3 py-1.5 flex items-center gap-2 hover:bg-emerald-50 transition cursor-pointer text-left font-medium text-slate-800"
+            >
+              <TableProperties className="w-3.5 h-3.5 text-[#107c41]" />
+              <span>Format Cells... (تنسيق الخلايا)</span>
+            </button>
           </div>
         )}
 
@@ -469,6 +481,16 @@ export const ExcelContextMenu: React.FC<ExcelContextMenuProps> = ({
               className="w-full px-3 py-1.5 flex items-center gap-2 hover:bg-gray-100 transition cursor-pointer text-left text-gray-700"
             >
               <span>Unhide</span>
+            </button>
+            <button
+              onClick={() => {
+                onOpenFormatCells?.('number');
+                onClose();
+              }}
+              className="w-full px-3 py-1.5 flex items-center gap-2 hover:bg-emerald-50 transition cursor-pointer text-left font-medium text-slate-800"
+            >
+              <TableProperties className="w-3.5 h-3.5 text-[#107c41]" />
+              <span>Format Cells... (تنسيق الخلايا)</span>
             </button>
           </div>
         )}
@@ -619,13 +641,16 @@ export const ExcelContextMenu: React.FC<ExcelContextMenuProps> = ({
             {/* Format Cells... */}
             <button
               onClick={() => {
-                onFormatRange('bg', '#fef08a');
+                onOpenFormatCells?.('number');
                 onClose();
               }}
-              className="w-full px-3 py-1.5 flex items-center gap-2 hover:bg-gray-100 transition cursor-pointer text-left font-medium"
+              className="w-full px-3 py-1.5 flex items-center justify-between hover:bg-emerald-50 transition cursor-pointer text-left font-semibold text-slate-900 group"
             >
-              <TableProperties className="w-3.5 h-3.5 text-gray-700" />
-              <span>Format Cells...</span>
+              <div className="flex items-center gap-2">
+                <TableProperties className="w-3.5 h-3.5 text-[#107c41]" />
+                <span>Format Cells... (تنسيق الخلايا)</span>
+              </div>
+              <span className="text-[10px] text-gray-400 group-hover:text-emerald-700">Ctrl+1</span>
             </button>
 
             {/* Pick From Drop-down List... */}

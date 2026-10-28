@@ -23,13 +23,13 @@ interface Props {
 
 const DEFAULT_DOC_CONTENT = `
 <div style="text-align: center; border-bottom: 2px solid #0078d4; padding-bottom: 15px; margin-bottom: 25px;">
-  <h1 style="color: #0078d4; font-size: 26px; margin-bottom: 6px; font-weight: 800;">شركة إنفينيتي تكنولوجي للحلول السحابية المتقدمة</h1>
-  <p style="color: #605e5c; font-size: 13px; margin: 0;">تقرير فني واستراتيجي: جناح الأوفيس المكتبي السيادي (Infinity Sovereign Office)</p>
+  <h1 style="color: #0078d4; font-size: 26px; margin-bottom: 6px; font-weight: 800;">جناح MY-DOC المكتبي السيادي المتكامل</h1>
+  <p style="color: #605e5c; font-size: 13px; margin: 0;">تقرير فني واستراتيجي: جناح الأوفيس المكتبي السيادي (MY-DOC Sovereign Office)</p>
 </div>
 
 <h2 style="color: #106ebe; font-size: 18px; margin-top: 20px; border-right: 4px solid #0078d4; padding-right: 10px;">1. ملخص المشروع والرؤية السيادية</h2>
 <p style="line-height: 1.8; text-align: justify;">
-يقدم هذا المشروع نموذجاً متفرداً يجمع بين <strong>البنية التحتية السحابية القوية</strong> (استضافة Shared + VPS بنظام ملفات ZFS وأقراص NVMe فائقة السرعة مع حماية ModSecurity) وبين <strong>جناح تطبيقات مكتبية سيادي متكامل</strong> يحاكي ويتفوق على تطبيقات مايكروسوفت أوفيس (Word, Excel, PowerPoint, OneNote, Access, Acrobat, Photoshop).
+يقدم هذا المشروع نموذجاً متفرداً يجمع بين <strong>جناح تطبيقات مكتبية سيادي متكامل</strong> يحاكي ويتفوق على تطبيقات مايكروسوفت أوفيس (Word, Excel, PowerPoint, OneNote, Access, Acrobat, Photoshop).
 </p>
 
 <div style="background-color: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 12px 16px; margin: 15px 0;">
@@ -43,24 +43,24 @@ const DEFAULT_DOC_CONTENT = `
 <table style="width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 13px;">
   <thead>
     <tr style="background-color: #0078d4; color: white;">
-      <th style="padding: 10px; border: 1px solid #0078d4; text-align: right;">تطبيق Infinity</th>
+      <th style="padding: 10px; border: 1px solid #0078d4; text-align: right;">تطبيق MY-DOC</th>
       <th style="padding: 10px; border: 1px solid #0078d4; text-align: right;">المقابل في MS Office</th>
       <th style="padding: 10px; border: 1px solid #0078d4; text-align: right;">الوظيفة والمزايا السيادية</th>
     </tr>
   </thead>
   <tbody>
     <tr style="background-color: #ffffff;">
-      <td style="padding: 8px 10px; border: 1px solid #e1dfdd; font-weight: bold; color: #0078d4;">Infinity Docs</td>
+      <td style="padding: 8px 10px; border: 1px solid #e1dfdd; font-weight: bold; color: #0078d4;">MY-DOC Word</td>
       <td style="padding: 8px 10px; border: 1px solid #e1dfdd;">Microsoft Word</td>
       <td style="padding: 8px 10px; border: 1px solid #e1dfdd;">محرر نصوص غني، تخطيط A4، قوالب عربية، دعم RTL فائق، تصدير .docx و PDF</td>
     </tr>
     <tr style="background-color: #f9fafb;">
-      <td style="padding: 8px 10px; border: 1px solid #e1dfdd; font-weight: bold; color: #107c41;">Infinity Sheets</td>
+      <td style="padding: 8px 10px; border: 1px solid #e1dfdd; font-weight: bold; color: #107c41;">MY-DOC Excel</td>
       <td style="padding: 8px 10px; border: 1px solid #e1dfdd;">Microsoft Excel</td>
       <td style="padding: 8px 10px; border: 1px solid #e1dfdd;">أكثر من 100 دالة رياضية ومالية، رسوم بيانية تفاعلية، جداول مصروفات اتحاد ملاك</td>
     </tr>
     <tr style="background-color: #ffffff;">
-      <td style="padding: 8px 10px; border: 1px solid #e1dfdd; font-weight: bold; color: #d83b01;">Infinity Slides</td>
+      <td style="padding: 8px 10px; border: 1px solid #e1dfdd; font-weight: bold; color: #d83b01;">MY-DOC PowerPoint</td>
       <td style="padding: 8px 10px; border: 1px solid #e1dfdd;">Microsoft PowerPoint</td>
       <td style="padding: 8px 10px; border: 1px solid #e1dfdd;">عروض تقديمية 16:9، وضع عارض كامل الشاشة، أشكال متقدمة، قوالب خليجية</td>
     </tr>
@@ -551,7 +551,7 @@ export const DocsApp: React.FC<Props> = ({
           <div className="mt-16 pt-4 border-t border-gray-200 flex items-center justify-between text-[11px] text-gray-400 select-none">
             <div className="flex items-center gap-1.5">
               <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-              <span>Infinity Sovereign Office - وثيقة محمية محلياً</span>
+              <span>MY-DOC Sovereign Office - وثيقة محمية محلياً</span>
             </div>
             <span>صفحة 1 من 1</span>
           </div>

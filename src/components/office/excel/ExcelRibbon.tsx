@@ -47,11 +47,18 @@ import {
   Hash,
   Calculator,
   Binary,
-  Maximize2
+  Maximize2,
+  Lightbulb,
+  Share2,
+  ExternalLink,
+  RefreshCw,
+  SlidersHorizontal,
+  Sliders,
+  Check
 } from 'lucide-react';
 import { SheetCell } from '../../../types';
 
-export type ExcelRibbonTab = 'file' | 'home' | 'insert' | 'layout' | 'formulas' | 'data' | 'review' | 'view';
+export type ExcelRibbonTab = 'file' | 'home' | 'insert' | 'layout' | 'formulas' | 'data' | 'review' | 'view' | 'design';
 
 interface Props {
   activeTab: ExcelRibbonTab;
@@ -112,6 +119,29 @@ interface Props {
   onInsertFloatingImage?: () => void;
   onInsertShape?: (shapeType: 'rect' | 'rounded-rect' | 'circle' | 'arrow-right' | 'arrow-left' | 'callout' | 'star' | 'diamond') => void;
   onCreateTable?: () => void;
+  onOpenFormatCells?: (tab?: 'number' | 'alignment' | 'font' | 'border' | 'fill' | 'protection') => void;
+  tableName?: string;
+  onTableNameChange?: (name: string) => void;
+  hasHeaderRow?: boolean;
+  onToggleHeaderRow?: () => void;
+  hasTotalRow?: boolean;
+  onToggleTotalRow?: () => void;
+  hasBandedRows?: boolean;
+  onToggleBandedRows?: () => void;
+  hasFirstColumn?: boolean;
+  onToggleFirstColumn?: () => void;
+  hasLastColumn?: boolean;
+  onToggleLastColumn?: () => void;
+  hasBandedColumns?: boolean;
+  onToggleBandedColumns?: () => void;
+  hasFilterButton?: boolean;
+  onToggleFilterButton?: () => void;
+  onApplyTableStyle?: (styleName: string) => void;
+  activeTableStyle?: string;
+  onConvertTableToRange?: () => void;
+  onResizeTable?: () => void;
+  onExportTable?: (format: 'csv' | 'json' | 'pdf') => void;
+  onInsertSlicer?: () => void;
 }
 
 export const ExcelRibbon: React.FC<Props> = ({
@@ -173,77 +203,126 @@ export const ExcelRibbon: React.FC<Props> = ({
   onInsertFloatingImage,
   onInsertShape,
   onCreateTable,
+  onOpenFormatCells,
+  tableName = 'Table1',
+  onTableNameChange,
+  hasHeaderRow = true,
+  onToggleHeaderRow,
+  hasTotalRow = false,
+  onToggleTotalRow,
+  hasBandedRows = true,
+  onToggleBandedRows,
+  hasFirstColumn = false,
+  onToggleFirstColumn,
+  hasLastColumn = false,
+  onToggleLastColumn,
+  hasBandedColumns = false,
+  onToggleBandedColumns,
+  hasFilterButton = true,
+  onToggleFilterButton,
+  onApplyTableStyle,
+  activeTableStyle = 'green',
+  onConvertTableToRange,
+  onResizeTable,
+  onExportTable,
+  onInsertSlicer,
 }) => {
   // Dropdown states
   const [showBorderMenu, setShowBorderMenu] = useState(false);
   const [showPasteSpecialMenu, setShowPasteSpecialMenu] = useState(false);
   const [showNumberFormatMenu, setShowNumberFormatMenu] = useState(false);
+  const [showFormatCellsMenu, setShowFormatCellsMenu] = useState(false);
   const [showAutoSumMenu, setShowAutoSumMenu] = useState(false);
   const [showClearMenu, setShowClearMenu] = useState(false);
   const [showCellStylesMenu, setShowCellStylesMenu] = useState(false);
   const [showFreezeMenu, setShowFreezeMenu] = useState(false);
   const [showShapesMenu, setShowShapesMenu] = useState(false);
   const [showImageMenu, setShowImageMenu] = useState(false);
+  const [showExportDataMenu, setShowExportDataMenu] = useState(false);
   const [selectedFont, setSelectedFont] = useState('Calibri');
   const [selectedFontSize, setSelectedFontSize] = useState(11);
+  const [tellMeQuery, setTellMeQuery] = useState('');
 
   const tabs: { id: ExcelRibbonTab; label: string }[] = [
-    { id: 'home', label: 'الرئيسية' },
-    { id: 'insert', label: 'إدراج' },
-    { id: 'layout', label: 'تخطيط الصفحة' },
-    { id: 'formulas', label: 'صيغ' },
-    { id: 'data', label: 'بيانات' },
-    { id: 'review', label: 'مراجعة' },
-    { id: 'view', label: 'عرض' },
+    { id: 'home', label: 'Home' },
+    { id: 'insert', label: 'Insert' },
+    { id: 'layout', label: 'Page Layout' },
+    { id: 'formulas', label: 'Formulas' },
+    { id: 'data', label: 'Data' },
+    { id: 'review', label: 'Review' },
+    { id: 'view', label: 'View' },
+    { id: 'design', label: 'Design' },
   ];
 
   return (
-    <div className="bg-[#f3f2f1] border-b border-gray-300 select-none text-gray-800 text-xs shrink-0 z-30">
-      {/* 1. Ribbon Tab Headers */}
-      <div className="flex items-center gap-0.5 px-3 pt-1 border-b border-gray-300 bg-[#f3f2f1]">
-        {/* File Button */}
-        <button
-          onClick={onOpenBackstage}
-          className="px-4 py-1.5 bg-[#107c41] hover:bg-[#0e6b37] text-white font-bold rounded-t-sm transition flex items-center gap-1.5 cursor-pointer shadow-xs text-xs"
-        >
-          <span>ملف</span>
-        </button>
+    <div className="bg-[#107c41] border-b border-gray-300 select-none text-gray-800 text-xs shrink-0 z-30 no-print ribbon-container" data-no-print="true">
+      {/* 1. Master Microsoft Excel 365 Tab Headers & Tell Me Search */}
+      <div className="flex items-center justify-between px-2 pt-1 bg-[#107c41] text-white">
+        {/* Left: File Button & Navigation Tabs */}
+        <div className="flex items-center gap-0.5 overflow-x-auto">
+          {/* File Button */}
+          <button
+            onClick={onOpenBackstage}
+            className="px-3.5 py-1.5 bg-[#0e6b37] hover:bg-[#0c592e] text-white font-bold rounded-t-sm transition flex items-center gap-1 cursor-pointer text-xs shrink-0 shadow-xs"
+            title="ملف (File Backstage Menu)"
+          >
+            <span>File</span>
+          </button>
 
-        {/* Tab Buttons */}
-        {tabs.map((tab) => {
-          const isActive = activeTab === tab.id;
-          return (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`px-3.5 py-1.5 font-semibold text-xs rounded-t-sm transition cursor-pointer relative ${
-                isActive
-                  ? 'bg-white text-[#107c41] font-bold border-t-2 border-t-[#107c41] shadow-2xs'
-                  : 'text-gray-700 hover:bg-gray-200/70 hover:text-gray-900'
-              }`}
-            >
-              {tab.label}
-              {isActive && (
-                <div className="absolute -bottom-[1px] left-0 right-0 h-[2px] bg-white z-10" />
-              )}
-            </button>
-          );
-        })}
+          {/* Ribbon Tabs */}
+          {tabs.map((tab) => {
+            const isActive = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`px-3 py-1.5 text-xs font-semibold rounded-t-sm transition cursor-pointer relative shrink-0 ${
+                  isActive
+                    ? 'bg-white text-[#107c41] font-bold shadow-xs'
+                    : 'text-white/90 hover:bg-white/15 hover:text-white'
+                }`}
+              >
+                <span>{tab.label}</span>
+                {isActive && (
+                  <div className="absolute -bottom-[1px] left-0 right-0 h-[2px] bg-white z-10" />
+                )}
+              </button>
+            );
+          })}
+        </div>
 
-        <div className="flex-1" />
+        {/* Center: "Tell me what you want to do..." Search Bar */}
+        <div className="hidden lg:flex items-center relative w-64 mx-3">
+          <Lightbulb className="w-3.5 h-3.5 absolute right-2.5 text-white/70 pointer-events-none" />
+          <input
+            type="text"
+            placeholder="Tell me what you want to do..."
+            value={tellMeQuery}
+            onChange={(e) => setTellMeQuery(e.target.value)}
+            className="w-full bg-white/20 hover:bg-white/30 focus:bg-white focus:text-gray-900 text-white placeholder-white/70 rounded px-2.5 py-1 pr-8 text-xs outline-none transition shadow-2xs font-sans"
+            style={{ direction: 'ltr' }}
+          />
+        </div>
 
-        {/* Right fast status info */}
-        <div className="flex items-center gap-2 text-[11px] text-gray-600 px-2 pb-1">
-          <span className="bg-emerald-100 text-[#107c41] px-2 py-0.5 rounded font-mono font-bold">
-            {selectedRangeStr || activeCell}
-          </span>
-          <span className="text-gray-400">|</span>
-          <span>Excel Sovereign Suite</span>
+        {/* Right: User Profile & Share */}
+        <div className="flex items-center gap-3 text-white text-xs shrink-0 px-2 pb-1">
+          <span className="font-semibold hidden sm:inline text-white/95 text-[11.5px]">Mohamed Salah Elsayed Farahat</span>
+          <button 
+            onClick={() => {
+              navigator.clipboard?.writeText(window.location.href);
+              alert('تم نسخ رابط المصنف للمشاركة بنجاح!');
+            }}
+            className="flex items-center gap-1.5 bg-white/15 hover:bg-white/25 px-2.5 py-1 rounded text-xs font-bold transition cursor-pointer shadow-2xs"
+            title="مشاركة المصنف (Share)"
+          >
+            <Share2 className="w-3.5 h-3.5 text-white" />
+            <span>Share</span>
+          </button>
         </div>
       </div>
 
       {/* 2. Ribbon Content Container */}
-      <div className="bg-white px-3 py-1.5 min-h-[92px] flex items-stretch gap-2 overflow-x-auto shadow-inner">
+      <div className="bg-white px-3 py-1.5 min-h-[92px] flex items-stretch gap-2 overflow-x-auto shadow-inner text-gray-800">
         {/* ========================================================= */}
         {/* TAB: HOME (الرئيسية)                                      */}
         {/* ========================================================= */}
@@ -504,7 +583,18 @@ export const ExcelRibbon: React.FC<Props> = ({
                   </label>
                 </div>
               </div>
-              <div className="text-[10px] text-gray-400 text-center font-medium mt-1">خط</div>
+              <div className="flex items-center justify-between px-1 text-[10px] text-gray-400 font-medium mt-1">
+                <span className="mx-auto">خط</span>
+                {onOpenFormatCells && (
+                  <button
+                    onClick={() => onOpenFormatCells('font')}
+                    className="p-0.5 hover:text-[#107c41] hover:bg-gray-200 rounded cursor-pointer"
+                    title="تنسيق خلايا - الخط (Ctrl+1)"
+                  >
+                    <Maximize2 className="w-2.5 h-2.5" />
+                  </button>
+                )}
+              </div>
             </div>
 
             {/* Alignment Group */}
@@ -580,7 +670,18 @@ export const ExcelRibbon: React.FC<Props> = ({
                   </button>
                 </div>
               </div>
-              <div className="text-[10px] text-gray-400 text-center font-medium mt-1">محاذاة</div>
+              <div className="flex items-center justify-between px-1 text-[10px] text-gray-400 font-medium mt-1">
+                <span className="mx-auto">محاذاة</span>
+                {onOpenFormatCells && (
+                  <button
+                    onClick={() => onOpenFormatCells('alignment')}
+                    className="p-0.5 hover:text-[#107c41] hover:bg-gray-200 rounded cursor-pointer"
+                    title="تنسيق خلايا - محاذاة (Ctrl+1)"
+                  >
+                    <Maximize2 className="w-2.5 h-2.5" />
+                  </button>
+                )}
+              </div>
             </div>
 
             {/* Number Format Group */}
@@ -606,7 +707,7 @@ export const ExcelRibbon: React.FC<Props> = ({
                   </button>
 
                   {showNumberFormatMenu && (
-                    <div className="absolute top-full left-0 mt-1 bg-white border border-gray-300 rounded shadow-xl py-1 z-50 w-36 text-right">
+                    <div className="absolute top-full left-0 mt-1 bg-white border border-gray-300 rounded shadow-xl py-1 z-50 w-44 text-right">
                       <button onClick={() => { onSetNumberFormat('text'); setShowNumberFormatMenu(false); }} className="w-full px-3 py-1 text-right hover:bg-emerald-50 text-[11px] block">عام</button>
                       <button onClick={() => { onSetNumberFormat('number'); setShowNumberFormatMenu(false); }} className="w-full px-3 py-1 text-right hover:bg-emerald-50 text-[11px] block">رقم (1,234.00)</button>
                       <button onClick={() => { onSetNumberFormat('currency-sar'); setShowNumberFormatMenu(false); }} className="w-full px-3 py-1 text-right hover:bg-emerald-50 text-[11px] block">عملة ر.س</button>
@@ -616,6 +717,17 @@ export const ExcelRibbon: React.FC<Props> = ({
                       <button onClick={() => { onSetNumberFormat('accounting'); setShowNumberFormatMenu(false); }} className="w-full px-3 py-1 text-right hover:bg-emerald-50 text-[11px] block">محاسبة</button>
                       <button onClick={() => { onSetNumberFormat('date'); setShowNumberFormatMenu(false); }} className="w-full px-3 py-1 text-right hover:bg-emerald-50 text-[11px] block">تاريخ (YYYY-MM-DD)</button>
                       <button onClick={() => { onSetNumberFormat('scientific'); setShowNumberFormatMenu(false); }} className="w-full px-3 py-1 text-right hover:bg-emerald-50 text-[11px] block">علمي (Scientific)</button>
+                      <div className="border-t border-gray-200 my-1"></div>
+                      <button
+                        onClick={() => {
+                          setShowNumberFormatMenu(false);
+                          onOpenFormatCells?.('number');
+                        }}
+                        className="w-full px-3 py-1.5 text-right hover:bg-emerald-50 text-[11px] font-bold text-emerald-800 flex items-center justify-between"
+                      >
+                        <span>تنسيقات أرقام إضافية...</span>
+                        <span className="text-[9px] text-gray-400 font-mono">Ctrl+1</span>
+                      </button>
                     </div>
                   )}
                 </div>
@@ -659,7 +771,18 @@ export const ExcelRibbon: React.FC<Props> = ({
                   </button>
                 </div>
               </div>
-              <div className="text-[10px] text-gray-400 text-center font-medium mt-1">رقم</div>
+              <div className="flex items-center justify-between px-1 text-[10px] text-gray-400 font-medium mt-1">
+                <span className="mx-auto">رقم</span>
+                {onOpenFormatCells && (
+                  <button
+                    onClick={() => onOpenFormatCells('number')}
+                    className="p-0.5 hover:text-[#107c41] hover:bg-gray-200 rounded cursor-pointer"
+                    title="تنسيق خلايا - الأرقام (Ctrl+1)"
+                  >
+                    <Maximize2 className="w-2.5 h-2.5" />
+                  </button>
+                )}
+              </div>
             </div>
 
             {/* Styles Group (Conditional formatting, Format as Table, Cell styles) */}
@@ -776,8 +899,32 @@ export const ExcelRibbon: React.FC<Props> = ({
                     <span>حذف عمود</span>
                   </button>
                 </div>
+
+                {onOpenFormatCells && (
+                  <div className="flex flex-col gap-1">
+                    <button
+                      onClick={() => onOpenFormatCells('number')}
+                      className="flex items-center gap-1 px-2 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-[#107c41] border border-emerald-300 rounded text-[10px] font-bold"
+                      title="تنسيق الخلايا الكامل (Format Cells - Ctrl+1)"
+                    >
+                      <Sparkles className="w-3.5 h-3.5 text-[#107c41]" />
+                      <span>تنسيق خلايا...</span>
+                    </button>
+                  </div>
+                )}
               </div>
-              <div className="text-[10px] text-gray-400 text-center font-medium mt-1">خلايا</div>
+              <div className="flex items-center justify-between px-1 text-[10px] text-gray-400 font-medium mt-1">
+                <span className="mx-auto">خلايا</span>
+                {onOpenFormatCells && (
+                  <button
+                    onClick={() => onOpenFormatCells('number')}
+                    className="p-0.5 hover:text-[#107c41] hover:bg-gray-200 rounded cursor-pointer"
+                    title="تنسيق الخلايا (Ctrl+1)"
+                  >
+                    <Maximize2 className="w-2.5 h-2.5" />
+                  </button>
+                )}
+              </div>
             </div>
 
             {/* Editing Group (AutoSum, Fill, Clear, Sort & Filter, Find & Select) */}
@@ -1666,6 +1813,314 @@ export const ExcelRibbon: React.FC<Props> = ({
                 </button>
               </div>
               <div className="text-[10px] text-gray-400 text-center font-medium mt-1">نافذة ووحدات ماكرو</div>
+            </div>
+          </div>
+        )}
+
+        {/* ========================================================= */}
+        {/* TAB: DESIGN (Table Tools Design - تصميم الجدول)           */}
+        {/* ========================================================= */}
+        {activeTab === 'design' && (
+          <div className="flex items-stretch gap-2 text-xs">
+            {/* 1. Properties Group */}
+            <div className="flex flex-col justify-between border-l border-gray-200 pl-2 pr-1">
+              <div className="flex flex-col gap-1.5">
+                <div className="flex flex-col">
+                  <span className="text-[10px] text-gray-600 font-semibold mb-0.5">Table Name:</span>
+                  <input
+                    type="text"
+                    value={tableName}
+                    onChange={(e) => onTableNameChange?.(e.target.value)}
+                    className="w-24 bg-white border border-gray-300 rounded px-1.5 py-0.5 text-xs font-mono font-bold text-gray-900 outline-none focus:border-[#107c41]"
+                  />
+                </div>
+                <button
+                  onClick={onResizeTable}
+                  className="flex items-center gap-1.5 p-1 rounded hover:bg-emerald-50 text-gray-700 hover:text-[#107c41] transition cursor-pointer text-[11px]"
+                  title="تغيير أبعاد وحدود الجدول (Resize Table)"
+                >
+                  <Grid className="w-3.5 h-3.5 text-blue-600" />
+                  <span>Resize Table</span>
+                </button>
+              </div>
+              <div className="text-[10px] text-gray-400 text-center font-medium mt-1">Properties</div>
+            </div>
+
+            {/* 2. Tools Group */}
+            <div className="flex flex-col justify-between border-l border-gray-200 pl-2 pr-1">
+              <div className="flex flex-col gap-1">
+                <button
+                  onClick={onOpenPivotTable}
+                  className="flex items-center gap-1.5 px-2 py-1 rounded hover:bg-emerald-50 text-gray-800 text-[11px] font-semibold transition cursor-pointer"
+                  title="تلخيص بيانات الجدول بجدول محوري (PivotTable)"
+                >
+                  <Table className="w-3.5 h-3.5 text-[#107c41]" />
+                  <span>Summarize with PivotTable</span>
+                </button>
+                <button
+                  onClick={onOpenRemoveDuplicates}
+                  className="flex items-center gap-1.5 px-2 py-1 rounded hover:bg-emerald-50 text-gray-800 text-[11px] font-semibold transition cursor-pointer"
+                  title="إزالة وتصفية الصفوف المكررة (Remove Duplicates)"
+                >
+                  <ArrowUpDown className="w-3.5 h-3.5 text-amber-600" />
+                  <span>Remove Duplicates</span>
+                </button>
+                <button
+                  onClick={onConvertTableToRange}
+                  className="flex items-center gap-1.5 px-2 py-1 rounded hover:bg-emerald-50 text-gray-800 text-[11px] font-semibold transition cursor-pointer"
+                  title="تحويل الجدول إلى نطاق خلايا عادي مع الاحتفاظ بالتنسيق"
+                >
+                  <FileSpreadsheet className="w-3.5 h-3.5 text-blue-600" />
+                  <span>Convert to Range</span>
+                </button>
+              </div>
+              <div className="text-[10px] text-gray-400 text-center font-medium mt-1">Tools</div>
+            </div>
+
+            {/* 3. External Table Data Group */}
+            <div className="flex flex-col justify-between border-l border-gray-200 pl-2 pr-1">
+              <div className="flex items-center gap-1.5">
+                <button
+                  onClick={onInsertSlicer}
+                  className="flex flex-col items-center justify-center p-1.5 hover:bg-emerald-50 rounded text-gray-800 cursor-pointer"
+                  title="إدراج مقسم طريقة العرض لتصفية بيانات الجدول بيانياً (Insert Slicer)"
+                >
+                  <Filter className="w-4 h-4 text-purple-600" />
+                  <span className="text-[10px] font-semibold mt-0.5">Insert Slicer</span>
+                </button>
+
+                <div className="relative">
+                  <button
+                    onClick={() => setShowExportDataMenu(!showExportDataMenu)}
+                    className="flex flex-col items-center justify-center p-1.5 hover:bg-emerald-50 rounded text-gray-800 cursor-pointer"
+                    title="تصدير بيانات الجدول"
+                  >
+                    <Download className="w-4 h-4 text-blue-600" />
+                    <span className="text-[10px] font-semibold mt-0.5 flex items-center gap-0.5">
+                      Export <ChevronDown className="w-3 h-3 text-gray-500" />
+                    </span>
+                  </button>
+
+                  {showExportDataMenu && (
+                    <div className="absolute top-full left-0 mt-1 bg-white border border-gray-300 rounded shadow-xl py-1 z-50 w-44 text-right">
+                      <button
+                        onClick={() => { onExportTable?.('csv'); setShowExportDataMenu(false); }}
+                        className="w-full px-3 py-1.5 text-right hover:bg-emerald-50 text-[11px] block font-semibold"
+                      >
+                        تصدير إلى ملف CSV
+                      </button>
+                      <button
+                        onClick={() => { onExportTable?.('json'); setShowExportDataMenu(false); }}
+                        className="w-full px-3 py-1.5 text-right hover:bg-emerald-50 text-[11px] block font-semibold"
+                      >
+                        تصدير إلى JSON
+                      </button>
+                      <button
+                        onClick={() => { onExportTable?.('pdf'); setShowExportDataMenu(false); }}
+                        className="w-full px-3 py-1.5 text-right hover:bg-emerald-50 text-[11px] block font-semibold"
+                      >
+                        تصدير كتقرير PDF
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                <button
+                  onClick={onRecalculateAll}
+                  className="flex flex-col items-center justify-center p-1.5 hover:bg-emerald-50 rounded text-gray-800 cursor-pointer"
+                  title="تحديث حسابات وبيانات الجدول (Refresh)"
+                >
+                  <RefreshCw className="w-4 h-4 text-[#107c41]" />
+                  <span className="text-[10px] font-semibold mt-0.5">Refresh</span>
+                </button>
+
+                <div className="flex flex-col gap-0.5 text-[10px] text-gray-600">
+                  <button onClick={() => onOpenFormatCells?.()} className="hover:text-blue-600 text-right cursor-pointer flex items-center gap-1">
+                    <span>Properties</span>
+                  </button>
+                  <button onClick={() => window.open(window.location.href, '_blank')} className="hover:text-blue-600 text-right cursor-pointer flex items-center gap-1">
+                    <span>Open in Browser</span>
+                  </button>
+                  <button onClick={onConvertTableToRange} className="hover:text-red-600 text-right cursor-pointer flex items-center gap-1">
+                    <span>Unlink</span>
+                  </button>
+                </div>
+              </div>
+              <div className="text-[10px] text-gray-400 text-center font-medium mt-1">External Table Data</div>
+            </div>
+
+            {/* 4. Table Style Options Group */}
+            <div className="flex flex-col justify-between border-l border-gray-200 pl-2 pr-1">
+              <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[11px]">
+                <label className="flex items-center gap-1.5 cursor-pointer text-gray-800 select-none">
+                  <input
+                    type="checkbox"
+                    checked={hasHeaderRow}
+                    onChange={onToggleHeaderRow}
+                    className="accent-[#107c41] rounded w-3.5 h-3.5 cursor-pointer"
+                  />
+                  <span>Header Row</span>
+                </label>
+                <label className="flex items-center gap-1.5 cursor-pointer text-gray-800 select-none">
+                  <input
+                    type="checkbox"
+                    checked={hasFirstColumn}
+                    onChange={onToggleFirstColumn}
+                    className="accent-[#107c41] rounded w-3.5 h-3.5 cursor-pointer"
+                  />
+                  <span>First Column</span>
+                </label>
+                <label className="flex items-center gap-1.5 cursor-pointer text-gray-800 select-none">
+                  <input
+                    type="checkbox"
+                    checked={hasTotalRow}
+                    onChange={onToggleTotalRow}
+                    className="accent-[#107c41] rounded w-3.5 h-3.5 cursor-pointer"
+                  />
+                  <span>Total Row</span>
+                </label>
+                <label className="flex items-center gap-1.5 cursor-pointer text-gray-800 select-none">
+                  <input
+                    type="checkbox"
+                    checked={hasLastColumn}
+                    onChange={onToggleLastColumn}
+                    className="accent-[#107c41] rounded w-3.5 h-3.5 cursor-pointer"
+                  />
+                  <span>Last Column</span>
+                </label>
+                <label className="flex items-center gap-1.5 cursor-pointer text-gray-800 select-none">
+                  <input
+                    type="checkbox"
+                    checked={hasBandedRows}
+                    onChange={onToggleBandedRows}
+                    className="accent-[#107c41] rounded w-3.5 h-3.5 cursor-pointer"
+                  />
+                  <span>Banded Rows</span>
+                </label>
+                <label className="flex items-center gap-1.5 cursor-pointer text-gray-800 select-none">
+                  <input
+                    type="checkbox"
+                    checked={hasBandedColumns}
+                    onChange={onToggleBandedColumns}
+                    className="accent-[#107c41] rounded w-3.5 h-3.5 cursor-pointer"
+                  />
+                  <span>Banded Columns</span>
+                </label>
+                <label className="flex items-center gap-1.5 cursor-pointer text-gray-800 select-none col-span-2">
+                  <input
+                    type="checkbox"
+                    checked={hasFilterButton}
+                    onChange={onToggleFilterButton}
+                    className="accent-[#107c41] rounded w-3.5 h-3.5 cursor-pointer"
+                  />
+                  <span>Filter Button</span>
+                </label>
+              </div>
+              <div className="text-[10px] text-gray-400 text-center font-medium mt-1">Table Style Options</div>
+            </div>
+
+            {/* 5. Table Styles Gallery */}
+            <div className="flex flex-col justify-between pl-1">
+              <div className="flex items-center gap-1.5 overflow-x-auto max-w-sm py-0.5">
+                {/* Excel Classic Green */}
+                <div
+                  onClick={() => onApplyTableStyle?.('green')}
+                  className={`w-14 h-12 rounded border p-0.5 cursor-pointer transition flex flex-col justify-between shrink-0 shadow-2xs ${
+                    activeTableStyle === 'green' ? 'ring-2 ring-[#107c41] border-[#107c41]' : 'border-gray-300 hover:border-gray-500'
+                  }`}
+                  title="نمط إكسيل الأخضر الكلاسيكي (Excel Green Medium)"
+                >
+                  <div className="h-3 bg-[#107c41] rounded-t-xs" />
+                  <div className="h-2 bg-[#dcfce7]" />
+                  <div className="h-2 bg-white" />
+                  <div className="h-2 bg-[#dcfce7] rounded-b-xs" />
+                </div>
+
+                {/* Dark / Black Theme */}
+                <div
+                  onClick={() => onApplyTableStyle?.('black')}
+                  className={`w-14 h-12 rounded border p-0.5 cursor-pointer transition flex flex-col justify-between shrink-0 shadow-2xs ${
+                    activeTableStyle === 'black' ? 'ring-2 ring-gray-900 border-gray-900' : 'border-gray-300 hover:border-gray-500'
+                  }`}
+                  title="نمط إكسيل الأسود الداكن (Charcoal Dark)"
+                >
+                  <div className="h-3 bg-gray-900 rounded-t-xs" />
+                  <div className="h-2 bg-gray-200" />
+                  <div className="h-2 bg-white" />
+                  <div className="h-2 bg-gray-200 rounded-b-xs" />
+                </div>
+
+                {/* Office Light Blue */}
+                <div
+                  onClick={() => onApplyTableStyle?.('blue')}
+                  className={`w-14 h-12 rounded border p-0.5 cursor-pointer transition flex flex-col justify-between shrink-0 shadow-2xs ${
+                    activeTableStyle === 'blue' ? 'ring-2 ring-blue-600 border-blue-600' : 'border-gray-300 hover:border-gray-500'
+                  }`}
+                  title="نمط أوفيس الأزرق (Light Blue Medium)"
+                >
+                  <div className="h-3 bg-[#0284c7] rounded-t-xs" />
+                  <div className="h-2 bg-[#e0f2fe]" />
+                  <div className="h-2 bg-white" />
+                  <div className="h-2 bg-[#e0f2fe] rounded-b-xs" />
+                </div>
+
+                {/* Warm Orange */}
+                <div
+                  onClick={() => onApplyTableStyle?.('orange')}
+                  className={`w-14 h-12 rounded border p-0.5 cursor-pointer transition flex flex-col justify-between shrink-0 shadow-2xs ${
+                    activeTableStyle === 'orange' ? 'ring-2 ring-amber-600 border-amber-600' : 'border-gray-300 hover:border-gray-500'
+                  }`}
+                  title="نمط برتقالي دافئ (Warm Orange Medium)"
+                >
+                  <div className="h-3 bg-[#ea580c] rounded-t-xs" />
+                  <div className="h-2 bg-[#ffedd5]" />
+                  <div className="h-2 bg-white" />
+                  <div className="h-2 bg-[#ffedd5] rounded-b-xs" />
+                </div>
+
+                {/* Steel Gray */}
+                <div
+                  onClick={() => onApplyTableStyle?.('gray')}
+                  className={`w-14 h-12 rounded border p-0.5 cursor-pointer transition flex flex-col justify-between shrink-0 shadow-2xs ${
+                    activeTableStyle === 'gray' ? 'ring-2 ring-gray-600 border-gray-600' : 'border-gray-300 hover:border-gray-500'
+                  }`}
+                  title="نمط رمادي أنيق (Steel Gray Medium)"
+                >
+                  <div className="h-3 bg-[#4b5563] rounded-t-xs" />
+                  <div className="h-2 bg-[#f3f4f6]" />
+                  <div className="h-2 bg-white" />
+                  <div className="h-2 bg-[#f3f4f6] rounded-b-xs" />
+                </div>
+
+                {/* Yellow / Gold */}
+                <div
+                  onClick={() => onApplyTableStyle?.('yellow')}
+                  className={`w-14 h-12 rounded border p-0.5 cursor-pointer transition flex flex-col justify-between shrink-0 shadow-2xs ${
+                    activeTableStyle === 'yellow' ? 'ring-2 ring-amber-500 border-amber-500' : 'border-gray-300 hover:border-gray-500'
+                  }`}
+                  title="نمط ذهبي مالي (Gold Yellow Medium)"
+                >
+                  <div className="h-3 bg-[#d97706] rounded-t-xs" />
+                  <div className="h-2 bg-[#fef3c7]" />
+                  <div className="h-2 bg-white" />
+                  <div className="h-2 bg-[#fef3c7] rounded-b-xs" />
+                </div>
+
+                {/* Deep Blue */}
+                <div
+                  onClick={() => onApplyTableStyle?.('navy')}
+                  className={`w-14 h-12 rounded border p-0.5 cursor-pointer transition flex flex-col justify-between shrink-0 shadow-2xs ${
+                    activeTableStyle === 'navy' ? 'ring-2 ring-indigo-700 border-indigo-700' : 'border-gray-300 hover:border-gray-500'
+                  }`}
+                  title="نمط كحلي داكن (Deep Navy Medium)"
+                >
+                  <div className="h-3 bg-[#1e40af] rounded-t-xs" />
+                  <div className="h-2 bg-[#dbeafe]" />
+                  <div className="h-2 bg-white" />
+                  <div className="h-2 bg-[#dbeafe] rounded-b-xs" />
+                </div>
+              </div>
+              <div className="text-[10px] text-gray-400 text-center font-medium mt-1">Table Styles</div>
             </div>
           </div>
         )}

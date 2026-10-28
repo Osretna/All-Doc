@@ -26,44 +26,12 @@ interface Props {
 const INITIAL_NOTES: NoteItem[] = [
   {
     id: 'n1',
-    title: 'أفكار تطوير منصة استضافة إنفينيتي (Infnty Cloud)',
-    notebook: 'العمل والتطوير',
-    section: 'الخوادم والسيرفرات',
-    tags: ['هام', 'سيرفرات', 'ZFS'],
-    hasAudio: true,
-    audioDuration: '01:24',
-    content: `# خطة ترقية التخزين إلى ZFS NVMe
-1. تطبيق ضغط البيانات LZ4 لتقليل استهلاك المساحة وزيادة سرعة القراءة بنسبة 30%.
-2. تفعيل Snapshots آلية كل 6 ساعات لجميع حسابات الاستضافة المشتركة.
-3. ربط لوحة تحكم الاستضافة بجناح Infinity Office لنسخ المستندات تلقائياً.`,
-    updatedAt: '2026-10-26',
-  },
-  {
-    id: 'n2',
-    title: 'متطلبات تطبيق نظام "ملاك" للعقارات السكنية',
-    notebook: 'نظام ملاك',
-    section: 'إدارة الشاغلين',
-    tags: ['ملاك', 'عقارات', 'فواتير'],
-    hasAudio: false,
-    content: `### المتطلبات الأساسية للنظام:
-- [x] مصمم جداول للوحدات السكنية وأسماء الملاك وأرقام التواصل.
-- [x] حساب مخصص لاشتراك الصيانة الشهري (مصاعد، أمن، نظافة).
-- [ ] إرسال إشعارات نصية واستخراج تقارير بصيغة PDF معتمدة من رئيس الاتحاد.
-- [ ] دمج نموذج محضر الاجتماع مع محرر Infinity Docs.`,
-    updatedAt: '2026-10-25',
-  },
-  {
-    id: 'n3',
-    title: 'دستور الأوفيس السيادي (Zero-Telemetry Protocol)',
-    notebook: 'السيادة والأمان',
-    section: 'الخصوصية',
-    tags: ['سيادي', 'أمان', 'PWA'],
-    hasAudio: true,
-    audioDuration: '00:45',
-    content: `لا يحق لأي خادم الاطلاع على نصوص أو أرقام أو ملفات العميل.
-كل شيء يتم معالجته وحفظه داخل متصفح المستخدم عبر IndexedDB و WebAssembly.
-التطبيق متاح دائماً أوفلاين ويتم تنصيبه كـ PWA خفيف وسريع.`,
-    updatedAt: '2026-10-24',
+    title: 'ملاحظة جديدة فارغة',
+    notebook: 'دفتر الملاحظات الرئيسي',
+    section: 'قسم عام',
+    tags: ['جديد'],
+    content: '',
+    updatedAt: new Date().toISOString().split('T')[0],
   },
 ];
 
@@ -203,7 +171,7 @@ export const NotesApp: React.FC<Props> = ({ fontFamily, newNoteSignal }) => {
         </div>
 
         <div className="pt-3 border-t border-gray-200 text-[10px] text-gray-400">
-          Infinity Notes Offline
+          MY-DOC Notes Offline
         </div>
       </div>
 

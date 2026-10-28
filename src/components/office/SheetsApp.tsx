@@ -16,6 +16,7 @@ import { ExcelFindReplaceModal } from './excel/ExcelFindReplaceModal';
 import { TextToColumnsModal } from './excel/TextToColumnsModal';
 import { GoalSeekModal } from './excel/GoalSeekModal';
 import { ExcelContextMenu } from './excel/ExcelContextMenu';
+import { FormatCellsModal, FormatCellsTab, FormatCellsConfig } from './excel/FormatCellsModal';
 import { 
   Plus, 
   FileUp, 
@@ -49,93 +50,10 @@ const generateCols = (): string[] => {
 export const COLS = generateCols();
 export const MAX_EXCEL_ROWS = 1048576;
 
-const DEFAULT_EXCEL_PRESETS: Record<string, { label: string; data: SheetData }> = {
+const DEFAULT_EXCEL_BLANK: Record<string, { label: string; data: SheetData }> = {
   sheet1: {
-    label: 'ورقة 1: ميزانية ملاك والصيانة',
-    data: {
-      'A1': { value: 'كشف ميزانية اتحاد شاغلين - برج النخيل (نظام ملاك)', bold: true, bg: '#107c41', color: '#ffffff', align: 'center', fontSize: 13 },
-      'A3': { value: 'البند / المصروف', bold: true, bg: '#e2e8f0', align: 'right', border: 'all' },
-      'B3': { value: 'الشهر السابق (ر.س)', bold: true, bg: '#e2e8f0', align: 'center', border: 'all' },
-      'C3': { value: 'الشهر الحالي (ر.س)', bold: true, bg: '#e2e8f0', align: 'center', border: 'all' },
-      'D3': { value: 'الميزانية المعتمدة', bold: true, bg: '#e2e8f0', align: 'center', border: 'all' },
-      'E3': { value: 'نسبة الإنجاز', bold: true, bg: '#e2e8f0', align: 'center', border: 'all' },
-
-      'A4': { value: 'صيانة المصاعد الدورية', border: 'all' },
-      'B4': { value: '1200', border: 'all', format: 'number' },
-      'C4': { value: '1200', border: 'all', format: 'number' },
-      'D4': { value: '1500', border: 'all', format: 'number' },
-      'E4': { value: '80%', border: 'all', format: 'percent' },
-
-      'A5': { value: 'خدمات الأمن والحراسة', border: 'all' },
-      'B5': { value: '2500', border: 'all', format: 'number' },
-      'C5': { value: '2500', border: 'all', format: 'number' },
-      'D5': { value: '2500', border: 'all', format: 'number' },
-      'E5': { value: '100%', border: 'all', format: 'percent' },
-
-      'A6': { value: 'فاتورة الكهرباء المشتركة', border: 'all' },
-      'B6': { value: '850', border: 'all', format: 'number' },
-      'C6': { value: '920', border: 'all', format: 'number' },
-      'D6': { value: '1000', border: 'all', format: 'number' },
-      'E6': { value: '92%', border: 'all', format: 'percent' },
-
-      'A7': { value: 'أعمال النظافة ومواد التعقيم', border: 'all' },
-      'B7': { value: '600', border: 'all', format: 'number' },
-      'C7': { value: '650', border: 'all', format: 'number' },
-      'D7': { value: '700', border: 'all', format: 'number' },
-      'E7': { value: '93%', border: 'all', format: 'percent' },
-
-      'A8': { value: 'صندوق الطوارئ والاحتياطي', border: 'all' },
-      'B8': { value: '1000', border: 'all', format: 'number' },
-      'C8': { value: '1000', border: 'all', format: 'number' },
-      'D8': { value: '1000', border: 'all', format: 'number' },
-      'E8': { value: '100%', border: 'all', format: 'percent' },
-
-      'A9': { value: 'الإجمالي العام للمصروفات', bold: true, bg: '#dcfce7', align: 'right', border: 'thick-bottom' },
-      'B9': { value: '6150', formula: '=SUM(B4:B8)', bold: true, bg: '#dcfce7', border: 'thick-bottom', format: 'currency-sar' },
-      'C9': { value: '6270', formula: '=SUM(C4:C8)', bold: true, bg: '#dcfce7', border: 'thick-bottom', format: 'currency-sar' },
-      'D9': { value: '6700', formula: '=SUM(D4:D8)', bold: true, bg: '#dcfce7', border: 'thick-bottom', format: 'currency-sar' },
-      'E9': { value: '93%', bold: true, bg: '#dcfce7', border: 'thick-bottom', format: 'percent' },
-    },
-  },
-  sheet2: {
-    label: 'ورقة 2: مسير رواتب الموظفين',
-    data: {
-      'A1': { value: 'مسير رواتب موظفي إنفينيتي تكنولوجي لتقنية المعلومات', bold: true, bg: '#1e293b', color: '#ffffff', align: 'center', fontSize: 13 },
-      'A3': { value: 'اسم الموظف', bold: true, bg: '#e2e8f0', border: 'all' },
-      'B3': { value: 'الراتب الأساسي', bold: true, bg: '#e2e8f0', border: 'all' },
-      'C3': { value: 'بدل سكن', bold: true, bg: '#e2e8f0', border: 'all' },
-      'D3': { value: 'بدل نقل', bold: true, bg: '#e2e8f0', border: 'all' },
-      'E3': { value: 'خصم التأمينات', bold: true, bg: '#e2e8f0', border: 'all' },
-      'F3': { value: 'صافي الراتب', bold: true, bg: '#e2e8f0', border: 'all' },
-
-      'A4': { value: 'م. خالد الشهري', border: 'all' },
-      'B4': { value: '14000', border: 'all', format: 'number' },
-      'C4': { value: '3500', border: 'all', format: 'number' },
-      'D4': { value: '1000', border: 'all', format: 'number' },
-      'E4': { value: '1400', border: 'all', format: 'number' },
-      'F4': { value: '17100', formula: '=SUM(B4:D4)-E4', bold: true, border: 'all', format: 'currency-sar' },
-
-      'A5': { value: 'أ. سارة المنصور', border: 'all' },
-      'B5': { value: '11500', border: 'all', format: 'number' },
-      'C5': { value: '2875', border: 'all', format: 'number' },
-      'D5': { value: '1000', border: 'all', format: 'number' },
-      'E5': { value: '1150', border: 'all', format: 'number' },
-      'F5': { value: '14225', formula: '=SUM(B5:D5)-E5', bold: true, border: 'all', format: 'currency-sar' },
-
-      'A6': { value: 'م. ياسر القاضي', border: 'all' },
-      'B6': { value: '16000', border: 'all', format: 'number' },
-      'C6': { value: '4000', border: 'all', format: 'number' },
-      'D6': { value: '1200', border: 'all', format: 'number' },
-      'E6': { value: '1600', border: 'all', format: 'number' },
-      'F6': { value: '19600', formula: '=SUM(B6:D6)-E6', bold: true, border: 'all', format: 'currency-sar' },
-
-      'A7': { value: 'إجمالي كتلة الرواتب الشهرية', bold: true, bg: '#fef08a', border: 'thick-bottom' },
-      'B7': { value: '41500', formula: '=SUM(B4:B6)', bold: true, border: 'thick-bottom', format: 'number' },
-      'C7': { value: '10375', formula: '=SUM(C4:C6)', bold: true, border: 'thick-bottom', format: 'number' },
-      'D7': { value: '3200', formula: '=SUM(D4:D6)', bold: true, border: 'thick-bottom', format: 'number' },
-      'E7': { value: '4150', formula: '=SUM(E4:E6)', bold: true, border: 'thick-bottom', format: 'number' },
-      'F7': { value: '50925', formula: '=SUM(F4:F6)', bold: true, bg: '#fef08a', border: 'thick-bottom', format: 'currency-sar' },
-    },
+    label: 'ورقة 1',
+    data: {},
   },
 };
 
@@ -167,7 +85,7 @@ export const SheetsApp: React.FC<Props> = ({
   const [sheets, setSheets] = useState<Record<string, { label: string; data: SheetData }>>(() => {
     return initialSheets || localVault.get<Record<string, { label: string; data: SheetData }>>(
       localVault.KEYS.SHEETS_DATA,
-      DEFAULT_EXCEL_PRESETS
+      DEFAULT_EXCEL_BLANK
     );
   });
 
@@ -194,6 +112,22 @@ export const SheetsApp: React.FC<Props> = ({
   // Fill Handle (Drag to Fill / Auto-fill down) state
   const [isDraggingFillHandle, setIsDraggingFillHandle] = useState<boolean>(false);
   const [fillDragEndRow, setFillDragEndRow] = useState<number | null>(null);
+
+  // Table Design (Table Tools) states
+  const [tableName, setTableName] = useState<string>('Table1');
+  const [hasHeaderRow, setHasHeaderRow] = useState<boolean>(true);
+  const [hasTotalRow, setHasTotalRow] = useState<boolean>(false);
+  const [hasBandedRows, setHasBandedRows] = useState<boolean>(true);
+  const [hasFirstColumn, setHasFirstColumn] = useState<boolean>(false);
+  const [hasLastColumn, setHasLastColumn] = useState<boolean>(false);
+  const [hasBandedColumns, setHasBandedColumns] = useState<boolean>(false);
+  const [hasFilterButton, setHasFilterButton] = useState<boolean>(true);
+  const [activeTableStyle, setActiveTableStyle] = useState<string>('green');
+
+  // Formula Range Selection (single click or drag reference)
+  const [isDraggingFormulaRange, setIsDraggingFormulaRange] = useState<boolean>(false);
+  const [formulaDragStartCell, setFormulaDragStartCell] = useState<string | null>(null);
+  const [formulaReferencedRange, setFormulaReferencedRange] = useState<string[]>([]);
 
   // View & UI controls
   const [isRTL, setIsRTL] = useState<boolean>(true);
@@ -232,6 +166,8 @@ export const SheetsApp: React.FC<Props> = ({
   const [isFindReplaceOpen, setIsFindReplaceOpen] = useState(false);
   const [isTextToColumnsOpen, setIsTextToColumnsOpen] = useState(false);
   const [isGoalSeekOpen, setIsGoalSeekOpen] = useState(false);
+  const [isFormatCellsOpen, setIsFormatCellsOpen] = useState(false);
+  const [formatCellsTab, setFormatCellsTab] = useState<FormatCellsTab>('number');
   const [definedNames, setDefinedNames] = useState<{ name: string; refersTo: string; scope: string; comment?: string }[]>([
     { name: 'ميزانية_الصيانة', refersTo: 'ورقة 1!$B$4:$B$8', scope: 'المصنف' },
     { name: 'إجمالي_المصروفات', refersTo: 'ورقة 1!$B$9:$E$9', scope: 'المصنف' },
@@ -253,6 +189,40 @@ export const SheetsApp: React.FC<Props> = ({
   const [hiddenCols, setHiddenCols] = useState<Set<string>>(new Set());
   const [rowHeights, setRowHeights] = useState<Record<number, number>>({});
   const [colWidths, setColWidths] = useState<Record<string, number>>({});
+
+  // Interactive Column & Row Resize Divider States with '+' handles
+  const [resizingCol, setResizingCol] = useState<{ col: string; startX: number; startWidth: number } | null>(null);
+  const [resizingRow, setResizingRow] = useState<{ row: number; startY: number; startHeight: number } | null>(null);
+  const [hoveredColDivider, setHoveredColDivider] = useState<string | null>(null);
+  const [hoveredRowDivider, setHoveredRowDivider] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!resizingCol && !resizingRow) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      if (resizingCol) {
+        const delta = isRTL ? (resizingCol.startX - e.clientX) : (e.clientX - resizingCol.startX);
+        const newWidth = Math.max(45, Math.min(800, resizingCol.startWidth + delta));
+        setColWidths((prev) => ({ ...prev, [resizingCol.col]: Math.round(newWidth) }));
+      } else if (resizingRow) {
+        const delta = e.clientY - resizingRow.startY;
+        const newHeight = Math.max(20, Math.min(400, resizingRow.startHeight + delta));
+        setRowHeights((prev) => ({ ...prev, [resizingRow.row]: Math.round(newHeight) }));
+      }
+    };
+
+    const handleMouseUp = () => {
+      setResizingCol(null);
+      setResizingRow(null);
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [resizingCol, resizingRow, isRTL]);
 
   // Context Menu state (Excel 365 style with Mini Toolbar)
   const [contextMenu, setContextMenu] = useState<{
@@ -569,6 +539,96 @@ export const SheetsApp: React.FC<Props> = ({
       },
     };
     saveSheets(updatedSheets);
+  };
+
+  // Apply Format Cells Config from FormatCellsModal (Number, Alignment, Font, Border, Fill, Protection)
+  const handleApplyFormatCells = (cfg: FormatCellsConfig) => {
+    const nextData = { ...data };
+    const targetCells = selectedRange.length > 0 ? selectedRange : [selectedCell];
+
+    // Map category to SheetCell format
+    let cellFormat: SheetCell['format'] = undefined;
+    if (cfg.category === 'currency') {
+      if (cfg.currencySymbol === 'EGP') cellFormat = 'currency-egp';
+      else if (cfg.currencySymbol === '$') cellFormat = 'currency-usd';
+      else cellFormat = 'currency-sar';
+    } else if (cfg.category === 'percentage') {
+      cellFormat = 'percent';
+    } else if (cfg.category === 'number') {
+      cellFormat = 'number';
+    } else if (cfg.category === 'accounting') {
+      cellFormat = 'accounting';
+    } else if (cfg.category === 'date') {
+      cellFormat = 'date';
+    } else if (cfg.category === 'fraction') {
+      cellFormat = 'fraction';
+    } else if (cfg.category === 'scientific') {
+      cellFormat = 'scientific';
+    } else if (cfg.category === 'text') {
+      cellFormat = 'text';
+    }
+
+    // Map border
+    let cellBorder: SheetCell['border'] = undefined;
+    if (cfg.borderTop && cfg.borderBottom && cfg.borderLeft && cfg.borderRight) {
+      cellBorder = 'all';
+    } else if (cfg.borderBottom && cfg.borderStyle === 'thick') {
+      cellBorder = 'thick-bottom';
+    } else if (cfg.borderBottom && cfg.borderStyle === 'double') {
+      cellBorder = 'double-bottom';
+    } else if (cfg.borderBottom) {
+      cellBorder = 'bottom';
+    } else if (cfg.borderTop) {
+      cellBorder = 'top';
+    } else if (cfg.borderLeft) {
+      cellBorder = 'left';
+    } else if (cfg.borderRight) {
+      cellBorder = 'right';
+    }
+
+    targetCells.forEach((cid) => {
+      const existing = nextData[cid] || { value: '' };
+      nextData[cid] = {
+        ...existing,
+        format: cellFormat !== undefined ? cellFormat : existing.format,
+        decimalPlaces: cfg.decimalPlaces,
+        currencySymbol: cfg.currencySymbol || existing.currencySymbol,
+        negativeFormat: cfg.negativeFormat,
+        dateFormat: cfg.dateFormat,
+        customFormat: cfg.customFormat,
+
+        // Alignment
+        align: cfg.horizontalAlign === 'center' ? 'center' : cfg.horizontalAlign === 'left' ? 'left' : cfg.horizontalAlign === 'right' ? 'right' : existing.align,
+        verticalAlign: cfg.verticalAlign === 'justify' ? 'middle' : cfg.verticalAlign,
+        wrapText: cfg.wrapText,
+        textRotation: cfg.textRotation,
+        shrinkToFit: cfg.shrinkToFit,
+        textDirection: cfg.textDirection,
+
+        // Font
+        fontFamily: cfg.fontFamily,
+        fontSize: cfg.fontSize,
+        bold: cfg.fontStyle === 'bold' || cfg.fontStyle === 'bold-italic',
+        italic: cfg.fontStyle === 'italic' || cfg.fontStyle === 'bold-italic',
+        color: cfg.color,
+        underline: cfg.underline !== 'none',
+        strikethrough: cfg.strikethrough,
+
+        // Border
+        border: cellBorder !== undefined ? cellBorder : existing.border,
+
+        // Fill
+        bg: cfg.fillColor && cfg.fillColor !== 'transparent' ? cfg.fillColor : existing.bg,
+
+        // Protection
+        locked: cfg.locked,
+        hidden: cfg.hidden,
+      };
+    });
+
+    const fullyComputed = recalculateSheet(nextData);
+    saveSheets({ ...sheets, [activeSheetKey]: { ...currentSheet, data: fullyComputed } });
+    setIsFormatCellsOpen(false);
   };
 
   // Toggle Wrap Text
@@ -1363,46 +1423,42 @@ export const SheetsApp: React.FC<Props> = ({
     if (e.button !== 0) return;
 
     // Check if user is typing or entering a formula and clicked another cell to reference it (Excel behavior)
-    // Works with single click immediately WITHOUT needing double-click!
-    const isFormulaMode = formulaInput.trim().startsWith('=') && (
-      isEditingCell ||
-      formulaInput.trim() === '=' ||
-      formulaInput.endsWith('(') ||
-      formulaInput.endsWith('+') ||
-      formulaInput.endsWith('-') ||
-      formulaInput.endsWith('*') ||
-      formulaInput.endsWith('/') ||
-      formulaInput.endsWith(',') ||
-      formulaInput.endsWith(':') ||
-      /[A-Za-z]+[0-9]+$/.test(formulaInput.trim())
-    );
+    // Works with a single click immediately WITHOUT needing double-click!
+    const isFormulaMode = formulaInput.trim().startsWith('=');
 
-    if (isFormulaMode) {
-      if (cellId !== selectedCell) {
-        e.preventDefault();
-        e.stopPropagation();
+    if (isFormulaMode && cellId !== selectedCell) {
+      e.preventDefault();
+      e.stopPropagation();
 
-        const trimmed = formulaInput.trim();
-        const lastChar = trimmed.slice(-1);
-        let updated = formulaInput;
+      const trimmed = formulaInput.trim();
+      let updated = formulaInput;
 
-        if (['=', '(', '+', '-', '*', '/', ',', ':'].includes(lastChar)) {
-          updated = formulaInput + cellId;
-        } else if (trimmed.endsWith(')')) {
-          updated = formulaInput.slice(0, -1) + ',' + cellId + ')';
-        } else if (/[A-Za-z]+[0-9]+$/.test(trimmed)) {
-          // Replace previous cell coordinate with the newly clicked one
-          updated = trimmed.replace(/[A-Za-z]+[0-9]+$/, cellId);
-        } else {
-          updated = formulaInput + '+' + cellId;
-        }
-
-        setFormulaInput(updated);
-        handleCellChange(selectedCell, updated);
-        setIsEditingCell(true);
-        setTimeout(() => gridContainerRef.current?.focus(), 0);
-        return;
+      // Handle formula functions like "=SUM" without "(" yet
+      if (/^=[A-Za-z]+$/i.test(trimmed)) {
+        updated = `${trimmed}(${cellId}`;
+      } else if (trimmed === '=') {
+        updated = `=${cellId}`;
+      } else if (['=', '(', '+', '-', '*', '/', ',', ':', '^'].some((op) => trimmed.endsWith(op))) {
+        updated = formulaInput + cellId;
+      } else if (trimmed.endsWith(')')) {
+        updated = formulaInput.slice(0, -1) + ',' + cellId + ')';
+      } else if (/[A-Za-z]+[0-9]+(:[A-Za-z]+[0-9]+)?$/.test(trimmed)) {
+        // Replace previous cell coordinate with the newly clicked one
+        updated = trimmed.replace(/[A-Za-z]+[0-9]+(:[A-Za-z]+[0-9]+)?$/, cellId);
+      } else {
+        updated = formulaInput + '+' + cellId;
       }
+
+      setFormulaInput(updated);
+      handleCellChange(selectedCell, updated);
+      setIsEditingCell(true);
+      setShowAutocomplete(false);
+
+      // Start drag tracking for range reference (e.g., A1:A5)
+      setIsDraggingFormulaRange(true);
+      setFormulaDragStartCell(cellId);
+      setFormulaReferencedRange([cellId]);
+      return;
     }
 
     // Apply Format Painter if active
@@ -1466,6 +1522,15 @@ export const SheetsApp: React.FC<Props> = ({
       e.preventDefault();
       e.stopPropagation();
       handleCreateTable();
+      return;
+    }
+
+    // Format Cells Shortcut: Ctrl + 1 or Cmd + 1
+    if ((e.ctrlKey || e.metaKey) && e.key === '1') {
+      e.preventDefault();
+      e.stopPropagation();
+      setFormatCellsTab('number');
+      setIsFormatCellsOpen(true);
       return;
     }
 
@@ -1767,6 +1832,20 @@ export const SheetsApp: React.FC<Props> = ({
   };
 
   const handleGridCellMouseEnter = (cellId: string) => {
+    if (isDraggingFormulaRange && formulaDragStartCell) {
+      const range = calculateCellsBetween(formulaDragStartCell, cellId);
+      setFormulaReferencedRange(range);
+      const rangeStr = `${formulaDragStartCell}:${cellId}`;
+      const trimmed = formulaInput.trim();
+      const updated = trimmed.replace(
+        new RegExp(`(${formulaDragStartCell}|[A-Za-z]+[0-9]+:[A-Za-z]+[0-9]+)$`),
+        rangeStr
+      );
+      setFormulaInput(updated);
+      handleCellChange(selectedCell, updated);
+      return;
+    }
+
     if (isDraggingFillHandle) {
       const coord = parseCellCoord(cellId);
       setFillDragEndRow(Math.max(rangeBounds.maxRow, coord.row));
@@ -1781,6 +1860,7 @@ export const SheetsApp: React.FC<Props> = ({
 
   const handleGridMouseUp = () => {
     setIsDraggingRange(false);
+    setIsDraggingFormulaRange(false);
 
     if (isDraggingFillHandle) {
       setIsDraggingFillHandle(false);
@@ -1934,6 +2014,158 @@ export const SheetsApp: React.FC<Props> = ({
     }
   };
 
+  // Table Design Palette & Styles
+  const TABLE_STYLES_MAP: Record<string, { headerBg: string; headerColor: string; bandBg: string; border: string }> = {
+    green: { headerBg: '#107c41', headerColor: '#ffffff', bandBg: '#f0fdf4', border: '#bbf7d0' },
+    dark: { headerBg: '#1f2937', headerColor: '#ffffff', bandBg: '#f3f4f6', border: '#e5e7eb' },
+    'light-blue': { headerBg: '#0284c7', headerColor: '#ffffff', bandBg: '#f0f9ff', border: '#bae6fd' },
+    'warm-orange': { headerBg: '#ea580c', headerColor: '#ffffff', bandBg: '#fff7ed', border: '#fed7aa' },
+    gray: { headerBg: '#4b5563', headerColor: '#ffffff', bandBg: '#f9fafb', border: '#e5e7eb' },
+    gold: { headerBg: '#ca8a04', headerColor: '#ffffff', bandBg: '#fefce8', border: '#fef08a' },
+    'deep-blue': { headerBg: '#1e40af', headerColor: '#ffffff', bandBg: '#eff6ff', border: '#bfdbfe' },
+  };
+
+  const handleApplyTableStyle = (styleName: string) => {
+    setActiveTableStyle(styleName);
+    const preset = TABLE_STYLES_MAP[styleName] || TABLE_STYLES_MAP.green;
+    const nextData = { ...data };
+
+    for (let r = rangeBounds.minRow; r <= rangeBounds.maxRow; r++) {
+      const isHeader = hasHeaderRow && r === rangeBounds.minRow;
+      const isTotal = hasTotalRow && r === rangeBounds.maxRow;
+      const isBanded = hasBandedRows && !isHeader && !isTotal && (r % 2 === 1);
+
+      for (let c = rangeBounds.minColIdx; c <= rangeBounds.maxColIdx; c++) {
+        const cellId = `${COLS[c]}${r}`;
+        const isFirstCol = hasFirstColumn && c === rangeBounds.minColIdx;
+        const isLastCol = hasLastColumn && c === rangeBounds.maxColIdx;
+
+        let bg = undefined;
+        let color = undefined;
+        let bold = undefined;
+
+        if (isHeader) {
+          bg = preset.headerBg;
+          color = preset.headerColor;
+          bold = true;
+        } else if (isTotal) {
+          bg = '#f8fafc';
+          bold = true;
+        } else if (isBanded) {
+          bg = preset.bandBg;
+        }
+
+        if (isFirstCol || isLastCol) {
+          bold = true;
+        }
+
+        nextData[cellId] = {
+          ...(nextData[cellId] || { value: '' }),
+          bg: bg !== undefined ? bg : nextData[cellId]?.bg,
+          color: color !== undefined ? color : nextData[cellId]?.color,
+          bold: bold !== undefined ? bold : nextData[cellId]?.bold,
+          border: 'all',
+        };
+      }
+    }
+
+    const updatedSheets = {
+      ...sheets,
+      [activeSheetKey]: { ...currentSheet, data: nextData },
+    };
+    saveSheets(updatedSheets);
+  };
+
+  const handleToggleTotalRow = () => {
+    const nextState = !hasTotalRow;
+    setHasTotalRow(nextState);
+
+    if (nextState) {
+      const totalRow = rangeBounds.maxRow + 1;
+      const nextData = { ...data };
+      const firstCol = COLS[rangeBounds.minColIdx];
+      nextData[`${firstCol}${totalRow}`] = {
+        value: 'الإجمالي (Total)',
+        bold: true,
+        align: 'right',
+        border: 'double-bottom',
+        bg: '#f8fafc',
+      };
+
+      for (let c = rangeBounds.minColIdx + 1; c <= rangeBounds.maxColIdx; c++) {
+        const col = COLS[c];
+        const sumFormula = `=SUM(${col}${rangeBounds.minRow + 1}:${col}${rangeBounds.maxRow})`;
+        nextData[`${col}${totalRow}`] = {
+          value: evaluateExcelFormula(sumFormula, nextData, sheets),
+          formula: sumFormula,
+          bold: true,
+          border: 'double-bottom',
+          bg: '#f8fafc',
+        };
+      }
+
+      const updatedSheets = {
+        ...sheets,
+        [activeSheetKey]: { ...currentSheet, data: recalculateSheet(nextData) },
+      };
+      saveSheets(updatedSheets);
+    }
+  };
+
+  const handleCommitFormula = () => {
+    let finalFormula = formulaInput.trim();
+    if (finalFormula.startsWith('=')) {
+      const openCount = (finalFormula.match(/\(/g) || []).length;
+      const closeCount = (finalFormula.match(/\)/g) || []).length;
+      if (openCount > closeCount) {
+        finalFormula += ')'.repeat(openCount - closeCount);
+      }
+    }
+    setFormulaInput(finalFormula);
+    handleCellChange(selectedCell, finalFormula);
+    setIsEditingCell(false);
+    setShowAutocomplete(false);
+    setFormulaReferencedRange([]);
+    setTimeout(() => gridContainerRef.current?.focus(), 0);
+  };
+
+  const handleCancelFormulaEdit = () => {
+    const orig = data[selectedCell]?.formula || data[selectedCell]?.value || '';
+    setFormulaInput(orig);
+    setIsEditingCell(false);
+    setShowAutocomplete(false);
+    setFormulaReferencedRange([]);
+    setTimeout(() => gridContainerRef.current?.focus(), 0);
+  };
+
+  // Global keydown listener to allow continuous typing into cell immediately after Enter / navigation
+  useEffect(() => {
+    const handleGlobalGridKeyDown = (e: KeyboardEvent) => {
+      const activeEl = document.activeElement;
+      const isInsideOtherInput = activeEl && (
+        activeEl.tagName === 'INPUT' ||
+        activeEl.tagName === 'TEXTAREA' ||
+        activeEl.getAttribute('contenteditable') === 'true'
+      );
+      if (isInsideOtherInput) return;
+
+      if (!gridContainerRef.current) return;
+
+      if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault();
+        setIsEditingCell(true);
+        handleCellChange(selectedCell, e.key);
+        handleFormulaInputChange(e.key);
+      } else if (e.key === 'Backspace' || e.key === 'Delete') {
+        e.preventDefault();
+        handleClear('contents');
+      }
+    };
+
+    window.addEventListener('keydown', handleGlobalGridKeyDown);
+    return () => window.removeEventListener('keydown', handleGlobalGridKeyDown);
+  }, [selectedCell, isEditingCell, data, sheets, activeSheetKey]);
+
   return (
     <div className="flex-1 flex flex-col bg-[#f3f2f1] overflow-hidden text-xs select-none h-full">
       {/* 1. Official Microsoft Excel Ribbon Bar */}
@@ -2001,6 +2233,28 @@ export const SheetsApp: React.FC<Props> = ({
         onInsertFloatingImage={() => floatingImageInputRef.current?.click()}
         onInsertShape={(shapeType) => handleInsertShape(shapeType)}
         onCreateTable={handleCreateTable}
+        tableName={tableName}
+        onTableNameChange={setTableName}
+        hasHeaderRow={hasHeaderRow}
+        onToggleHeaderRow={() => setHasHeaderRow(!hasHeaderRow)}
+        hasTotalRow={hasTotalRow}
+        onToggleTotalRow={handleToggleTotalRow}
+        hasBandedRows={hasBandedRows}
+        onToggleBandedRows={() => setHasBandedRows(!hasBandedRows)}
+        hasFirstColumn={hasFirstColumn}
+        onToggleFirstColumn={() => setHasFirstColumn(!hasFirstColumn)}
+        hasLastColumn={hasLastColumn}
+        onToggleLastColumn={() => setHasLastColumn(!hasLastColumn)}
+        hasBandedColumns={hasBandedColumns}
+        onToggleBandedColumns={() => setHasBandedColumns(!hasBandedColumns)}
+        hasFilterButton={hasFilterButton}
+        onToggleFilterButton={() => setHasFilterButton(!hasFilterButton)}
+        onApplyTableStyle={handleApplyTableStyle}
+        activeTableStyle={activeTableStyle}
+        onOpenFormatCells={(tab) => {
+          setFormatCellsTab(tab || 'number');
+          setIsFormatCellsOpen(true);
+        }}
       />
 
       {/* 2. Excel Formula Bar */}
@@ -2021,6 +2275,24 @@ export const SheetsApp: React.FC<Props> = ({
               selectedCell
             )}
           </div>
+
+          {/* Cancel Button (✕) */}
+          <button
+            onClick={handleCancelFormulaEdit}
+            className="w-6 h-6 flex items-center justify-center font-bold rounded text-gray-500 hover:text-red-600 hover:bg-red-50 cursor-pointer transition text-xs border border-gray-300 bg-white"
+            title="إلغاء الأمر (Cancel / Esc)"
+          >
+            ✕
+          </button>
+
+          {/* Commit / Enter Button (✓) */}
+          <button
+            onClick={handleCommitFormula}
+            className="w-6 h-6 flex items-center justify-center font-bold rounded text-emerald-700 hover:text-emerald-800 hover:bg-emerald-100 cursor-pointer transition text-xs font-mono border border-emerald-400 bg-emerald-50"
+            title="إدخال وحساب الصيغة (Enter / Commit)"
+          >
+            ✓
+          </button>
 
           {/* fx Button */}
           <button
@@ -2498,7 +2770,7 @@ export const SheetsApp: React.FC<Props> = ({
                           colName: col,
                         });
                       }}
-                      className={`p-1 border border-gray-300 text-center select-none transition-colors ${
+                      className={`p-1 border border-gray-300 text-center select-none transition-colors relative group/colheader ${
                         isColInRange ? 'bg-emerald-100 text-[#107c41] font-bold border-b-2 border-b-[#107c41]' : 'bg-[#f3f2f1] hover:bg-gray-200 text-gray-700'
                       } ${
                         (freezeState === 'col' || freezeState === 'both') && cIdx === 0 ? 'sticky right-10 z-20 shadow-xs' : ''
@@ -2521,6 +2793,46 @@ export const SheetsApp: React.FC<Props> = ({
                             ▼
                           </button>
                         )}
+                      </div>
+
+                      {/* Interactive Column Resize Divider with '+' Handle */}
+                      <div
+                        onMouseDown={(e) => {
+                          e.stopPropagation();
+                          e.preventDefault();
+                          setResizingCol({
+                            col,
+                            startX: e.clientX,
+                            startWidth: colW,
+                          });
+                        }}
+                        onMouseEnter={() => setHoveredColDivider(col)}
+                        onMouseLeave={() => setHoveredColDivider(null)}
+                        onDoubleClick={(e) => {
+                          e.stopPropagation();
+                          setColWidths((prev) => ({ ...prev, [col]: 110 }));
+                        }}
+                        className={`absolute top-0 bottom-0 ${isRTL ? 'left-0 -translate-x-1/2' : 'right-0 translate-x-1/2'} w-3 z-30 cursor-col-resize flex items-center justify-center group/resize`}
+                        title={`تكبير وتصغير مساحة العمود ${col} (اسحب للتكبير أو التصغير، انقر مرتين للضبط الافتراضي)`}
+                      >
+                        {/* Divider Line */}
+                        <div
+                          className={`w-0.5 h-full transition-colors ${
+                            resizingCol?.col === col || hoveredColDivider === col
+                              ? 'bg-[#107c41]'
+                              : 'bg-transparent group-hover/resize:bg-[#107c41]/50'
+                          }`}
+                        />
+                        {/* '+' Badge Indicator */}
+                        <div
+                          className={`absolute w-4 h-4 rounded-full bg-[#107c41] text-white flex items-center justify-center text-[10px] font-bold shadow-lg transition-all ${
+                            resizingCol?.col === col || hoveredColDivider === col
+                              ? 'opacity-100 scale-110 ring-2 ring-emerald-300'
+                              : 'opacity-0 group-hover/resize:opacity-100 scale-95'
+                          }`}
+                        >
+                          +
+                        </div>
                       </div>
                     </th>
                   );
@@ -2556,7 +2868,7 @@ export const SheetsApp: React.FC<Props> = ({
                           rowNum,
                         });
                       }}
-                      className={`p-1 border border-gray-300 text-center text-gray-500 font-mono text-[10px] select-none transition-colors ${
+                      className={`p-1 border border-gray-300 text-center text-gray-500 font-mono text-[10px] select-none transition-colors relative group/rowheader ${
                         isRowInRange ? 'bg-emerald-100 text-[#107c41] font-bold border-r-2 border-r-[#107c41]' : 'bg-[#f3f2f1] hover:bg-gray-200'
                       } ${
                         (freezeState === 'col' || freezeState === 'both') ? 'sticky right-0 z-10 bg-[#f3f2f1]' : ''
@@ -2567,7 +2879,47 @@ export const SheetsApp: React.FC<Props> = ({
                       }}
                       title={`تحديد الصف ${rowNum} بالكامل (انقر أو اسحب لتحديد عدة صفوف)`}
                     >
-                      {rowNum}
+                      <span>{rowNum}</span>
+
+                      {/* Interactive Row Resize Divider with '+' Handle */}
+                      <div
+                        onMouseDown={(e) => {
+                          e.stopPropagation();
+                          e.preventDefault();
+                          setResizingRow({
+                            row: rowNum,
+                            startY: e.clientY,
+                            startHeight: rowHeights[rowNum] || 24,
+                          });
+                        }}
+                        onMouseEnter={() => setHoveredRowDivider(rowNum)}
+                        onMouseLeave={() => setHoveredRowDivider(null)}
+                        onDoubleClick={(e) => {
+                          e.stopPropagation();
+                          setRowHeights((prev) => ({ ...prev, [rowNum]: 24 }));
+                        }}
+                        className="absolute bottom-0 inset-x-0 h-3 z-30 cursor-row-resize flex items-center justify-center translate-y-1/2 group/rowresize"
+                        title={`تكبير وتصغير مساحة الصف ${rowNum} (اسحب لتغيير الارتفاع، انقر مرتين للضبط الافتراضي)`}
+                      >
+                        {/* Divider Line */}
+                        <div
+                          className={`h-0.5 w-full transition-colors ${
+                            resizingRow?.row === rowNum || hoveredRowDivider === rowNum
+                              ? 'bg-[#107c41]'
+                              : 'bg-transparent group-hover/rowresize:bg-[#107c41]/50'
+                          }`}
+                        />
+                        {/* '+' Badge Indicator */}
+                        <div
+                          className={`absolute w-3.5 h-3.5 rounded-full bg-[#107c41] text-white flex items-center justify-center text-[9px] font-bold shadow-lg transition-all ${
+                            resizingRow?.row === rowNum || hoveredRowDivider === rowNum
+                              ? 'opacity-100 scale-110 ring-2 ring-emerald-300'
+                              : 'opacity-0 group-hover/rowresize:opacity-100 scale-95'
+                          }`}
+                        >
+                          +
+                        </div>
+                      </div>
                     </td>
                   )}
 
@@ -2619,10 +2971,12 @@ export const SheetsApp: React.FC<Props> = ({
 
                     const effectiveAlign = cell?.align || (isRTL ? 'right' : 'left');
                     const flexJustify = effectiveAlign === 'center' ? 'center' : (effectiveAlign === 'right' ? 'flex-end' : 'flex-start');
+                    const isReferencedInFormula = formulaReferencedRange.includes(cellId);
 
                     return (
                       <td
                         key={cellId}
+                        tabIndex={isSelected ? 0 : -1}
                         colSpan={cell?.mergeColSpan || 1}
                         rowSpan={cell?.mergeRowSpan || 1}
                         onContextMenu={(e) => {
@@ -2653,9 +3007,11 @@ export const SheetsApp: React.FC<Props> = ({
                         style={{
                           backgroundColor: isFillPreviewRow
                             ? 'rgba(16, 124, 65, 0.08)'
-                            : (inRange && !isSelected
-                              ? 'rgba(16, 124, 65, 0.12)'
-                              : (cell?.bg || (isSelected ? '#ffffff' : undefined))),
+                            : (isReferencedInFormula
+                              ? 'rgba(0, 120, 212, 0.12)'
+                              : (inRange && !isSelected
+                                ? 'rgba(16, 124, 65, 0.12)'
+                                : (cell?.bg || (isSelected ? '#ffffff' : undefined)))),
                           color: cell?.color,
                           fontWeight: cell?.bold ? 'bold' : 'normal',
                           fontStyle: cell?.italic ? 'italic' : 'normal',
@@ -2672,9 +3028,11 @@ export const SheetsApp: React.FC<Props> = ({
                           borderBottom: isBottomBorder ? '2px solid #107c41' : cellBorderStyle.borderBottom || cellBorderStyle.border,
                           borderRight: isRightBorder ? '2px solid #107c41' : cellBorderStyle.borderRight || cellBorderStyle.border,
                           borderLeft: isLeftBorder ? '2px solid #107c41' : cellBorderStyle.borderLeft || cellBorderStyle.border,
-                          outline: isFillPreviewRow
-                            ? '1px dashed #107c41'
-                            : (isSelected && selectedRange.length <= 1 ? '2px solid #107c41' : undefined),
+                          outline: isReferencedInFormula
+                            ? '2px dashed #0078d4'
+                            : (isFillPreviewRow
+                              ? '1px dashed #107c41'
+                              : (isSelected && selectedRange.length <= 1 ? '2px solid #107c41' : undefined)),
                           zIndex: isSelected ? 15 : (inRange ? 5 : 1),
                         }}
                       >
@@ -2744,6 +3102,8 @@ export const SheetsApp: React.FC<Props> = ({
                                     setFormulaInput(finalFormula);
                                     handleCellChange(cellId, finalFormula);
                                     setIsEditingCell(false);
+                                    setShowAutocomplete(false);
+                                    setFormulaReferencedRange([]);
                                     const coords = parseCellCoord(cellId);
                                     if (coords.row < MAX_EXCEL_ROWS) {
                                       const nextRow = coords.row + 1;
@@ -2753,22 +3113,29 @@ export const SheetsApp: React.FC<Props> = ({
                                       const nextId = `${COLS[coords.colIdx]}${nextRow}`;
                                       setSelectedCell(nextId);
                                       setSelectedRange([nextId]);
+                                      const nextCell = data[nextId];
+                                      setFormulaInput(nextCell?.formula || nextCell?.value || '');
                                     }
-                                    setTimeout(() => gridContainerRef.current?.focus(), 0);
+                                    setTimeout(() => gridContainerRef.current?.focus(), 10);
                                   } else if (e.key === 'Tab') {
                                     e.preventDefault();
                                     setIsEditingCell(false);
+                                    setShowAutocomplete(false);
+                                    setFormulaReferencedRange([]);
                                     const coords = parseCellCoord(cellId);
                                     if (coords.colIdx < COLS.length - 1) {
                                       const nextId = `${COLS[coords.colIdx + 1]}${coords.row}`;
                                       setSelectedCell(nextId);
                                       setSelectedRange([nextId]);
+                                      const nextCell = data[nextId];
+                                      setFormulaInput(nextCell?.formula || nextCell?.value || '');
                                     }
-                                    setTimeout(() => gridContainerRef.current?.focus(), 0);
+                                    setTimeout(() => gridContainerRef.current?.focus(), 10);
                                   } else if (e.key === 'Escape') {
                                     setIsEditingCell(false);
                                     setShowAutocomplete(false);
-                                    setTimeout(() => gridContainerRef.current?.focus(), 0);
+                                    setFormulaReferencedRange([]);
+                                    setTimeout(() => gridContainerRef.current?.focus(), 10);
                                   }
                                 }}
                                 className={`w-full bg-white border border-[#107c41] outline-none text-xs px-1 text-gray-900 font-mono shadow-xs z-30`}
@@ -2877,6 +3244,20 @@ export const SheetsApp: React.FC<Props> = ({
           </tbody>
         </table>
       </div>
+
+      {/* Active Column / Row Resizing Feedback Badge */}
+      {resizingCol && (
+        <div className="fixed bottom-12 left-1/2 -translate-x-1/2 z-50 bg-[#107c41] text-white px-4 py-1.5 rounded-full text-xs font-bold shadow-2xl flex items-center gap-2 animate-in fade-in">
+          <span>العمود {resizingCol.col}:</span>
+          <span>العرض {colWidths[resizingCol.col] || 110} بكسل</span>
+        </div>
+      )}
+      {resizingRow && (
+        <div className="fixed bottom-12 left-1/2 -translate-x-1/2 z-50 bg-[#107c41] text-white px-4 py-1.5 rounded-full text-xs font-bold shadow-2xl flex items-center gap-2 animate-in fade-in">
+          <span>الصف {resizingRow.row}:</span>
+          <span>الارتفاع {rowHeights[resizingRow.row] || 24} بكسل</span>
+        </div>
+      )}
 
       {/* 4. Multi-Sheet Tabs Bar & Live Excel Status Bar */}
       <div className="flex items-center justify-between px-3 py-1 bg-[#f3f2f1] border-t border-gray-300 text-[11px] text-gray-700 select-none shrink-0">
@@ -3205,8 +3586,23 @@ export const SheetsApp: React.FC<Props> = ({
           onHideCol={(c) => setHiddenCols((prev) => new Set(prev).add(c))}
           onUnhideCols={() => setHiddenCols(new Set())}
           onPickDropdownValue={(val) => handleCellChange(contextMenu.cellId, val)}
+          onOpenFormatCells={(tab) => {
+            setFormatCellsTab(tab || 'number');
+            setIsFormatCellsOpen(true);
+          }}
         />
       )}
+
+      {/* 7. Excel Official Format Cells Modal (Number, Alignment, Font, Border, Fill, Protection) */}
+      <FormatCellsModal
+        isOpen={isFormatCellsOpen}
+        initialTab={formatCellsTab}
+        currentCell={data[selectedCell]}
+        cellAddress={selectedCell}
+        sampleValue={data[selectedCell]?.value || '1234.56'}
+        onClose={() => setIsFormatCellsOpen(false)}
+        onApply={handleApplyFormatCells}
+      />
     </div>
   );
 };

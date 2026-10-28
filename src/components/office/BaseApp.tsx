@@ -69,61 +69,14 @@ interface Props {
 
 const INITIAL_ACCESS_TABLES: DbTable[] = [
   {
-    id: 'tbl_mollak',
-    name: 'وحدات_نظام_ملاك',
-    label: 'سجل وحدات برج النخيل (نظام ملاك)',
+    id: 'tbl_1',
+    name: 'جدول1',
+    label: 'جدول 1',
     fields: [
-      { name: 'unit_no', label: 'رقم الوحدة', type: 'text', primaryKey: true },
-      { name: 'owner_name', label: 'اسم المالك', type: 'text' },
-      { name: 'floor', label: 'الطابق', type: 'number' },
-      { name: 'monthly_due', label: 'اشتراك الصيانة (ر.س)', type: 'currency' },
-      { name: 'status', label: 'حالة السداد', type: 'select', options: ['مسدد', 'مستحق', 'متأخر'] },
-      { name: 'phone', label: 'رقم الجوال', type: 'text' },
+      { name: 'ID', label: 'المعرف', type: 'number', primaryKey: true },
+      { name: 'حقل1', label: 'حقل 1', type: 'text' },
     ],
-    records: [
-      { id: '1', unit_no: '101', owner_name: 'م. أحمد المنصوري', floor: 1, monthly_due: 350, status: 'مسدد', phone: '+966 50 123 4567' },
-      { id: '2', unit_no: '102', owner_name: 'أ. فيصل القحطاني', floor: 1, monthly_due: 350, status: 'مسدد', phone: '+966 55 987 6543' },
-      { id: '3', unit_no: '201', owner_name: 'د. سارة الغامدي', floor: 2, monthly_due: 400, status: 'مستحق', phone: '+966 54 222 3344' },
-      { id: '4', unit_no: '202', owner_name: 'أ. خالد التميمي', floor: 2, monthly_due: 400, status: 'متأخر', phone: '+966 56 777 8899' },
-      { id: '5', unit_no: '301', owner_name: 'م. عمر الشريف', floor: 3, monthly_due: 450, status: 'مسدد', phone: '+966 50 555 1122' },
-      { id: '6', unit_no: '302', owner_name: 'أ. طارق الدوسري', floor: 3, monthly_due: 450, status: 'مسدد', phone: '+966 55 111 9988' },
-    ],
-  },
-  {
-    id: 'tbl_servers',
-    name: 'سيرفرات_الاستضافة_VPS',
-    label: 'سيرفرات العملاء السحابية (Infnty VPS)',
-    fields: [
-      { name: 'server_id', label: 'كود السيرفر', type: 'text', primaryKey: true },
-      { name: 'client', label: 'العميل المشترك', type: 'text' },
-      { name: 'plan', label: 'نوع الباقة', type: 'select', options: ['VPS NVMe-1', 'VPS NVMe-2', 'Semi-Dedicated'] },
-      { name: 'storage_zfs', label: 'المساحة ZFS', type: 'text' },
-      { name: 'expiry_date', label: 'تاريخ التجديد', type: 'date' },
-      { name: 'price_sar', label: 'السعر الشهري (ر.س)', type: 'currency' },
-    ],
-    records: [
-      { id: '10', server_id: 'SRV-DXB-01', client: 'مؤسسة التقنية الذكية', plan: 'VPS NVMe-2', storage_zfs: '250 GB NVMe (LZ4)', expiry_date: '2027-01-15', price_sar: 450 },
-      { id: '11', server_id: 'SRV-RUH-04', client: 'شركة الإعمار الخليجية', plan: 'Semi-Dedicated', storage_zfs: '500 GB NVMe (ZFS Raid1)', expiry_date: '2026-12-30', price_sar: 850 },
-      { id: '12', server_id: 'SRV-CAI-02', client: 'منصة الدلتا التعليمية', plan: 'VPS NVMe-1', storage_zfs: '100 GB NVMe', expiry_date: '2026-11-20', price_sar: 250 },
-    ],
-  },
-  {
-    id: 'tbl_expenses',
-    name: 'مصروفات_الصيانة_الدورية',
-    label: 'سجل مصروفات الصيانة والفواتير',
-    fields: [
-      { name: 'item', label: 'البند / الفاتورة', type: 'text', primaryKey: true },
-      { name: 'category', label: 'القسم', type: 'select', options: ['مصاعد', 'أمن ونظافة', 'كهرباء ومياه', 'طوارئ'] },
-      { name: 'amount', label: 'المبلغ (ر.س)', type: 'currency' },
-      { name: 'date', label: 'تاريخ الصرف', type: 'date' },
-      { name: 'approved', label: 'معتمد', type: 'boolean' },
-    ],
-    records: [
-      { id: '101', item: 'عقد صيانة مصاعد ميتسوبيشي', category: 'مصاعد', amount: 1200, date: '2026-10-01', approved: true },
-      { id: '102', item: 'رواتب حراسة الأمن', category: 'أمن ونظافة', amount: 2500, date: '2026-10-01', approved: true },
-      { id: '103', item: 'فاتورة كهرباء الإنارة والمضخات', category: 'كهرباء ومياه', amount: 920, date: '2026-10-05', approved: true },
-      { id: '104', item: 'شراء مواد نظافة وتعقيم للمداخل', category: 'أمن ونظافة', amount: 650, date: '2026-10-10', approved: true },
-    ],
+    records: [],
   },
 ];
 
@@ -203,7 +156,7 @@ export const BaseApp: React.FC<Props> = ({ fontFamily, initialTables, onTablesCh
     return initialTables || localVault.get<DbTable[]>(localVault.KEYS.BASE_DATA, INITIAL_ACCESS_TABLES);
   });
 
-  const [activeTableId, setActiveTableId] = useState<string>('tbl_mollak');
+  const [activeTableId, setActiveTableId] = useState<string>('tbl_1');
   const [activeRibbonTab, setActiveRibbonTab] = useState<AccessRibbonTab>('home');
   const [viewMode, setViewMode] = useState<AccessViewMode>('records');
   const [searchQuery, setSearchQuery] = useState<string>('');

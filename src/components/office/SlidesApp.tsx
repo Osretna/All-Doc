@@ -57,87 +57,13 @@ interface Props {
 const INITIAL_SLIDES: PowerPointSlideData[] = [
   {
     id: 's1',
-    title: 'شركة إنفينيتي تكنولوجي',
-    subtitle: 'الاستضافة السحابية الفائقة وجناح الأوفيس السيادي المكتبي',
-    body: [
-      'سيرفرات سحابية Shared & VPS بنظام ملفات ZFS وأقراص NVMe فائقة السرعة',
-      'جناح أوفيس متكامل يعمل 100% بدون إنترنت وبدون تتبع أو تسجيل حسابات',
-      'نظام "ملاك" لإدارة اتحادات الشاغلين والمجمعات العقارية الحديثة',
-    ],
+    title: '',
+    subtitle: '',
+    body: [],
     layout: 'title',
-    notes: 'مقدمة العرض: التأكيد على مفهوم السيادة الرقمية وعدم ارتباط العميل بأي طرف ثالث.',
+    notes: '',
     theme: 'blue',
-    transition: 'morph',
-    transitionConfig: {
-      type: 'morph',
-      duration: 1.0,
-      direction: 'smooth',
-      sound: 'none',
-      advanceOnClick: true,
-    },
-  },
-  {
-    id: 's2',
-    title: 'لماذا يحتاج العالم إلى "الأوفيس السيادي"؟',
-    subtitle: 'تحرر كامل من اشتراكات الشركات الاحتكارية وحماية البيانات',
-    body: [
-      'حماية البيانات: لا تغادر ملفاتك جهازك أبداً ولا تخضع للمسح أو التدريب للذكاء الاصطناعي.',
-      'تشغيل دائم أوفلاين: جاهز للعمل أثناء انقطاع الإنترنت أو أثناء السفر.',
-      'توافق كامل مع ملفات Microsoft Office (.docx / .xlsx / .pptx).',
-      'قابل للتنصيب المباشر (PWA) على أجهزة الكمبيوتر (Windows/Mac) والهواتف الذكية.',
-    ],
-    layout: 'content',
-    notes: 'تسليط الضوء على الأمان السيادي لشركات المحاماة، المحاسبة، والجهات الحكومية.',
-    theme: 'emerald',
-    transition: 'push',
-    transitionConfig: {
-      type: 'push',
-      duration: 0.75,
-      direction: 'from-right',
-      sound: 'none',
-      advanceOnClick: true,
-    },
-  },
-  {
-    id: 's3',
-    title: 'نظام "ملاك" للاتحادات العقارية',
-    subtitle: 'إدارة ذكية ومؤتمتة للأبراج والمجمعات السكنية',
-    body: [
-      'سجل شامل للوحدات والملاك ومستحقات الصيانة الدورية.',
-      'تقارير مالية وجداول مصروفات معتمدة متوافقة مع جداول Infinity Sheets.',
-      'إصدار محاضر اجتماعات الجمعيات العمومية وسندات الصرف بضغطة زر.',
-    ],
-    layout: 'split',
-    notes: 'شرح كيف يرتبط نظام ملاك بجناح الأوفيس والاستضافة السحابية لإنفينيتي.',
-    theme: 'amber',
-    transition: 'wipe',
-    transitionConfig: {
-      type: 'wipe',
-      duration: 1.0,
-      direction: 'from-right',
-      sound: 'none',
-      advanceOnClick: true,
-    },
-  },
-  {
-    id: 's4',
-    title: 'مقارنة الحلول السيادية بالحلول السحابية العامة',
-    subtitle: 'تحليل تكلفة الملكية الإجمالية وحماية الخصوصية',
-    body: [
-      'حلول عامة: تكاليف اشتراكات شهرية باهظة + خضوع لشروط خصوصية أجنبية.',
-      'حلول إنفينيتي السيادية: امتلاك كامل للبنية التحتية، zero telemetry، وسرعة استجابة فائقة.',
-    ],
-    layout: 'comparison',
-    notes: 'مقارنة فنية ومالية تساعد متخذ القرار على الاستثمار في البنية السيادية.',
-    theme: 'dark',
-    transition: 'zoom',
-    transitionConfig: {
-      type: 'zoom',
-      duration: 0.8,
-      direction: 'in',
-      sound: 'none',
-      advanceOnClick: true,
-    },
+    transition: 'none',
   },
 ];
 
@@ -164,10 +90,7 @@ export const SlidesApp: React.FC<Props> = ({
   }, [initialSlides]);
 
   const [currentSlideIndex, setCurrentSlideIndex] = useState<number>(0);
-  const [sections, setSections] = useState<SlideSection[]>([
-    { id: 'sec_1', title: 'مقدمة العرض والسيادة الرقمية', slideIds: ['s1', 's2'] },
-    { id: 'sec_2', title: 'الأنظمة السحابية والحلول المقارنة', slideIds: ['s3', 's4'] },
-  ]);
+  const [sections, setSections] = useState<SlideSection[]>([]);
 
   // Ribbon & View Mode State
   const [activeTab, setActiveTab] = useState<PowerPointTab>('home');
@@ -561,7 +484,7 @@ export const SlidesApp: React.FC<Props> = ({
         onInsertTable={handleInsertTable}
         onInsertImage={handleInsertImage}
         onInsertSmartArt={() => setIsSmartArtModalOpen(true)}
-        onInsertChart={() => alert('إدراج مخطط بياني: مدمج مع محرك رسوم Infinity البيانية.')}
+        onInsertChart={() => alert('إدراج مخطط بياني: مدمج مع محرك رسوم MY-DOC البيانية.')}
         currentThemeId={currentThemeId}
         onSelectTheme={handleApplyTheme}
         onOpenSlideSizeModal={() => setIsSlideSizeOpen(true)}
@@ -969,7 +892,7 @@ export const SlidesApp: React.FC<Props> = ({
 
               {/* Slide Footer */}
               <div className="pt-4 border-t border-white/10 flex items-center justify-between text-[11px] text-white/40 select-none">
-                <span>Infinity Sovereign Office Suite 2026</span>
+                <span>MY-DOC Sovereign Office Suite 2026</span>
                 <span>محفوظ ومحمي محلياً 100%</span>
               </div>
             </div>

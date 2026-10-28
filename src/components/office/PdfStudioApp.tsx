@@ -82,13 +82,13 @@ export const PdfStudioApp: React.FC<Props> = ({
   onOpenBackstage 
 }) => {
   // Document state
-  const [documentTitle, setDocumentTitle] = useState('محضر_اجتماع_واعتماد_برج_النخيل_2026.pdf');
+  const [documentTitle, setDocumentTitle] = useState('مستند PDF فارغ 1.pdf');
   const [pdfFile, setPdfFile] = useState<File | null>(initialPdfFile || null);
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [pdfDoc, setPdfDoc] = useState<pdfjsLib.PDFDocumentProxy | null>(null);
-  const [totalPages, setTotalPages] = useState<number>(3);
+  const [totalPages, setTotalPages] = useState<number>(1);
   const [currentPage, setCurrentPage] = useState<number>(1);
-  const [pageRotations, setPageRotations] = useState<Record<number, number>>({ 1: 0, 2: 0, 3: 0 });
+  const [pageRotations, setPageRotations] = useState<Record<number, number>>({ 1: 0 });
   const [zoomLevel, setZoomLevel] = useState<number>(100);
   const [isLoadingPdf, setIsLoadingPdf] = useState<boolean>(false);
   const [isRenderLoading, setIsRenderLoading] = useState<boolean>(false);
@@ -107,36 +107,15 @@ export const PdfStudioApp: React.FC<Props> = ({
   const [readingMode, setReadingMode] = useState<boolean>(false);
 
   // Overlays & Annotations states
-  const [stickyNotes, setStickyNotes] = useState<StickyNote[]>([
-    {
-      id: 'note_1',
-      pageNumber: 1,
-      x: 75,
-      y: 20,
-      text: 'تمت مراجعة البنود المالية وفق جدول أعمال الجمعية العمومية.',
-      author: 'م. خالد الشهري (المدقق)',
-      date: '2026-10-27',
-      color: '#fef08a',
-    },
-  ]);
-  const [stamps, setStamps] = useState<StampItem[]>([
-    {
-      id: 'stamp_1',
-      pageNumber: 1,
-      x: 18,
-      y: 78,
-      title: 'معتمد رسمياً',
-      dateStr: new Date().toLocaleDateString('en-US'),
-      type: 'approved',
-    },
-  ]);
+  const [stickyNotes, setStickyNotes] = useState<StickyNote[]>([]);
+  const [stamps, setStamps] = useState<StampItem[]>([]);
   const [signatures, setSignatures] = useState<SignatureItem[]>([]);
   const [drawings, setDrawings] = useState<DrawingPath[]>([]);
   const [redactions, setRedactions] = useState<RedactionBox[]>([]);
   const [textBlocks, setTextBlocks] = useState<TextBlockItem[]>([]);
   const [images, setImages] = useState<PdfImageItem[]>([]);
   const [blankPageContents, setBlankPageContents] = useState<Record<number, string>>({
-    1: 'صفحة رقم 1 - جاهزة للكتابة والتحرير المباشر وإدراج الصور والعلامات المائية.'
+    1: ''
   });
   const imageInputRef = useRef<HTMLInputElement>(null);
 
