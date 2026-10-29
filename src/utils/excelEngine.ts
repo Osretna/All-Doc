@@ -13,6 +13,7 @@ export const EXCEL_FUNCTIONS: ExcelFunctionDef[] = [
   { name: 'SUM', syntax: 'SUM(number1, [number2], ...)', desc: 'جمع كافة الأرقام في نطاق محدد من الخلايا', example: '=SUM(B4:B8)', category: 'Math' },
   { name: 'SUMIF', syntax: 'SUMIF(range, criteria, [sum_range])', desc: 'جمع الخلايا التي تستوفي شرطاً محدداً', example: '=SUMIF(C4:C8, ">1000")', category: 'Math' },
   { name: 'SUMIFS', syntax: 'SUMIFS(sum_range, criteria_range1, criteria1, ...)', desc: 'جمع الخلايا المستوفية لشروط متعددة', example: '=SUMIFS(D4:D20, A4:A20, "مكتمل", B4:B20, ">500")', category: 'Math' },
+  { name: 'SUBTOTAL', syntax: 'SUBTOTAL(function_num, ref1, [ref2], ...)', desc: 'حساب المجموع الفرعي في قائمة أو قاعدة بيانات (1=متوسط, 2=عد, 9=مجموع, 4=أكبر, 5=أصغر)', example: '=SUBTOTAL(9, B4:B20)', category: 'Math' },
   { name: 'PRODUCT', syntax: 'PRODUCT(number1, [number2], ...)', desc: 'ضرب كافة الأرقام المحددة ببعضها', example: '=PRODUCT(B4, C4, 1.15)', category: 'Math' },
   { name: 'ROUND', syntax: 'ROUND(number, num_digits)', desc: 'تقريب رقم إلى عدد محدد من الخانات العشرية', example: '=ROUND(B4*1.15, 2)', category: 'Math' },
   { name: 'ROUNDUP', syntax: 'ROUNDUP(number, num_digits)', desc: 'تقريب رقم لأعلى مبتعداً عن الصفر', example: '=ROUNDUP(B4, 0)', category: 'Math' },
@@ -346,6 +347,110 @@ export function evaluateExcelFormula(
       if (vals.length === 0) return '0';
       const prod = vals.reduce((a, b) => a * b, 1);
       return formatResult(prod);
+    }
+
+    // 3b. SUBTOTAL(function_num, ref1, [ref2], ...)
+    const subtotalMatch = raw.match(/^SUBTOTAL\s*\((.+)\)$/i);
+    if (subtotalMatch) {
+      const args = splitFormulaArgs(subtotalMatch[1]);
+      if (args.length >= 2) {
+        const fnNum = parseInt(resolveArgValue(args[0], sheetData, allSheets), 10);
+        const refArgs = args.slice(1);
+        const allVals: number[] = [];
+        let nonBlankCount = 0;
+
+        refArgs.forEach((ref) => {
+          const vals = collectNumericValues(ref, sheetData, allSheets);
+          allVals.push(...vals);
+
+          // For COUNTA
+          const cleanRef = stripSheetPrefix(ref.toUpperCase());
+          const cells = parseRange(cleanRef);
+          const tData = resolveTargetSheetData(ref, sheetData, allSheets);
+          cells.forEach((cid) => {
+            if ((tData[cid]?.value || '').toString().trim() !== '') {
+              nonBlankCount++;
+            }
+          });
+        });
+
+        // Mapping function_num:
+        // 1 or 101: AVERAGE
+        // 2 or 102: COUNT
+        // 3 or 103: COUNTA
+        // 4 or 104: MAX
+        // 5 or 105: MIN
+        // 6 or 106: PRODUCT
+        // 7 or 107: STDEV
+        // 8 or 108: STDEVP
+        // 9 or 109: SUM
+        // 10 or 110: VAR
+        // 11 or 111: VARP
+        switch (fnNum) {
+          case 1:
+          case 101: {
+            if (allVals.length === 0) return '#DIV/0!';
+            const sum = allVals.reduce((a, b) => a + b, 0);
+            return formatResult(sum / allVals.length);
+          }
+          case 2:
+          case 102: {
+            return allVals.length.toString();
+          }
+          case 3:
+          case 103: {
+            return nonBlankCount.toString();
+          }
+          case 4:
+          case 104: {
+            if (allVals.length === 0) return '0';
+            return formatResult(Math.max(...allVals));
+          }
+          case 5:
+          case 105: {
+            if (allVals.length === 0) return '0';
+            return formatResult(Math.min(...allVals));
+          }
+          case 6:
+          case 106: {
+            if (allVals.length === 0) return '0';
+            return formatResult(allVals.reduce((a, b) => a * b, 1));
+          }
+          case 7:
+          case 107: {
+            if (allVals.length < 2) return '#DIV/0!';
+            const mean = allVals.reduce((a, b) => a + b, 0) / allVals.length;
+            const variance = allVals.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / (allVals.length - 1);
+            return formatResult(Math.sqrt(variance));
+          }
+          case 8:
+          case 108: {
+            if (allVals.length === 0) return '0';
+            const mean = allVals.reduce((a, b) => a + b, 0) / allVals.length;
+            const variance = allVals.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / allVals.length;
+            return formatResult(Math.sqrt(variance));
+          }
+          case 9:
+          case 109: {
+            const sum = allVals.reduce((a, b) => a + b, 0);
+            return formatResult(sum);
+          }
+          case 10:
+          case 110: {
+            if (allVals.length < 2) return '#DIV/0!';
+            const mean = allVals.reduce((a, b) => a + b, 0) / allVals.length;
+            return formatResult(allVals.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / (allVals.length - 1));
+          }
+          case 11:
+          case 111: {
+            if (allVals.length === 0) return '0';
+            const mean = allVals.reduce((a, b) => a + b, 0) / allVals.length;
+            return formatResult(allVals.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / allVals.length);
+          }
+          default:
+            return '#VALUE!';
+        }
+      }
     }
 
     // 4. AVERAGE(...)

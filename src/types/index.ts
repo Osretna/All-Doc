@@ -71,9 +71,7 @@ export interface SheetCell {
   color?: string;
   fontSize?: number;
   fontFamily?: string;
-  border?: 'all' | 'bottom' | 'top' | 'thick-bottom' | 'double-bottom' | 'outside' | 'none' | 'left' | 'right' | 'thick-outside' | 'top-bottom' | 'top-thick-bottom' | 'top-double-bottom';
-  borderColor?: string;
-  borderStyle?: 'solid' | 'dashed' | 'dotted' | 'double' | 'thick';
+  border?: 'all' | 'bottom' | 'top' | 'thick-bottom' | 'double-bottom' | 'outside' | 'none' | 'left' | 'right';
   textRotation?: number;
   comment?: string;
   sparkline?: { type: 'line' | 'column' | 'winloss'; range: string };
@@ -95,14 +93,6 @@ export interface SheetCell {
 }
 
 export type SheetData = { [cellId: string]: SheetCell };
-
-export interface ExcelSheetRecord {
-  label: string;
-  data: SheetData;
-  colWidths?: Record<string, number>;
-  rowHeights?: Record<number, number>;
-  isRTL?: boolean;
-}
 
 export interface SlideItem {
   id: string;
@@ -170,6 +160,8 @@ export interface DocumentTabItem {
   title: string;
   content?: any;
   isModified?: boolean;
+  fileHandle?: any;
+  savedFilename?: string;
   createdAt: number;
 }
 
