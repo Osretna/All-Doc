@@ -3,7 +3,6 @@ import { OfficeAppId, SheetData, SlideItem, DbTable } from '../../types';
 import { APP_CONFIGS } from '../../utils/appConfigs';
 import { localVault } from '../../utils/storage';
 import { parseDocxFile, parseExcelFile, parsePptxFile, parseAccessFile } from '../../utils/fileImport';
-import { EXCEL_TEMPLATES } from '../office/excel/excelTemplates';
 import {
   FileText,
   Plus,
@@ -333,42 +332,48 @@ export const BackstageModal: React.FC<Props> = ({
                   </>
                 )}
 
-                {/* SHEETS TEMPLATES (All 30 Templates from image_f2ceac1d.png & image_70d46d9e.png) */}
+                {/* SHEETS TEMPLATES */}
                 {activeApp === 'sheets' && (
                   <>
-                    {EXCEL_TEMPLATES.map((tmpl) => (
-                      <div
-                        key={tmpl.id}
-                        onClick={() => {
-                          if (onLoadExcelData) {
-                            onLoadExcelData(tmpl.sheets, tmpl.title);
-                          } else {
-                            onApplyTemplate(tmpl.id, tmpl.title);
-                          }
-                          onClose();
-                        }}
-                        className="p-4 rounded-xl border border-gray-200 hover:border-emerald-600 hover:shadow-lg cursor-pointer transition flex flex-col justify-between h-48 bg-white group"
-                      >
-                        <div>
-                          <div className="flex items-center justify-between mb-1">
-                            <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded uppercase">
-                              {tmpl.category}
-                            </span>
-                            {tmpl.badge && (
-                              <span className="text-[10px] font-bold bg-[#107c41] text-white px-1.5 py-0.5 rounded-full">
-                                {tmpl.badge}
-                              </span>
-                            )}
-                          </div>
-                          <h4 className="font-bold text-gray-900 text-sm group-hover:text-emerald-700">{tmpl.titleEn}</h4>
-                          <span className="text-xs text-gray-700 font-medium">{tmpl.title}</span>
-                          <p className="text-[11px] text-gray-500 mt-1 line-clamp-2">
-                            {tmpl.description}
-                          </p>
+                    <div
+                      onClick={() => {
+                        onApplyTemplate('mollak_budget', 'ميزانية اتحاد ملاك وصيانة عقارات');
+                        onClose();
+                      }}
+                      className="p-5 rounded-xl border border-gray-200 hover:border-emerald-600 hover:shadow-lg cursor-pointer transition flex flex-col justify-between h-48 bg-emerald-50/30"
+                    >
+                      <div>
+                        <div className="flex items-center gap-2 text-xs font-bold text-emerald-700 mb-1">
+                          <Table className="w-3.5 h-3.5" />
+                          <span>قوالب إكسيل مالية</span>
                         </div>
-                        <span className="text-[11px] font-semibold text-emerald-700 group-hover:underline">فتح القالب في إكسيل ➔</span>
+                        <h4 className="font-bold text-gray-900 text-sm">ميزانية مصروفات اتحاد ملاك</h4>
+                        <p className="text-xs text-gray-500 mt-1.5 line-clamp-2">
+                          جدول متكامل لحساب رسوم الصيانة، حراسة الأمن، فواتير الكهرباء المشتركة، مع دوال الجمع التلقائي.
+                        </p>
                       </div>
-                    ))}
+                      <span className="text-[11px] font-semibold text-emerald-700">تحميل القالب ➔</span>
+                    </div>
+
+                    <div
+                      onClick={() => {
+                        onApplyTemplate('payroll', 'جدول رواتب وبدلات الموظفين');
+                        onClose();
+                      }}
+                      className="p-5 rounded-xl border border-gray-200 hover:border-emerald-600 hover:shadow-lg cursor-pointer transition flex flex-col justify-between h-48 bg-gray-50/50"
+                    >
+                      <div>
+                        <div className="flex items-center gap-2 text-xs font-bold text-emerald-700 mb-1">
+                          <FileSpreadsheet className="w-3.5 h-3.5" />
+                          <span>قالب موارد بشرية</span>
+                        </div>
+                        <h4 className="font-bold text-gray-900 text-sm">مسير رواتب وبدلات الموظفين</h4>
+                        <p className="text-xs text-gray-500 mt-1.5 line-clamp-2">
+                          حساب الراتب الأساسي، بدل السكن، بدل النقل، التأمينات وصافي المستحق بصيغ جاهزة.
+                        </p>
+                      </div>
+                      <span className="text-[11px] font-semibold text-emerald-700">تحميل القالب ➔</span>
+                    </div>
                   </>
                 )}
 
