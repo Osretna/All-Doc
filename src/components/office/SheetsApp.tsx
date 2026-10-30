@@ -17,11 +17,11 @@ import { TextToColumnsModal } from './excel/TextToColumnsModal';
 import { GoalSeekModal } from './excel/GoalSeekModal';
 import { ExcelContextMenu } from './excel/ExcelContextMenu';
 import { FormatCellsModal, FormatCellsTab, FormatCellsConfig } from './excel/FormatCellsModal';
-import { ExcelSheetTabContextMenu } from './excel/ExcelSheetTabContextMenu';
-import { MoveCopySheetModal } from './excel/MoveCopySheetModal';
-import { UnhideSheetModal } from './excel/UnhideSheetModal';
-import { ViewCodeModal } from './excel/ViewCodeModal';
-import { ProtectSheetModal } from './excel/ProtectSheetModal';
+import { ExcelBackstageModal } from './excel/ExcelBackstageModal';
+import { ExcelTableStylesGallery, ExcelTableStyle, EXCEL_365_TABLE_STYLES } from './excel/ExcelTableStylesGallery';
+import { ExcelTemplateDefinition } from './excel/excelTemplates';
+import * as XLSX from 'xlsx';
+import { saveFileDirectlyToDevice } from '../../utils/fileSaver';
 import { 
   Plus, 
   FileUp, 
@@ -30,15 +30,31 @@ import {
   TrendingUp,
   BarChart2,
   Image as ImageIcon,
-  CheckCircle2
+  CheckCircle2,
+  Save,
+  Download,
+  Copy,
+  Trash2,
+  Edit3,
+  Code,
+  ShieldCheck,
+  Palette,
+  EyeOff,
+  Eye,
+  CheckSquare,
+  Layers,
+  ChevronRight
 } from 'lucide-react';
 
 interface Props {
   fontFamily: string;
   zoomLevel: number;
-  initialSheets?: Record<string, { label: string; data: SheetData }>;
-  onSheetsChange?: (sheets: Record<string, { label: string; data: SheetData }>) => void;
+  initialSheets?: Record<string, { label: string; data: SheetData; colWidths?: Record<string, number>; rowHeights?: Record<number, number>; isRTL?: boolean }>;
+  onSheetsChange?: (sheets: Record<string, { label: string; data: SheetData; colWidths?: Record<string, number>; rowHeights?: Record<number, number>; isRTL?: boolean }>) => void;
   onOpenBackstage?: () => void;
+  onOpenNewWorkbookTab?: (title: string, sheets: Record<string, { label: string; data: SheetData; colWidths?: Record<string, number>; rowHeights?: Record<number, number>; isRTL?: boolean }>, handle?: any) => void;
+  activeFileHandle?: any;
+  onSaveFileHandle?: (handle: any) => void;
 }
 
 const generateCols = (): string[] => {
@@ -55,10 +71,11 @@ const generateCols = (): string[] => {
 export const COLS = generateCols();
 export const MAX_EXCEL_ROWS = 1048576;
 
-const DEFAULT_EXCEL_BLANK: Record<string, { label: string; data: SheetData }> = {
+const DEFAULT_EXCEL_BLANK: Record<string, { label: string; data: SheetData; colWidths?: Record<string, number>; rowHeights?: Record<number, number>; isRTL?: boolean }> = {
   sheet1: {
     label: 'ورقة 1',
     data: {},
+    isRTL: false,
   },
 };
 
@@ -76,8 +93,16 @@ export const SheetsApp: React.FC<Props> = ({
   zoomLevel: initialZoom,
   initialSheets,
   onSheetsChange,
-  onOpenBackstage
+  onOpenBackstage,
+  onOpenNewWorkbookTab,
+  activeFileHandle,
+  onSaveFileHandle,
 }) => {
+  const [fileHandle, setFileHandle] = useState<any>(activeFileHandle || null);
+  useEffect(() => {
+    if (activeFileHandle) setFileHandle(activeFileHandle);
+  }, [activeFileHandle]);
+
   const [activeSheetKey, setActiveSheetKeyState] = useState<string>(() => {
     return localVault.get('infinity_office_active_sheet_key', 'sheet1');
   });
@@ -87,12 +112,32 @@ export const SheetsApp: React.FC<Props> = ({
     localVault.set('infinity_office_active_sheet_key', key);
   };
 
-  const [sheets, setSheets] = useState<Record<string, { label: string; data: SheetData }>>(() => {
-    return initialSheets || localVault.get<Record<string, { label: string; data: SheetData }>>(
+  const [sheets, setSheets] = useState<Record<string, { label: string; data: SheetData; colWidths?: Record<string, number>; rowHeights?: Record<number, number>; isRTL?: boolean }>>(() => {
+    return initialSheets || localVault.get<Record<string, { label: string; data: SheetData; colWidths?: Record<string, number>; rowHeights?: Record<number, number>; isRTL?: boolean }>>(
       localVault.KEYS.SHEETS_DATA,
       DEFAULT_EXCEL_BLANK
     );
   });
+
+  // Sheet Tabs Context Menu, Renaming, Tab Colors & Visibility States
+  const [sheetContextMenu, setSheetContextMenu] = useState<{
+    visible: boolean;
+    x: number;
+    y: number;
+    sheetKey: string;
+    sheetLabel: string;
+  } | null>(null);
+  const [renamingSheetKey, setRenamingSheetKey] = useState<string | null>(null);
+  const [renamingSheetText, setRenamingSheetText] = useState<string>('');
+  const [sheetTabColors, setSheetTabColors] = useState<Record<string, string>>(() => {
+    return localVault.get('infinity_office_excel_sheet_colors', {});
+  });
+  const [hiddenSheets, setHiddenSheets] = useState<Set<string>>(new Set());
+  const [isUnhideModalOpen, setIsUnhideModalOpen] = useState<boolean>(false);
+  const [isViewCodeModalOpen, setIsViewCodeModalOpen] = useState<boolean>(false);
+  const [viewCodeSheetKey, setViewCodeSheetKey] = useState<string>('sheet1');
+  const [protectedSheets, setProtectedSheets] = useState<Set<string>>(new Set());
+  const [isTabColorSubmenuOpen, setIsTabColorSubmenuOpen] = useState<boolean>(false);
 
   // Ribbon state
   const [activeRibbonTab, setActiveRibbonTab] = useState<ExcelRibbonTab>('home');
@@ -127,15 +172,25 @@ export const SheetsApp: React.FC<Props> = ({
   const [hasLastColumn, setHasLastColumn] = useState<boolean>(false);
   const [hasBandedColumns, setHasBandedColumns] = useState<boolean>(false);
   const [hasFilterButton, setHasFilterButton] = useState<boolean>(true);
-  const [activeTableStyle, setActiveTableStyle] = useState<string>('green');
+  const [activeTableStyle, setActiveTableStyle] = useState<string>(() => {
+    return localVault.get('infinity_office_excel_active_table_style_' + activeSheetKey, 'green');
+  });
+  const [activeTableRange, setActiveTableRange] = useState<{
+    minColIdx: number;
+    maxColIdx: number;
+    minRow: number;
+    maxRow: number;
+  } | null>(() => {
+    return localVault.get('infinity_office_excel_active_table_range_' + activeSheetKey, null);
+  });
 
   // Formula Range Selection (single click or drag reference)
   const [isDraggingFormulaRange, setIsDraggingFormulaRange] = useState<boolean>(false);
   const [formulaDragStartCell, setFormulaDragStartCell] = useState<string | null>(null);
   const [formulaReferencedRange, setFormulaReferencedRange] = useState<string[]>([]);
 
-  // View & UI controls
-  const [isRTL, setIsRTL] = useState<boolean>(true);
+  // View & UI controls (Excel 365 defaults to LTR Left-to-Right for standard workbooks)
+  const [isRTL, setIsRTL] = useState<boolean>(false);
   const [showFormulaBar, setShowFormulaBar] = useState<boolean>(true);
   const [showGridlines, setShowGridlines] = useState<boolean>(true);
   const [showHeadings, setShowHeadings] = useState<boolean>(true);
@@ -173,23 +228,6 @@ export const SheetsApp: React.FC<Props> = ({
   const [isGoalSeekOpen, setIsGoalSeekOpen] = useState(false);
   const [isFormatCellsOpen, setIsFormatCellsOpen] = useState(false);
   const [formatCellsTab, setFormatCellsTab] = useState<FormatCellsTab>('number');
-
-  // Sheet Tab Right Click & Management states
-  const [sheetContextMenu, setSheetContextMenu] = useState<{
-    x: number;
-    y: number;
-    sheetKey: string;
-    sheetLabel: string;
-  } | null>(null);
-  const [renamingSheetKey, setRenamingSheetKey] = useState<string | null>(null);
-  const [renamingInput, setRenamingInput] = useState<string>('');
-  const [isMoveCopyModalOpen, setIsMoveCopyModalOpen] = useState<boolean>(false);
-  const [isUnhideModalOpen, setIsUnhideModalOpen] = useState<boolean>(false);
-  const [isViewCodeModalOpen, setIsViewCodeModalOpen] = useState<boolean>(false);
-  const [isProtectSheetModalOpen, setIsProtectSheetModalOpen] = useState<boolean>(false);
-  const [protectingSheetKey, setProtectingSheetKey] = useState<string | null>(null);
-  const [protectedSheets, setProtectedSheets] = useState<Record<string, boolean>>({});
-
   const [definedNames, setDefinedNames] = useState<{ name: string; refersTo: string; scope: string; comment?: string }[]>([
     { name: 'ميزانية_الصيانة', refersTo: 'ورقة 1!$B$4:$B$8', scope: 'المصنف' },
     { name: 'إجمالي_المصروفات', refersTo: 'ورقة 1!$B$9:$E$9', scope: 'المصنف' },
@@ -197,6 +235,11 @@ export const SheetsApp: React.FC<Props> = ({
   ]);
   const [visibleRowCount, setVisibleRowCount] = useState<number>(100);
   const [tableNotification, setTableNotification] = useState<string | null>(null);
+  const [isExcelBackstageOpen, setIsExcelBackstageOpen] = useState(false);
+  const [isTableStylesGalleryOpen, setIsTableStylesGalleryOpen] = useState(false);
+  const [isSaved, setIsSaved] = useState(true);
+  const [autoSaveCountdown, setAutoSaveCountdown] = useState(300);
+  const [docTitle, setDocTitle] = useState(() => localVault.get('infinity_office_doc_title', 'مصنف 1 - فارغ'));
   const imageInputRef = useRef<HTMLInputElement>(null);
   const floatingImageInputRef = useRef<HTMLInputElement>(null);
 
@@ -381,13 +424,36 @@ export const SheetsApp: React.FC<Props> = ({
   const data = currentSheet ? currentSheet.data : {};
   const activeCellData = data[selectedCell];
 
-  // Sync external sheets if provided
+  // Sync external sheets if provided without resetting user's active sheet
   useEffect(() => {
     if (initialSheets && Object.keys(initialSheets).length > 0) {
-      setSheets(initialSheets);
-      setActiveSheetKey(Object.keys(initialSheets)[0]);
+      setSheets((prev) => {
+        if (prev === initialSheets) return prev;
+        return initialSheets;
+      });
+      setActiveSheetKeyState((prevKey) => {
+        if (prevKey && initialSheets[prevKey]) return prevKey;
+        const saved = localVault.get('infinity_office_active_sheet_key', '');
+        if (saved && initialSheets[saved]) return saved;
+        return Object.keys(initialSheets)[0] || 'sheet1';
+      });
     }
   }, [initialSheets]);
+
+  // Sync dimensions and sheet direction on activeSheetKey change
+  useEffect(() => {
+    const sheet = sheets[activeSheetKey];
+    if (!sheet) return;
+    if (sheet.colWidths && Object.keys(sheet.colWidths).length > 0) {
+      setColWidths(sheet.colWidths);
+    }
+    if (sheet.rowHeights && Object.keys(sheet.rowHeights).length > 0) {
+      setRowHeights(sheet.rowHeights);
+    }
+    if (sheet.isRTL !== undefined) {
+      setIsRTL(sheet.isRTL);
+    }
+  }, [activeSheetKey, sheets]);
 
   // Sync zoom prop
   useEffect(() => {
@@ -465,11 +531,239 @@ export const SheetsApp: React.FC<Props> = ({
     setCurrentFunctionSyntax(null);
   }, [selectedCell, activeSheetKey]);
 
+  // Auto-save every 5 minutes (300 seconds)
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setAutoSaveCountdown((prev) => {
+        if (prev <= 1) {
+          localVault.set(localVault.KEYS.SHEETS_DATA, sheets);
+          setIsSaved(true);
+          return 300;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [sheets]);
+
+  const handleQuickSave = async () => {
+    try {
+      // 1. Build authentic Excel binary blob (.xlsx)
+      const wb = XLSX.utils.book_new();
+      Object.keys(sheets).forEach((sKey) => {
+        const sheet = sheets[sKey];
+        const rows: any[][] = [];
+        let maxR = 1;
+        let maxC = 0;
+        Object.keys(sheet.data).forEach((cid) => {
+          const coord = parseCellCoord(cid);
+          if (coord.row > maxR) maxR = coord.row;
+          if (coord.colIdx > maxC) maxC = coord.colIdx;
+        });
+
+        for (let r = 1; r <= maxR; r++) {
+          const rowData: any[] = [];
+          for (let c = 0; c <= maxC; c++) {
+            const cellId = `${COLS[c]}${r}`;
+            const cell = sheet.data[cellId];
+            if (!cell) {
+              rowData.push('');
+            } else if (cell.formula) {
+              rowData.push({ f: cell.formula.replace(/^=/, ''), v: cell.value });
+            } else {
+              rowData.push(cell.value);
+            }
+          }
+          rows.push(rowData);
+        }
+
+        const ws = XLSX.utils.aoa_to_sheet(rows);
+        XLSX.utils.book_append_sheet(wb, ws, sheet.label || sKey);
+      });
+
+      const out = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+      const blob = new Blob([out], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+
+      // 2. Direct-to-Device file saving via File System Access API
+      let currentHandle = fileHandle;
+
+      if (!currentHandle && typeof window !== 'undefined' && 'showSaveFilePicker' in window) {
+        try {
+          currentHandle = await (window as any).showSaveFilePicker({
+            suggestedName: `${docTitle || 'مصنف 1'}.xlsx`,
+            types: [
+              {
+                description: 'Excel Workbook (*.xlsx)',
+                accept: {
+                  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'],
+                },
+              },
+            ],
+          });
+          setFileHandle(currentHandle);
+          onSaveFileHandle?.(currentHandle);
+          if (currentHandle.name) {
+            const cleanName = currentHandle.name.replace(/\.[^/.]+$/, '');
+            setDocTitle(cleanName);
+            localVault.set('infinity_office_doc_title', cleanName);
+          }
+        } catch (pickErr: any) {
+          if (pickErr.name === 'AbortError') {
+            return;
+          }
+          console.warn('File picker dismissed:', pickErr);
+        }
+      }
+
+      if (currentHandle && typeof currentHandle.createWritable === 'function') {
+        const writable = await currentHandle.createWritable();
+        await writable.write(blob);
+        await writable.close();
+        localVault.set(localVault.KEYS.SHEETS_DATA, sheets);
+        setIsSaved(true);
+        setAutoSaveCountdown(300);
+        setTableNotification(`تم الحفظ المباشر على جهازك في نفس مسار الملف (${currentHandle.name || docTitle}) بنجاح!`);
+        setTimeout(() => setTableNotification(null), 4000);
+        return;
+      }
+
+      // Fallback: save to disk via fileSaver
+      saveFileDirectlyToDevice({
+        filename: `${docTitle || 'مصنف 1'}.xlsx`,
+        data: blob,
+        mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        primaryExtension: 'xlsx',
+      });
+      localVault.set(localVault.KEYS.SHEETS_DATA, sheets);
+      setIsSaved(true);
+      setAutoSaveCountdown(300);
+      setTableNotification('تم حفظ وتنزيل المصنف بنجاح على جهازك!');
+      setTimeout(() => setTableNotification(null), 3000);
+    } catch (err) {
+      console.error('Quick save error:', err);
+      localVault.set(localVault.KEYS.SHEETS_DATA, sheets);
+      setIsSaved(true);
+      setAutoSaveCountdown(300);
+      setTableNotification('تم حفظ المصنف محلياً على جهازك!');
+      setTimeout(() => setTableNotification(null), 3000);
+    }
+  };
+
+  const handleSelectTemplate = (template: ExcelTemplateDefinition) => {
+    setSheets(template.sheets);
+    const targetKey = template.sheets['sheet3'] ? 'sheet3' : (Object.keys(template.sheets)[0] || 'sheet1');
+    setActiveSheetKey(targetKey);
+    const sheet = template.sheets[targetKey];
+    if (sheet?.colWidths) setColWidths(sheet.colWidths);
+    if (sheet?.rowHeights) setRowHeights(sheet.rowHeights);
+    if (sheet?.isRTL !== undefined) setIsRTL(sheet.isRTL);
+    saveSheets(template.sheets);
+    const title = template.titleEn || template.title;
+    setDocTitle(title);
+    localVault.set('infinity_office_doc_title', title);
+    setSelectedCell('B2');
+    setSelectedRange(['B2']);
+    setTableNotification(`تم تحميل وتطبيق قالب "${title}" بنجاح!`);
+    setTimeout(() => setTableNotification(null), 4000);
+  };
+
+  const handleLoadExcelData = (loadedSheets: Record<string, { label: string; data: SheetData; colWidths?: Record<string, number>; rowHeights?: Record<number, number>; isRTL?: boolean }>, title: string) => {
+    setSheets(loadedSheets);
+    const keys = Object.keys(loadedSheets);
+    const introKey = keys.find(k => loadedSheets[k].label?.toLowerCase().includes('introduction to function')) || keys[0] || 'sheet1';
+    setActiveSheetKey(introKey);
+    const sheet = loadedSheets[introKey];
+    if (sheet?.colWidths) setColWidths(sheet.colWidths);
+    if (sheet?.rowHeights) setRowHeights(sheet.rowHeights);
+    if (sheet?.isRTL !== undefined) setIsRTL(sheet.isRTL);
+    saveSheets(loadedSheets);
+    setDocTitle(title);
+    localVault.set('infinity_office_doc_title', title);
+    setSelectedCell('B2');
+    setSelectedRange(['B2']);
+    setTableNotification(`تم فتح المصنف "${title}" بنجاح بكافة التنسيقات والألوان والأبعاد!`);
+    setTimeout(() => setTableNotification(null), 4000);
+  };
+
+  const handleExportMultiFormat = (format: 'xlsx' | 'xlsm' | 'xlsb' | 'xls' | 'csv' | 'tsv' | 'ods' | 'xml' | 'html' | 'pdf') => {
+    if (format === 'pdf') {
+      window.print();
+      return;
+    }
+
+    try {
+      const wb = XLSX.utils.book_new();
+      Object.keys(sheets).forEach((sKey) => {
+        const sheet = sheets[sKey];
+        const rows: any[][] = [];
+        
+        let maxR = 1;
+        let maxC = 0;
+        Object.keys(sheet.data).forEach((cid) => {
+          const coord = parseCellCoord(cid);
+          if (coord.row > maxR) maxR = coord.row;
+          if (coord.colIdx > maxC) maxC = coord.colIdx;
+        });
+
+        for (let r = 1; r <= maxR; r++) {
+          const rowData: any[] = [];
+          for (let c = 0; c <= maxC; c++) {
+            const cellId = `${COLS[c]}${r}`;
+            const cell = sheet.data[cellId];
+            if (!cell) {
+              rowData.push('');
+            } else if (cell.formula) {
+              rowData.push({ f: cell.formula.replace(/^=/, ''), v: cell.value });
+            } else {
+              rowData.push(cell.value);
+            }
+          }
+          rows.push(rowData);
+        }
+
+        const ws = XLSX.utils.aoa_to_sheet(rows);
+        XLSX.utils.book_append_sheet(wb, ws, sheet.label || sKey);
+      });
+
+      const bookTypeMap: Record<string, XLSX.BookType> = {
+        xlsx: 'xlsx',
+        xlsm: 'xlsm',
+        xlsb: 'xlsb',
+        xls: 'biff8',
+        csv: 'csv',
+        tsv: 'txt',
+        ods: 'ods',
+        html: 'html',
+        xml: 'xlsx',
+      };
+
+      const bookType = bookTypeMap[format] || 'xlsx';
+      const ext = format === 'tsv' ? 'tsv' : (format === 'xml' ? 'xml' : format);
+      const fileName = `${docTitle || 'مصنف إكسيل 365'}.${ext}`;
+
+      const out = XLSX.write(wb, { bookType, type: 'array' });
+      const blob = new Blob([out], { type: 'application/octet-stream' });
+      saveFileDirectlyToDevice({
+        filename: fileName,
+        data: blob,
+        mimeType: 'application/octet-stream',
+        primaryExtension: ext,
+      });
+      setTableNotification(`تم تصدير وحفظ المصنف بصيغة .${ext} بنجاح!`);
+      setTimeout(() => setTableNotification(null), 4000);
+    } catch (err) {
+      console.error('Export failed:', err);
+      setTableNotification('حدث خطأ أثناء تصدير الملف.');
+      setTimeout(() => setTableNotification(null), 4000);
+    }
+  };
+
   // Save sheets helper
-  const saveSheets = (newSheets: Record<string, { label: string; data: SheetData }>) => {
+  const saveSheets = (newSheets: Record<string, { label: string; data: SheetData; colWidths?: Record<string, number>; rowHeights?: Record<number, number>; isRTL?: boolean }>) => {
     setSheets(newSheets);
     localVault.set(localVault.KEYS.SHEETS_DATA, newSheets);
     onSheetsChange?.(newSheets);
+    setIsSaved(false);
   };
 
   // Recalculate sheet formulas
@@ -478,7 +772,7 @@ export const SheetsApp: React.FC<Props> = ({
     Object.keys(updated).forEach((cellId) => {
       const cell = updated[cellId];
       if (cell && cell.formula) {
-        const computed = evaluateExcelFormula(cell.formula, updated, sheets);
+        const computed = evaluateExcelFormula(cell.formula, updated, sheets, hiddenRows);
         updated[cellId] = {
           ...cell,
           value: computed,
@@ -490,7 +784,7 @@ export const SheetsApp: React.FC<Props> = ({
 
   const handleCellChange = (cellId: string, rawVal: string) => {
     const isFormula = rawVal.startsWith('=');
-    const computedVal = isFormula ? evaluateExcelFormula(rawVal, data, sheets) : rawVal;
+    const computedVal = isFormula ? evaluateExcelFormula(rawVal, data, sheets, hiddenRows) : rawVal;
 
     const nextData = {
       ...data,
@@ -535,9 +829,29 @@ export const SheetsApp: React.FC<Props> = ({
     saveSheets(updatedSheets);
   };
 
-  // Set borders
-  const handleSetBorder = (borderType: SheetCell['border']) => {
-    handleFormatRange('border', borderType);
+  // Set borders with color and style options
+  const handleSetBorder = (
+    borderType: SheetCell['border'],
+    options?: { color?: string; style?: 'solid' | 'dashed' | 'dotted' | 'double' | 'thick' }
+  ) => {
+    const targets = selectedRange.length > 0 ? selectedRange : [selectedCell];
+    const nextData = { ...data };
+    targets.forEach((cid) => {
+      nextData[cid] = {
+        ...(nextData[cid] || { value: '' }),
+        border: borderType,
+        borderColor: options?.color || nextData[cid]?.borderColor,
+        borderStyle: options?.style || nextData[cid]?.borderStyle,
+      };
+    });
+    const updatedSheets = {
+      ...sheets,
+      [activeSheetKey]: {
+        ...currentSheet,
+        data: nextData,
+      },
+    };
+    saveSheets(updatedSheets);
   };
 
   // Set alignment
@@ -1250,11 +1564,7 @@ export const SheetsApp: React.FC<Props> = ({
   };
 
   // Create Table (Alt + T or Ctrl + T)
-  const handleCreateTable = (chosenStyle?: string) => {
-    const styleToUse = chosenStyle || activeTableStyle || 'black';
-    setActiveTableStyle(styleToUse);
-    const preset = TABLE_STYLES_MAP[styleToUse] || TABLE_STYLES_MAP.black || TABLE_STYLES_MAP.green;
-
+  const handleCreateTable = () => {
     let startColIdx = rangeBounds.minColIdx;
     let endColIdx = rangeBounds.maxColIdx;
     let startRow = rangeBounds.minRow;
@@ -1279,8 +1589,8 @@ export const SheetsApp: React.FC<Props> = ({
         ...(existing || { value: '' }),
         value: existing?.value ? existing.value : `عمود ${c - startColIdx + 1}`,
         bold: true,
-        bg: preset.headerBg,
-        color: preset.headerColor,
+        bg: '#107c41',
+        color: '#ffffff',
         align: 'center',
         border: 'all',
       };
@@ -1288,7 +1598,7 @@ export const SheetsApp: React.FC<Props> = ({
 
     // Body rows with zebra striping
     for (let r = startRow + 1; r <= endRow; r++) {
-      const isZebra = (r - startRow) % 2 === 1;
+      const isZebra = (r - startRow) % 2 === 0;
       for (let c = startColIdx; c <= endColIdx; c++) {
         const col = COLS[c];
         const cellId = `${col}${r}`;
@@ -1296,7 +1606,7 @@ export const SheetsApp: React.FC<Props> = ({
         const existing = nextData[cellId];
         nextData[cellId] = {
           ...(existing || { value: '' }),
-          bg: isZebra ? preset.bandBg : '#ffffff',
+          bg: isZebra ? '#f8fafc' : '#ffffff',
           color: existing?.color || '#1e293b',
           border: 'all',
           align: existing?.align || 'center',
@@ -1304,13 +1614,15 @@ export const SheetsApp: React.FC<Props> = ({
       }
     }
 
+    const tblRange = { minColIdx: startColIdx, maxColIdx: endColIdx, minRow: startRow, maxRow: endRow };
+    setActiveTableRange(tblRange);
+    localVault.set('infinity_office_excel_active_table_range_' + activeSheetKey, tblRange);
     setShowFilterActive(true);
     setSelectedRange(allCells);
     saveSheets({ ...sheets, [activeSheetKey]: { ...currentSheet, data: nextData } });
-    setActiveRibbonTab('design');
     
-    setTableNotification(`تم إنشاء وتنسيق جدول Excel (${styleToUse}) بنجاح بنطاق (${COLS[startColIdx]}${startRow}:${COLS[endColIdx]}${endRow})!`);
-    setTimeout(() => setTableNotification(null), 4000);
+    setTableNotification(`تم إنشاء وتنسيق جدول Excel القياسي بنجاح بنطاق (${COLS[startColIdx]}${startRow}:${COLS[endColIdx]}${endRow})! الاختصار المعتمد: Alt + T (أو Ctrl + T)`);
+    setTimeout(() => setTableNotification(null), 5000);
   };
 
   // Image Upload Handler
@@ -1613,6 +1925,75 @@ export const SheetsApp: React.FC<Props> = ({
     }
 
     if (isEditingCell) return;
+
+    // Quick Save Shortcut: Ctrl + S
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+      e.preventDefault();
+      handleQuickSave();
+      return;
+    }
+
+    // Ctrl + Shift + Down: Jump to row 1,048,576
+    if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'ArrowDown') {
+      e.preventDefault();
+      setVisibleRowCount(MAX_EXCEL_ROWS);
+      const coords = parseCellCoord(selectedCell);
+      const targetCellId = `${coords.col}${MAX_EXCEL_ROWS}`;
+      setSelectedCell(targetCellId);
+      setSelectedRange([targetCellId]);
+      setTimeout(() => {
+        if (gridContainerRef.current) {
+          gridContainerRef.current.scrollTop = gridContainerRef.current.scrollHeight;
+          gridContainerRef.current.focus();
+        }
+      }, 50);
+      return;
+    }
+
+    // Ctrl + Shift + Up: Jump to row 1
+    if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'ArrowUp') {
+      e.preventDefault();
+      const coords = parseCellCoord(selectedCell);
+      const targetCellId = `${coords.col}1`;
+      setSelectedCell(targetCellId);
+      setSelectedRange([targetCellId]);
+      setTimeout(() => {
+        if (gridContainerRef.current) {
+          gridContainerRef.current.scrollTop = 0;
+          gridContainerRef.current.focus();
+        }
+      }, 50);
+      return;
+    }
+
+    // Ctrl + Shift + Left / Right: Jump to first / last column
+    if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+      e.preventDefault();
+      const coords = parseCellCoord(selectedCell);
+      const isGoToLast = (isRTL && e.key === 'ArrowLeft') || (!isRTL && e.key === 'ArrowRight');
+      const targetCol = isGoToLast ? COLS[COLS.length - 1] : COLS[0];
+      const targetCellId = `${targetCol}${coords.row}`;
+      setSelectedCell(targetCellId);
+      setSelectedRange([targetCellId]);
+      setTimeout(() => gridContainerRef.current?.focus(), 0);
+      return;
+    }
+
+    // Ctrl + د or Ctrl + ]: Increase font size
+    if ((e.ctrlKey || e.metaKey) && (e.key === 'د' || e.key === ']' || e.code === 'BracketClose')) {
+      e.preventDefault();
+      const currentSz = activeCellData?.fontSize || 11;
+      handleFormatRange('fontSize', Math.min(72, currentSz + 1));
+      return;
+    }
+
+    // Ctrl + ج or Ctrl + [: Decrease font size
+    if ((e.ctrlKey || e.metaKey) && (e.key === 'ج' || e.key === '[' || e.code === 'BracketOpen')) {
+      e.preventDefault();
+      const currentSz = activeCellData?.fontSize || 11;
+      handleFormatRange('fontSize', Math.max(8, currentSz - 1));
+      return;
+    }
 
     const coords = parseCellCoord(selectedCell);
     let nextColIdx = coords.colIdx;
@@ -1984,15 +2365,34 @@ export const SheetsApp: React.FC<Props> = ({
     try {
       const parsedSheets = await parseExcelFile(file);
       if (Object.keys(parsedSheets).length > 0) {
-        saveSheets(parsedSheets);
-        setActiveSheetKey(Object.keys(parsedSheets)[0]);
-        setSelectedCell('A1');
-        setSelectedRange(['A1']);
-        alert(`تم فتح ملف Excel "${file.name}" واستيراد أوراق العمل بنجاح!`);
+        if (onOpenNewWorkbookTab) {
+          // Automatically open in a brand new tab to prevent losing active work!
+          onOpenNewWorkbookTab(file.name, parsedSheets);
+          setTableNotification(`تم فتح مصنف Excel "${file.name}" في تبويب مستقل جديد بنجاح!`);
+        } else {
+          setSheets(parsedSheets);
+          const keys = Object.keys(parsedSheets);
+          const introKey = keys.find((k) => parsedSheets[k].label?.toLowerCase().includes('introduction to function')) || keys[0];
+          setActiveSheetKey(introKey);
+          const targetSheet = parsedSheets[introKey];
+          if (targetSheet?.colWidths) setColWidths(targetSheet.colWidths);
+          if (targetSheet?.rowHeights) setRowHeights(targetSheet.rowHeights);
+          if (targetSheet?.isRTL !== undefined) setIsRTL(targetSheet.isRTL);
+          saveSheets(parsedSheets);
+          const nameNoExt = file.name.replace(/\.[^/.]+$/, '');
+          setDocTitle(nameNoExt);
+          localVault.set('infinity_office_doc_title', nameNoExt);
+          setSelectedCell('B2');
+          setSelectedRange(['B2']);
+          setTableNotification(`تم فتح ملف Excel "${file.name}" واستيراد أوراق العمل بكافة الأبعاد والتنسيقات بنجاح!`);
+        }
+        setTimeout(() => setTableNotification(null), 4000);
       }
     } catch (err) {
       console.error(err);
       alert('حدث خطأ أثناء فتح ملف Excel.');
+    } finally {
+      e.target.value = '';
     }
   };
 
@@ -2010,141 +2410,142 @@ export const SheetsApp: React.FC<Props> = ({
     setActiveSheetKey(newKey);
   };
 
-  const handleDeleteSheet = (keyToDelete: string) => {
-    const keys = Object.keys(sheets);
-    if (keys.length <= 1) {
-      alert('يجب أن يحتوي المصنف على ورقة عمل مرئية واحدة على الأقل.');
-      return;
-    }
-    const nextSheets = { ...sheets };
-    delete nextSheets[keyToDelete];
-    saveSheets(nextSheets);
-    if (activeSheetKey === keyToDelete) {
-      const remainingKeys = Object.keys(nextSheets).filter(k => !(nextSheets[k] as any).isHidden);
-      setActiveSheetKey(remainingKeys[0] || Object.keys(nextSheets)[0]);
-    }
-    setTableNotification('تم حذف ورقة العمل بنجاح.');
-    setTimeout(() => setTableNotification(null), 3000);
+  // Context menu operations for Sheet Tabs (Excel 365 style)
+  const handleInsertSheet = () => {
+    handleAddSheet();
+    setSheetContextMenu(null);
   };
 
-  const handleRenameSheet = (key: string, newLabel: string) => {
-    const trimmed = newLabel.trim();
-    if (!trimmed) {
-      setRenamingSheetKey(null);
+  const handleDeleteSheet = (key: string) => {
+    const visibleCount = Object.keys(sheets).filter((k) => !hiddenSheets.has(k)).length;
+    if (visibleCount <= 1) {
+      alert('يجب أن يحتوي المصنف على ورقة عمل مرئية واحدة على الأقل.');
+      setSheetContextMenu(null);
       return;
     }
-    const nextSheets = {
-      ...sheets,
-      [key]: {
-        ...sheets[key],
-        label: trimmed,
-      },
-    };
-    saveSheets(nextSheets);
+    const targetLabel = sheets[key]?.label || key;
+    if (confirm(`هل أنت متأكد من رغبتك في حذف ورقة العمل "${targetLabel}" نهائياً؟`)) {
+      const nextSheets = { ...sheets };
+      delete nextSheets[key];
+      saveSheets(nextSheets);
+      if (activeSheetKey === key) {
+        const remainingKeys = Object.keys(nextSheets).filter((k) => !hiddenSheets.has(k));
+        setActiveSheetKey(remainingKeys[0] || Object.keys(nextSheets)[0]);
+      }
+      setTableNotification(`تم حذف ورقة العمل "${targetLabel}" بنجاح.`);
+      setTimeout(() => setTableNotification(null), 3500);
+    }
+    setSheetContextMenu(null);
+  };
+
+  const handleStartRenameSheet = (key: string) => {
+    setRenamingSheetKey(key);
+    setRenamingSheetText(sheets[key]?.label || '');
+    setSheetContextMenu(null);
+  };
+
+  const handleCommitRenameSheet = () => {
+    if (renamingSheetKey && renamingSheetText.trim()) {
+      const trimmed = renamingSheetText.trim();
+      const updated = {
+        ...sheets,
+        [renamingSheetKey]: {
+          ...sheets[renamingSheetKey],
+          label: trimmed,
+        },
+      };
+      saveSheets(updated);
+      setTableNotification(`تم تغيير اسم ورقة العمل إلى "${trimmed}"`);
+      setTimeout(() => setTableNotification(null), 3000);
+    }
     setRenamingSheetKey(null);
   };
 
-  const handleMoveOrCopySheet = (sourceKey: string, targetKey: string | 'end', isCopy: boolean) => {
-    const sourceSheet = sheets[sourceKey];
-    if (!sourceSheet) return;
-
-    if (isCopy) {
-      const newKey = `sheet_copy_${Date.now()}`;
-      const copyLabel = `${sourceSheet.label} (2)`;
-      const newSheetObj = {
-        label: copyLabel,
-        data: JSON.parse(JSON.stringify(sourceSheet.data || {})),
-        tabColor: (sourceSheet as any).tabColor,
-      };
-
-      const keys = Object.keys(sheets);
-      const newSheets: Record<string, any> = {};
-
-      if (targetKey === 'end') {
-        Object.assign(newSheets, sheets, { [newKey]: newSheetObj });
-      } else {
-        keys.forEach((k) => {
-          if (k === targetKey) {
-            newSheets[newKey] = newSheetObj;
-          }
-          newSheets[k] = sheets[k];
-        });
-      }
-
-      saveSheets(newSheets);
-      setActiveSheetKey(newKey);
-      setTableNotification(`تم إنشاء نسخة من ورقة العمل (${copyLabel}) بنجاح!`);
-    } else {
-      const keys = Object.keys(sheets).filter(k => k !== sourceKey);
-      const newSheets: Record<string, any> = {};
-
-      if (targetKey === 'end') {
-        keys.forEach(k => { newSheets[k] = sheets[k]; });
-        newSheets[sourceKey] = sourceSheet;
-      } else {
-        keys.forEach(k => {
-          if (k === targetKey) {
-            newSheets[sourceKey] = sourceSheet;
-          }
-          newSheets[k] = sheets[k];
-        });
-      }
-
-      saveSheets(newSheets);
-      setActiveSheetKey(sourceKey);
-      setTableNotification(`تم نقل ورقة العمل (${sourceSheet.label}) بنجاح!`);
-    }
-    setTimeout(() => setTableNotification(null), 3000);
-  };
-
-  const handleSetTabColor = (key: string, color?: string) => {
-    const nextSheets = {
+  const handleMoveOrCopySheet = (key: string) => {
+    const src = sheets[key];
+    if (!src) return;
+    const copyKey = `${key}_copy_${Date.now()}`;
+    const copyLabel = `${src.label} (2)`;
+    const updated = {
       ...sheets,
-      [key]: {
-        ...sheets[key],
-        tabColor: color,
+      [copyKey]: {
+        label: copyLabel,
+        data: { ...src.data },
+        colWidths: src.colWidths ? { ...src.colWidths } : undefined,
+        rowHeights: src.rowHeights ? { ...src.rowHeights } : undefined,
+        isRTL: src.isRTL,
       },
     };
-    saveSheets(nextSheets);
+    saveSheets(updated);
+    setActiveSheetKey(copyKey);
+    setSheetContextMenu(null);
+    setTableNotification(`تم إنشاء نسخة من ورقة العمل بنجاح باسم "${copyLabel}"!`);
+    setTimeout(() => setTableNotification(null), 3500);
+  };
+
+  const handleToggleProtectSheet = (key: string) => {
+    setProtectedSheets((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) {
+        next.delete(key);
+        setTableNotification(`تم إلغاء حماية ورقة العمل "${sheets[key]?.label}"`);
+      } else {
+        next.add(key);
+        setTableNotification(`تمت حماية ورقة العمل "${sheets[key]?.label}" بنجاح (وضع القراءة فقط)`);
+      }
+      setTimeout(() => setTableNotification(null), 3500);
+      return next;
+    });
+    setSheetContextMenu(null);
+  };
+
+  const handleSetTabColor = (key: string, color: string) => {
+    const updated = { ...sheetTabColors, [key]: color };
+    setSheetTabColors(updated);
+    localVault.set('infinity_office_excel_sheet_colors', updated);
+    setSheetContextMenu(null);
+    setIsTabColorSubmenuOpen(false);
   };
 
   const handleHideSheet = (key: string) => {
-    const visibleCount = Object.values(sheets).filter(s => !(s as any).isHidden).length;
-    if (visibleCount <= 1) {
-      alert('لا يمكن إخفاء كل أوراق العمل. يجب أن تظل ورقة عمل واحدة مرئية على الأقل.');
+    const visibleKeys = Object.keys(sheets).filter((k) => !hiddenSheets.has(k));
+    if (visibleKeys.length <= 1) {
+      alert('لا يمكن إخفاء كافة أوراق العمل، يجب إبقاء ورقة عمل واحدة مرئية على الأقل.');
+      setSheetContextMenu(null);
       return;
     }
-    const nextSheets = {
-      ...sheets,
-      [key]: {
-        ...sheets[key],
-        isHidden: true,
-      },
-    };
-    saveSheets(nextSheets);
+    setHiddenSheets((prev) => new Set([...prev, key]));
     if (activeSheetKey === key) {
-      const remaining = Object.keys(nextSheets).filter(k => !(nextSheets[k] as any).isHidden);
-      if (remaining.length > 0) {
-        setActiveSheetKey(remaining[0]);
-      }
+      const nextKey = visibleKeys.find((k) => k !== key) || visibleKeys[0];
+      setActiveSheetKey(nextKey);
     }
-    setTableNotification('تم إخفاء ورقة العمل.');
-    setTimeout(() => setTableNotification(null), 3000);
+    setSheetContextMenu(null);
+    setTableNotification(`تم إخفاء ورقة العمل "${sheets[key]?.label}".`);
+    setTimeout(() => setTableNotification(null), 3500);
   };
 
   const handleUnhideSheet = (key: string) => {
-    const nextSheets = {
-      ...sheets,
-      [key]: {
-        ...sheets[key],
-        isHidden: false,
-      },
-    };
-    saveSheets(nextSheets);
+    setHiddenSheets((prev) => {
+      const next = new Set(prev);
+      next.delete(key);
+      return next;
+    });
     setActiveSheetKey(key);
-    setTableNotification(`تم إظهار ورقة العمل (${nextSheets[key].label}) بنجاح!`);
-    setTimeout(() => setTableNotification(null), 3000);
+    setIsUnhideModalOpen(false);
+    setTableNotification(`تم إظهار ورقة العمل "${sheets[key]?.label}" بنجاح!`);
+    setTimeout(() => setTableNotification(null), 3500);
   };
+
+  // Close sheet context menu on outside click
+  useEffect(() => {
+    if (!sheetContextMenu) return;
+    const handleCloseMenu = () => {
+      setSheetContextMenu(null);
+      setIsTabColorSubmenuOpen(false);
+    };
+    window.addEventListener('click', handleCloseMenu);
+    return () => window.removeEventListener('click', handleCloseMenu);
+  }, [sheetContextMenu]);
 
   // Format cell display value based on number format
   const formatCellValue = (cell?: SheetCell): string => {
@@ -2177,36 +2578,228 @@ export const SheetsApp: React.FC<Props> = ({
     }
   };
 
-  // Table Design Palette & Styles
-  const TABLE_STYLES_MAP: Record<string, { headerBg: string; headerColor: string; bandBg: string; border: string }> = {
-    black: { headerBg: '#18181b', headerColor: '#ffffff', bandBg: '#f4f4f5', border: '#e4e4e7' },
-    dark: { headerBg: '#18181b', headerColor: '#ffffff', bandBg: '#f4f4f5', border: '#e4e4e7' },
-    green: { headerBg: '#107c41', headerColor: '#ffffff', bandBg: '#f0fdf4', border: '#bbf7d0' },
-    blue: { headerBg: '#2563eb', headerColor: '#ffffff', bandBg: '#eff6ff', border: '#bfdbfe' },
-    'light-blue': { headerBg: '#0284c7', headerColor: '#ffffff', bandBg: '#f0f9ff', border: '#bae6fd' },
-    'warm-orange': { headerBg: '#ea580c', headerColor: '#ffffff', bandBg: '#fff7ed', border: '#fed7aa' },
-    orange: { headerBg: '#ea580c', headerColor: '#ffffff', bandBg: '#fff7ed', border: '#fed7aa' },
-    gray: { headerBg: '#475569', headerColor: '#ffffff', bandBg: '#f8fafc', border: '#cbd5e1' },
-    teal: { headerBg: '#0d9488', headerColor: '#ffffff', bandBg: '#f0fdfa', border: '#99f6e4' },
-    purple: { headerBg: '#7c3aed', headerColor: '#ffffff', bandBg: '#faf5ff', border: '#ddd6fe' },
-    gold: { headerBg: '#ca8a04', headerColor: '#ffffff', bandBg: '#fefce8', border: '#fef08a' },
-    'deep-blue': { headerBg: '#1e40af', headerColor: '#ffffff', bandBg: '#eff6ff', border: '#bfdbfe' },
+  // Helper to find table bounds around a cell
+  const findTableBounds = (cellId: string): { minColIdx: number; maxColIdx: number; minRow: number; maxRow: number } => {
+    // If user has explicitly selected a multi-cell range, prioritize it!
+    if (selectedRange && selectedRange.length > 1) {
+      return {
+        minColIdx: rangeBounds.minColIdx,
+        maxColIdx: rangeBounds.maxColIdx,
+        minRow: rangeBounds.minRow,
+        maxRow: rangeBounds.maxRow,
+      };
+    }
+
+    // Check if cell is within or adjacent to activeTableRange
+    if (activeTableRange) {
+      const p = parseCellCoord(cellId);
+      if (
+        p.colIdx >= activeTableRange.minColIdx &&
+        p.colIdx <= activeTableRange.maxColIdx &&
+        p.row >= activeTableRange.minRow &&
+        p.row <= activeTableRange.maxRow + 1
+      ) {
+        return activeTableRange;
+      }
+    }
+
+    // Auto-detect contiguous data / formatted table around cellId
+    const startCoord = parseCellCoord(cellId);
+    let minR = startCoord.row;
+    let maxR = startCoord.row;
+    let minC = startCoord.colIdx;
+    let maxC = startCoord.colIdx;
+
+    const hasContent = (cIdx: number, rNum: number) => {
+      const cid = `${COLS[cIdx]}${rNum}`;
+      const c = data[cid];
+      return Boolean(c && ((c.value !== undefined && c.value !== '') || c.bg || c.border || c.formula));
+    };
+
+    // If active cell has no content, check if adjacent cells have content
+    if (!hasContent(startCoord.colIdx, startCoord.row)) {
+      for (let r = Math.max(1, startCoord.row - 1); r <= Math.min(MAX_EXCEL_ROWS, startCoord.row + 1); r++) {
+        for (let c = Math.max(0, startCoord.colIdx - 1); c <= Math.min(COLS.length - 1, startCoord.colIdx + 1); c++) {
+          if (hasContent(c, r)) {
+            minR = r;
+            maxR = r;
+            minC = c;
+            maxC = c;
+            break;
+          }
+        }
+      }
+    }
+
+    // Expand upward
+    while (minR > 1) {
+      let rowHasData = false;
+      for (let c = minC; c <= maxC; c++) {
+        if (hasContent(c, minR - 1)) {
+          rowHasData = true;
+          break;
+        }
+      }
+      if (rowHasData) minR--;
+      else break;
+    }
+
+    // Expand downward
+    while (maxR < MAX_EXCEL_ROWS) {
+      let rowHasData = false;
+      for (let c = minC; c <= maxC; c++) {
+        if (hasContent(c, maxR + 1)) {
+          rowHasData = true;
+          break;
+        }
+      }
+      if (rowHasData) maxR++;
+      else break;
+    }
+
+    // Expand left
+    while (minC > 0) {
+      let colHasData = false;
+      for (let r = minR; r <= maxR; r++) {
+        if (hasContent(minC - 1, r)) {
+          colHasData = true;
+          break;
+        }
+      }
+      if (colHasData) minC--;
+      else break;
+    }
+
+    // Expand right
+    while (maxC < COLS.length - 1) {
+      let colHasData = false;
+      for (let r = minR; r <= maxR; r++) {
+        if (hasContent(maxC + 1, r)) {
+          colHasData = true;
+          break;
+        }
+      }
+      if (colHasData) maxC++;
+      else break;
+    }
+
+    // Fallback: If still single cell with no content, default to 4 cols x 5 rows
+    if (minR === maxR && minC === maxC && !hasContent(minC, minR)) {
+      return {
+        minColIdx: minC,
+        maxColIdx: Math.min(COLS.length - 1, minC + 3),
+        minRow: minR,
+        maxRow: Math.min(MAX_EXCEL_ROWS, minR + 4),
+      };
+    }
+
+    return { minColIdx: minC, maxColIdx: maxC, minRow: minR, maxRow: maxR };
   };
 
-  const handleApplyTableStyle = (styleName: string) => {
+  // Complete Table Design Palette & Styles with all color aliases & Excel 365 presets
+  const TABLE_STYLES_MAP: Record<string, { headerBg: string; headerColor: string; bandBg: string; border: string; accentColor: string }> = {
+    // Green
+    green: { headerBg: '#107c41', headerColor: '#ffffff', bandBg: '#dcfce7', border: '#86efac', accentColor: '#107c41' },
+    emerald: { headerBg: '#059669', headerColor: '#ffffff', bandBg: '#d1fae5', border: '#6ee7b7', accentColor: '#059669' },
+    // Dark / Black
+    black: { headerBg: '#111827', headerColor: '#ffffff', bandBg: '#f3f4f6', border: '#d1d5db', accentColor: '#111827' },
+    dark: { headerBg: '#1f2937', headerColor: '#ffffff', bandBg: '#f3f4f6', border: '#e5e7eb', accentColor: '#1f2937' },
+    charcoal: { headerBg: '#111827', headerColor: '#ffffff', bandBg: '#f3f4f6', border: '#d1d5db', accentColor: '#111827' },
+    // Blue
+    blue: { headerBg: '#0284c7', headerColor: '#ffffff', bandBg: '#e0f2fe', border: '#bae6fd', accentColor: '#0284c7' },
+    'light-blue': { headerBg: '#0284c7', headerColor: '#ffffff', bandBg: '#e0f2fe', border: '#bae6fd', accentColor: '#0284c7' },
+    sky: { headerBg: '#0284c7', headerColor: '#ffffff', bandBg: '#e0f2fe', border: '#bae6fd', accentColor: '#0284c7' },
+    // Orange
+    orange: { headerBg: '#ea580c', headerColor: '#ffffff', bandBg: '#ffedd5', border: '#fed7aa', accentColor: '#ea580c' },
+    'warm-orange': { headerBg: '#ea580c', headerColor: '#ffffff', bandBg: '#ffedd5', border: '#fed7aa', accentColor: '#ea580c' },
+    amber: { headerBg: '#ea580c', headerColor: '#ffffff', bandBg: '#ffedd5', border: '#fed7aa', accentColor: '#ea580c' },
+    // Gray
+    gray: { headerBg: '#4b5563', headerColor: '#ffffff', bandBg: '#f3f4f6', border: '#e5e7eb', accentColor: '#4b5563' },
+    steel: { headerBg: '#4b5563', headerColor: '#ffffff', bandBg: '#f3f4f6', border: '#e5e7eb', accentColor: '#4b5563' },
+    // Yellow / Gold
+    yellow: { headerBg: '#d97706', headerColor: '#ffffff', bandBg: '#fef3c7', border: '#fde68a', accentColor: '#d97706' },
+    gold: { headerBg: '#d97706', headerColor: '#ffffff', bandBg: '#fef3c7', border: '#fde68a', accentColor: '#d97706' },
+    // Navy / Deep Blue
+    navy: { headerBg: '#1e40af', headerColor: '#ffffff', bandBg: '#dbeafe', border: '#bfdbfe', accentColor: '#1e40af' },
+    'deep-blue': { headerBg: '#1e40af', headerColor: '#ffffff', bandBg: '#dbeafe', border: '#bfdbfe', accentColor: '#1e40af' },
+    indigo: { headerBg: '#4338ca', headerColor: '#ffffff', bandBg: '#e0e7ff', border: '#c7d2fe', accentColor: '#4338ca' },
+    // Red & Purple & Teal
+    red: { headerBg: '#dc2626', headerColor: '#ffffff', bandBg: '#fee2e2', border: '#fca5a5', accentColor: '#dc2626' },
+    purple: { headerBg: '#7c3aed', headerColor: '#ffffff', bandBg: '#ede9fe', border: '#ddd6fe', accentColor: '#7c3aed' },
+    teal: { headerBg: '#0f766e', headerColor: '#ffffff', bandBg: '#ccfbf1', border: '#99f6e4', accentColor: '#0f766e' },
+  };
+
+  const applyTableStylingToRange = (
+    styleParam: string | ExcelTableStyle,
+    targetBounds: { minColIdx: number; maxColIdx: number; minRow: number; maxRow: number },
+    options?: {
+      headerRow?: boolean;
+      totalRow?: boolean;
+      bandedRows?: boolean;
+      firstCol?: boolean;
+      lastCol?: boolean;
+      bandedCols?: boolean;
+    }
+  ) => {
+    const opts = {
+      headerRow: options?.headerRow !== undefined ? options.headerRow : hasHeaderRow,
+      totalRow: options?.totalRow !== undefined ? options.totalRow : hasTotalRow,
+      bandedRows: options?.bandedRows !== undefined ? options.bandedRows : hasBandedRows,
+      firstCol: options?.firstCol !== undefined ? options.firstCol : hasFirstColumn,
+      lastCol: options?.lastCol !== undefined ? options.lastCol : hasLastColumn,
+      bandedCols: options?.bandedCols !== undefined ? options.bandedCols : hasBandedColumns,
+    };
+
+    let preset: { headerBg: string; headerColor: string; bandBg: string; border: string; accentColor: string };
+    let styleName = 'green';
+
+    if (typeof styleParam === 'string') {
+      styleName = styleParam;
+      const key = styleParam.toLowerCase();
+      if (TABLE_STYLES_MAP[key]) {
+        preset = TABLE_STYLES_MAP[key];
+      } else {
+        const match = EXCEL_365_TABLE_STYLES.find((s) => s.id === styleParam || s.id.toLowerCase() === key);
+        if (match) {
+          preset = {
+            headerBg: match.headerBg,
+            headerColor: match.headerColor,
+            bandBg: match.bandBg,
+            border: match.borderColor,
+            accentColor: match.accentColor,
+          };
+        } else {
+          preset = TABLE_STYLES_MAP.green;
+        }
+      }
+    } else {
+      styleName = styleParam.id;
+      preset = {
+        headerBg: styleParam.headerBg,
+        headerColor: styleParam.headerColor,
+        bandBg: styleParam.bandBg,
+        border: styleParam.borderColor,
+        accentColor: styleParam.accentColor,
+      };
+    }
+
     setActiveTableStyle(styleName);
-    const preset = TABLE_STYLES_MAP[styleName] || TABLE_STYLES_MAP.black || TABLE_STYLES_MAP.green;
+    localVault.set('infinity_office_excel_active_table_style_' + activeSheetKey, styleName);
+
     const nextData = { ...data };
+    const allCells: string[] = [];
 
-    for (let r = rangeBounds.minRow; r <= rangeBounds.maxRow; r++) {
-      const isHeader = hasHeaderRow && r === rangeBounds.minRow;
-      const isTotal = hasTotalRow && r === rangeBounds.maxRow;
-      const isBanded = hasBandedRows && !isHeader && !isTotal && (r % 2 === 1);
+    for (let r = targetBounds.minRow; r <= targetBounds.maxRow; r++) {
+      const isHeader = opts.headerRow && r === targetBounds.minRow;
+      const isTotal = opts.totalRow && r === targetBounds.maxRow;
+      const isBandedRow = opts.bandedRows && !isHeader && !isTotal && ((r - targetBounds.minRow) % 2 === 1);
 
-      for (let c = rangeBounds.minColIdx; c <= rangeBounds.maxColIdx; c++) {
+      for (let c = targetBounds.minColIdx; c <= targetBounds.maxColIdx; c++) {
         const cellId = `${COLS[c]}${r}`;
-        const isFirstCol = hasFirstColumn && c === rangeBounds.minColIdx;
-        const isLastCol = hasLastColumn && c === rangeBounds.maxColIdx;
+        allCells.push(cellId);
+        const isFirstCol = opts.firstCol && c === targetBounds.minColIdx;
+        const isLastCol = opts.lastCol && c === targetBounds.maxColIdx;
+        const isBandedCol = opts.bandedCols && !isFirstCol && !isLastCol && ((c - targetBounds.minColIdx) % 2 === 1);
 
         let bg = '#ffffff';
         let color = '#1e293b';
@@ -2219,20 +2812,27 @@ export const SheetsApp: React.FC<Props> = ({
         } else if (isTotal) {
           bg = '#f8fafc';
           bold = true;
-        } else if (isBanded) {
+          color = '#0f172a';
+        } else if (isBandedRow) {
           bg = preset.bandBg;
+          color = preset.bandBg === '#374151' ? '#ffffff' : '#1e293b';
+        } else if (isBandedCol) {
+          bg = preset.bandBg;
+          color = preset.bandBg === '#374151' ? '#ffffff' : '#1e293b';
         }
 
         if (isFirstCol || isLastCol) {
           bold = true;
         }
 
+        const existing = nextData[cellId];
         nextData[cellId] = {
-          ...(nextData[cellId] || { value: '' }),
+          ...(existing || { value: '' }),
           bg,
           color,
-          bold: bold || nextData[cellId]?.bold,
+          bold: bold || (existing?.bold && !isHeader && !isTotal ? true : bold),
           border: 'all',
+          borderColor: preset.border,
         };
       }
     }
@@ -2242,18 +2842,68 @@ export const SheetsApp: React.FC<Props> = ({
       [activeSheetKey]: { ...currentSheet, data: nextData },
     };
     saveSheets(updatedSheets);
-    setTableNotification(`تم تطبيق نمط الجدول بنجاح (${styleName})!`);
+    setSelectedRange(allCells);
+    setActiveTableRange(targetBounds);
+    localVault.set('infinity_office_excel_active_table_range_' + activeSheetKey, targetBounds);
+    setTableNotification(`تم تطبيق نمط الجدول وتحديث الألوان بنجاح!`);
     setTimeout(() => setTableNotification(null), 3000);
+  };
+
+  const handleApplyTableStyle = (styleParam: string | ExcelTableStyle) => {
+    const targetBounds = findTableBounds(selectedCell);
+    applyTableStylingToRange(styleParam, targetBounds);
+  };
+
+  const handleToggleHeaderRow = () => {
+    const nextVal = !hasHeaderRow;
+    setHasHeaderRow(nextVal);
+    const targetBounds = findTableBounds(selectedCell);
+    applyTableStylingToRange(activeTableStyle, targetBounds, { headerRow: nextVal });
+  };
+
+  const handleToggleBandedRows = () => {
+    const nextVal = !hasBandedRows;
+    setHasBandedRows(nextVal);
+    const targetBounds = findTableBounds(selectedCell);
+    applyTableStylingToRange(activeTableStyle, targetBounds, { bandedRows: nextVal });
+  };
+
+  const handleToggleFirstColumn = () => {
+    const nextVal = !hasFirstColumn;
+    setHasFirstColumn(nextVal);
+    const targetBounds = findTableBounds(selectedCell);
+    applyTableStylingToRange(activeTableStyle, targetBounds, { firstCol: nextVal });
+  };
+
+  const handleToggleLastColumn = () => {
+    const nextVal = !hasLastColumn;
+    setHasLastColumn(nextVal);
+    const targetBounds = findTableBounds(selectedCell);
+    applyTableStylingToRange(activeTableStyle, targetBounds, { lastCol: nextVal });
+  };
+
+  const handleToggleBandedColumns = () => {
+    const nextVal = !hasBandedColumns;
+    setHasBandedColumns(nextVal);
+    const targetBounds = findTableBounds(selectedCell);
+    applyTableStylingToRange(activeTableStyle, targetBounds, { bandedCols: nextVal });
+  };
+
+  const handleToggleFilterButton = () => {
+    const nextVal = !hasFilterButton;
+    setHasFilterButton(nextVal);
+    setShowFilterActive(nextVal);
   };
 
   const handleToggleTotalRow = () => {
     const nextState = !hasTotalRow;
     setHasTotalRow(nextState);
+    const targetBounds = findTableBounds(selectedCell);
 
     if (nextState) {
-      const totalRow = rangeBounds.maxRow + 1;
+      const totalRow = targetBounds.maxRow + 1;
       const nextData = { ...data };
-      const firstCol = COLS[rangeBounds.minColIdx];
+      const firstCol = COLS[targetBounds.minColIdx];
       nextData[`${firstCol}${totalRow}`] = {
         value: 'الإجمالي (Total)',
         bold: true,
@@ -2262,9 +2912,9 @@ export const SheetsApp: React.FC<Props> = ({
         bg: '#f8fafc',
       };
 
-      for (let c = rangeBounds.minColIdx + 1; c <= rangeBounds.maxColIdx; c++) {
+      for (let c = targetBounds.minColIdx + 1; c <= targetBounds.maxColIdx; c++) {
         const col = COLS[c];
-        const sumFormula = `=SUM(${col}${rangeBounds.minRow + 1}:${col}${rangeBounds.maxRow})`;
+        const sumFormula = `=SUM(${col}${targetBounds.minRow + 1}:${col}${targetBounds.maxRow})`;
         nextData[`${col}${totalRow}`] = {
           value: evaluateExcelFormula(sumFormula, nextData, sheets),
           formula: sumFormula,
@@ -2274,11 +2924,18 @@ export const SheetsApp: React.FC<Props> = ({
         };
       }
 
+      const updatedBounds = { ...targetBounds, maxRow: totalRow };
+      setActiveTableRange(updatedBounds);
+      localVault.set('infinity_office_excel_active_table_range_' + activeSheetKey, updatedBounds);
+
       const updatedSheets = {
         ...sheets,
         [activeSheetKey]: { ...currentSheet, data: recalculateSheet(nextData) },
       };
       saveSheets(updatedSheets);
+      applyTableStylingToRange(activeTableStyle, updatedBounds, { totalRow: true });
+    } else {
+      applyTableStylingToRange(activeTableStyle, targetBounds, { totalRow: false });
     }
   };
 
@@ -2338,11 +2995,78 @@ export const SheetsApp: React.FC<Props> = ({
 
   return (
     <div className="flex-1 flex flex-col bg-[#f3f2f1] overflow-hidden text-xs select-none h-full">
+      {/* 0. Excel 365 Quick Access Toolbar & AutoSave / Status Bar */}
+      <div className="bg-[#107c41] px-3 py-1 flex items-center justify-between text-white text-xs border-b border-emerald-900 shrink-0 select-none">
+        <div className="flex items-center gap-3">
+          {/* Quick Save Button with Live Status Dot */}
+          <button
+            onClick={handleQuickSave}
+            className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-emerald-800/80 hover:bg-emerald-700 transition cursor-pointer font-bold shadow-xs border border-emerald-600/50"
+            title={`حفظ يدوي (Ctrl+S) - الحفظ التلقائي يعمل كل 5 دقائق (متبقي ${Math.floor(autoSaveCountdown / 60)}:${String(autoSaveCountdown % 60).padStart(2, '0')})`}
+          >
+            <Save className="w-3.5 h-3.5 text-white" />
+            <span>حفظ</span>
+            <span
+              className={`w-2.5 h-2.5 rounded-full inline-block transition-all ${
+                isSaved
+                  ? 'bg-emerald-300 ring-2 ring-emerald-200'
+                  : 'bg-amber-400 ring-2 ring-amber-200 animate-pulse'
+              }`}
+              title={isSaved ? 'المصنف محفوظ محلياً (دائرة خضراء)' : 'توجد تعديلات غير محفوظة (دائرة برتقالية)'}
+            />
+          </button>
+
+          {/* AutoSave Countdown Badge */}
+          <div className="hidden sm:flex items-center gap-1.5 text-[10.5px] bg-emerald-900/40 px-2 py-0.5 rounded text-emerald-100 font-mono">
+            <span>حفظ تلقائي:</span>
+            <span className="font-bold text-white">
+              {Math.floor(autoSaveCountdown / 60)}:{String(autoSaveCountdown % 60).padStart(2, '0')}
+            </span>
+          </div>
+
+          {/* Document Title (Editable) */}
+          <div className="flex items-center gap-1">
+            <input
+              type="text"
+              value={docTitle}
+              onChange={(e) => {
+                setDocTitle(e.target.value);
+                localVault.set('infinity_office_doc_title', e.target.value);
+              }}
+              className="bg-transparent hover:bg-black/20 focus:bg-white focus:text-gray-900 px-2 py-0.5 rounded font-bold text-xs outline-none transition text-white border border-transparent focus:border-white w-44 sm:w-56"
+              title="انقر لتعديل اسم المصنف"
+            />
+          </div>
+        </div>
+
+        {/* Right Action Tools: Templates & Export */}
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setIsExcelBackstageOpen(true)}
+            className="flex items-center gap-1 px-2 py-0.5 bg-white/15 hover:bg-white/25 rounded text-[11px] font-bold transition cursor-pointer"
+            title="فتح معرض قوالب Excel 365 (Backstage Templates Gallery)"
+          >
+            <span>القوالب و جديد</span>
+            <span className="text-[10px] bg-emerald-700 px-1 rounded">30</span>
+          </button>
+
+          <button
+            onClick={() => handleExportMultiFormat('xlsx')}
+            className="flex items-center gap-1 px-2 py-0.5 bg-emerald-800 hover:bg-emerald-700 rounded text-[11px] font-bold transition cursor-pointer border border-emerald-600/50"
+            title="حفظ وتصدير بصيغة Excel (.xlsx)"
+          >
+            <Download className="w-3 h-3 text-white" />
+            <span>تصدير .xlsx</span>
+          </button>
+        </div>
+      </div>
+
       {/* 1. Official Microsoft Excel Ribbon Bar */}
       <ExcelRibbon
         activeTab={activeRibbonTab}
         setActiveTab={setActiveRibbonTab}
-        onOpenBackstage={onOpenBackstage || (() => {})}
+        onOpenBackstage={() => setIsExcelBackstageOpen(true)}
+        onOpenTableStylesGallery={() => setIsTableStylesGalleryOpen(true)}
         activeCell={selectedCell}
         activeCellData={activeCellData}
         selectedRangeStr={rangeBounds.rangeStr}
@@ -2406,19 +3130,19 @@ export const SheetsApp: React.FC<Props> = ({
         tableName={tableName}
         onTableNameChange={setTableName}
         hasHeaderRow={hasHeaderRow}
-        onToggleHeaderRow={() => setHasHeaderRow(!hasHeaderRow)}
+        onToggleHeaderRow={handleToggleHeaderRow}
         hasTotalRow={hasTotalRow}
         onToggleTotalRow={handleToggleTotalRow}
         hasBandedRows={hasBandedRows}
-        onToggleBandedRows={() => setHasBandedRows(!hasBandedRows)}
+        onToggleBandedRows={handleToggleBandedRows}
         hasFirstColumn={hasFirstColumn}
-        onToggleFirstColumn={() => setHasFirstColumn(!hasFirstColumn)}
+        onToggleFirstColumn={handleToggleFirstColumn}
         hasLastColumn={hasLastColumn}
-        onToggleLastColumn={() => setHasLastColumn(!hasLastColumn)}
+        onToggleLastColumn={handleToggleLastColumn}
         hasBandedColumns={hasBandedColumns}
-        onToggleBandedColumns={() => setHasBandedColumns(!hasBandedColumns)}
+        onToggleBandedColumns={handleToggleBandedColumns}
         hasFilterButton={hasFilterButton}
-        onToggleFilterButton={() => setHasFilterButton(!hasFilterButton)}
+        onToggleFilterButton={handleToggleFilterButton}
         onApplyTableStyle={handleApplyTableStyle}
         activeTableStyle={activeTableStyle}
         onOpenFormatCells={(tab) => {
@@ -3123,16 +3847,34 @@ export const SheetsApp: React.FC<Props> = ({
 
                     // Border styling
                     let cellBorderStyle: React.CSSProperties = {};
+                    const bColor = cell?.borderColor || '#0f172a';
+                    const bStyle = cell?.borderStyle || 'solid';
+                    const bThick = bStyle === 'thick' ? '3px solid' : (bStyle === 'double' ? '3px double' : (bStyle === 'dashed' ? '1px dashed' : (bStyle === 'dotted' ? '1px dotted' : '1px solid')));
+
                     if (cell?.border === 'all') {
-                      cellBorderStyle = { border: '1px solid #94a3b8' };
+                      cellBorderStyle = { border: `${bThick} ${bColor}` };
                     } else if (cell?.border === 'outside') {
-                      cellBorderStyle = { border: '2px solid #0f172a' };
+                      cellBorderStyle = { border: `2px ${bStyle === 'thick' ? 'solid' : bStyle} ${bColor}` };
+                    } else if (cell?.border === 'thick-outside') {
+                      cellBorderStyle = { border: `3px solid ${bColor}` };
                     } else if (cell?.border === 'thick-bottom') {
-                      cellBorderStyle = { borderBottom: '3px solid #0f172a' };
+                      cellBorderStyle = { borderBottom: `3px solid ${bColor}` };
                     } else if (cell?.border === 'double-bottom') {
-                      cellBorderStyle = { borderBottom: '3px double #0f172a' };
+                      cellBorderStyle = { borderBottom: `3px double ${bColor}` };
                     } else if (cell?.border === 'bottom') {
-                      cellBorderStyle = { borderBottom: '1px solid #0f172a' };
+                      cellBorderStyle = { borderBottom: `1px solid ${bColor}` };
+                    } else if (cell?.border === 'top') {
+                      cellBorderStyle = { borderTop: `1px solid ${bColor}` };
+                    } else if (cell?.border === 'left') {
+                      cellBorderStyle = { borderLeft: `1px solid ${bColor}` };
+                    } else if (cell?.border === 'right') {
+                      cellBorderStyle = { borderRight: `1px solid ${bColor}` };
+                    } else if (cell?.border === 'top-bottom') {
+                      cellBorderStyle = { borderTop: `1px solid ${bColor}`, borderBottom: `1px solid ${bColor}` };
+                    } else if (cell?.border === 'top-thick-bottom') {
+                      cellBorderStyle = { borderTop: `1px solid ${bColor}`, borderBottom: `3px solid ${bColor}` };
+                    } else if (cell?.border === 'top-double-bottom') {
+                      cellBorderStyle = { borderTop: `1px solid ${bColor}`, borderBottom: `3px double ${bColor}` };
                     } else if (cell?.border === 'none') {
                       cellBorderStyle = { border: 'none' };
                     }
@@ -3314,33 +4056,102 @@ export const SheetsApp: React.FC<Props> = ({
                                 }}
                               />
                             ) : (
-                              <div
-                                onDoubleClick={() => setIsEditingCell(true)}
-                                className={`w-full px-1 truncate text-xs select-none flex items-center gap-1.5`}
-                                style={{
-                                  textAlign: effectiveAlign,
-                                  justifyContent: flexJustify,
-                                }}
-                              >
-                                {cell?.image && (
-                                  <img
-                                    src={cell.image}
-                                    alt="خلية"
-                                    className="w-5 h-5 rounded object-cover border border-emerald-600 shrink-0 shadow-2xs"
-                                    title="صورة مدرجة في الخلية"
-                                  />
-                                )}
-                                <span 
-                                  className="truncate"
-                                  style={{
-                                    textAlign: effectiveAlign,
-                                    width: effectiveAlign === 'center' ? '100%' : undefined,
-                                    display: 'inline-block',
-                                  }}
-                                >
-                                  {showFormulasMode && cell?.formula ? cell.formula : formatCellValue(cell)}
-                                </span>
-                              </div>
+                              (() => {
+                                const isWideCol = (colWidths[col] || 110) >= 180;
+                                const shouldWrap = cell?.wrapText || isWideCol;
+                                const rawDisplay = showFormulasMode && cell?.formula ? cell.formula : formatCellValue(cell);
+
+                                // Special card renderers for tutorial sheets and rich cards
+                                const stepMatch = typeof rawDisplay === 'string' ? rawDisplay.match(/^([1-9])\.\s+(.*)$/) : null;
+                                const isActionButtons = typeof rawDisplay === 'string' && rawDisplay.includes('Dive down for more detail');
+                                const isTitleHeader = rawDisplay === 'Introduction to functions' || rawDisplay === 'More about functions' || rawDisplay === 'Basic math in Excel' || rawDisplay === 'Welcome to Excel';
+
+                                if (isTitleHeader) {
+                                  return (
+                                    <div 
+                                      onDoubleClick={() => setIsEditingCell(true)}
+                                      className="w-full py-1 text-left px-1 select-none" 
+                                      dir="ltr"
+                                    >
+                                      <span className="text-[18px] font-bold text-[#262626] tracking-tight">{rawDisplay}</span>
+                                    </div>
+                                  );
+                                }
+
+                                if (isActionButtons) {
+                                  return (
+                                    <div 
+                                      onDoubleClick={() => setIsEditingCell(true)}
+                                      className="flex items-center gap-3 py-1 text-left px-1 select-none" 
+                                      dir="ltr"
+                                    >
+                                      <button 
+                                        type="button"
+                                        onClick={(e) => { e.stopPropagation(); alert('تفاصيل إضافية حول دوال إكسيل 365: يمكنك استخدام دوال SUM و AVERAGE و COUNT لإجراء كافة العمليات الحسابية.'); }}
+                                        className="px-3.5 py-1.5 rounded bg-[#f2f2f2] hover:bg-[#e6e6e6] text-[#333333] text-xs font-semibold border border-gray-300 shadow-xs cursor-pointer"
+                                      >
+                                        Dive down for more detail
+                                      </button>
+                                      <button 
+                                        type="button"
+                                        onClick={(e) => { e.stopPropagation(); setActiveSheetKey('sheet4'); }}
+                                        className="px-3.5 py-1.5 rounded bg-white hover:bg-emerald-50 text-[#107c41] text-xs font-semibold border-2 border-[#107c41] flex items-center gap-1 shadow-xs cursor-pointer"
+                                      >
+                                        Next step ➔
+                                      </button>
+                                    </div>
+                                  );
+                                }
+
+                                if (stepMatch) {
+                                  return (
+                                    <div 
+                                      onDoubleClick={() => setIsEditingCell(true)}
+                                      className="flex items-start gap-2.5 text-left py-1 px-1 w-full leading-relaxed select-none" 
+                                      dir="ltr"
+                                    >
+                                      <span className="w-5 h-5 rounded-full bg-[#107c41] text-white flex items-center justify-center font-bold text-xs shrink-0 mt-0.5 shadow-xs">
+                                        {stepMatch[1]}
+                                      </span>
+                                      <span className="flex-1 text-xs text-gray-800 leading-normal font-normal whitespace-normal break-words">
+                                        {stepMatch[2]}
+                                      </span>
+                                    </div>
+                                  );
+                                }
+
+                                return (
+                                  <div
+                                    onDoubleClick={() => setIsEditingCell(true)}
+                                    className={`w-full px-1 text-xs select-none flex items-center gap-1.5 ${
+                                      shouldWrap ? 'whitespace-normal break-words leading-relaxed py-0.5' : 'truncate'
+                                    }`}
+                                    style={{
+                                      textAlign: effectiveAlign,
+                                      justifyContent: flexJustify,
+                                    }}
+                                  >
+                                    {cell?.image && (
+                                      <img
+                                        src={cell.image}
+                                        alt="خلية"
+                                        className="w-5 h-5 rounded object-cover border border-emerald-600 shrink-0 shadow-2xs"
+                                        title="صورة مدرجة في الخلية"
+                                      />
+                                    )}
+                                    <span 
+                                      className={shouldWrap ? 'whitespace-normal break-words' : 'truncate'}
+                                      style={{
+                                        textAlign: effectiveAlign,
+                                        width: effectiveAlign === 'center' ? '100%' : undefined,
+                                        display: 'inline-block',
+                                      }}
+                                    >
+                                      {rawDisplay}
+                                    </span>
+                                  </div>
+                                );
+                              })()
                             )}
 
                             {/* In-Cell Floating Autocomplete Dropdown */}
@@ -3430,78 +4241,131 @@ export const SheetsApp: React.FC<Props> = ({
       )}
 
       {/* 4. Multi-Sheet Tabs Bar & Live Excel Status Bar */}
-      <div className="flex items-center justify-between px-3 py-1 bg-[#f3f2f1] border-t border-gray-300 text-[11px] text-gray-700 select-none shrink-0">
+      <div 
+        dir={isRTL ? 'rtl' : 'ltr'} 
+        className="flex items-center justify-between px-3 py-1 bg-[#f3f2f1] border-t border-gray-300 text-[11px] text-gray-700 select-none shrink-0"
+      >
         {/* Sheet Tabs */}
         <div className="flex items-center gap-1 overflow-x-auto">
           {Object.entries(sheets)
-            .filter(([_, s]) => !(s as any).isHidden)
+            .filter(([key]) => !hiddenSheets.has(key))
             .map(([key, s]) => {
               const isActive = key === activeSheetKey;
               const isRenaming = renamingSheetKey === key;
-              const tabColor = (s as any).tabColor;
-              const isProtected = !!protectedSheets[key];
-
-              if (isRenaming) {
-                return (
-                  <div key={key} className="px-2 py-1 bg-white border-t-2 border-[#107c41] shadow-xs shrink-0 flex items-center">
-                    <input
-                      autoFocus
-                      type="text"
-                      value={renamingInput}
-                      onChange={(e) => setRenamingInput(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          handleRenameSheet(key, renamingInput);
-                        } else if (e.key === 'Escape') {
-                          setRenamingSheetKey(null);
-                        }
-                      }}
-                      onBlur={() => handleRenameSheet(key, renamingInput)}
-                      className="px-1.5 py-0.5 text-xs font-bold border border-emerald-600 rounded outline-none w-24 bg-white text-gray-900"
-                    />
-                  </div>
-                );
-              }
+              const isProtected = protectedSheets.has(key);
+              const customColor = sheetTabColors[key];
 
               return (
-                <button
+                <div
                   key={key}
-                  onClick={() => setActiveSheetKey(key)}
-                  onDoubleClick={() => {
-                    setRenamingSheetKey(key);
-                    setRenamingInput(s.label);
-                  }}
                   onContextMenu={(e) => {
                     e.preventDefault();
+                    e.stopPropagation();
+                    const menuX = Math.min(window.innerWidth - 220, Math.max(10, e.clientX - 20));
+                    const menuY = Math.max(20, e.clientY - 310);
                     setSheetContextMenu({
-                      x: e.clientX,
-                      y: e.clientY,
+                      visible: true,
+                      x: menuX,
+                      y: menuY,
                       sheetKey: key,
                       sheetLabel: s.label,
                     });
+                    setIsTabColorSubmenuOpen(false);
+                  }}
+                  onDoubleClick={(e) => {
+                    e.stopPropagation();
+                    handleStartRenameSheet(key);
+                  }}
+                  onClick={() => {
+                    if (!isRenaming) setActiveSheetKey(key);
                   }}
                   style={{
-                    borderBottom: tabColor ? `3px solid ${tabColor}` : undefined,
+                    borderBottom: customColor ? `3.5px solid ${customColor}` : undefined,
                   }}
-                  className={`px-3 py-1 font-bold rounded-t transition cursor-pointer shrink-0 relative flex items-center gap-1.5 ${
+                  className={`group relative flex items-center gap-1 px-3 py-1 font-bold rounded-t transition cursor-pointer shrink-0 select-none ${
                     isActive
                       ? 'bg-white text-emerald-800 border-t-2 border-[#107c41] shadow-xs'
                       : 'hover:bg-gray-200 text-gray-600'
                   }`}
-                  title={`${s.label} - انقر نقراً مزدوجاً لإعادة التسمية أو انقر بزر الماوس الأيمن للخيارات`}
+                  title={`${s.label} - انقر مرتين لإعادة التسمية، أو انقر بزر الماوس الأيمن لفتح القائمة`}
                 >
-                  {isProtected && <span className="text-amber-600 text-[10px]">🔒</span>}
-                  <span>{s.label}</span>
-                </button>
+                  {isRenaming ? (
+                    <input
+                      type="text"
+                      autoFocus
+                      value={renamingSheetText}
+                      onChange={(e) => setRenamingSheetText(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          handleCommitRenameSheet();
+                        } else if (e.key === 'Escape') {
+                          e.preventDefault();
+                          setRenamingSheetKey(null);
+                        }
+                      }}
+                      onBlur={handleCommitRenameSheet}
+                      onClick={(e) => e.stopPropagation()}
+                      className="px-1 py-0.5 text-xs font-bold border border-emerald-600 bg-white rounded outline-none w-24 text-center"
+                    />
+                  ) : (
+                    <>
+                      <span>{s.label}</span>
+                      {isProtected && (
+                        <span title="هذه الورقة محمية">
+                          <ShieldCheck className="w-3 h-3 text-emerald-600 inline" />
+                        </span>
+                      )}
+                    </>
+                  )}
+                </div>
               );
             })}
 
+          {/* Add Sheet (+) Button */}
           <button
             onClick={handleAddSheet}
-            className="p-1 hover:bg-gray-200 rounded text-gray-700 cursor-pointer"
+            className="p-1 hover:bg-gray-200 rounded text-gray-700 cursor-pointer transition"
             title="إضافة ورقة عمل جديدة (+)"
           >
-            <Plus className="w-3.5 h-3.5" />
+            <Plus className="w-4 h-4" />
+          </button>
+
+          {/* Unhide Sheet indicator if any hidden */}
+          {hiddenSheets.size > 0 && (
+            <button
+              onClick={() => setIsUnhideModalOpen(true)}
+              className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300 hover:bg-amber-200 cursor-pointer flex items-center gap-1"
+              title="توجد أوراق عمل مخفية، انقر لإظهارها (Unhide...)"
+            >
+              <Eye className="w-3 h-3 text-amber-700" />
+              <span>أوراق مخفية ({hiddenSheets.size})</span>
+            </button>
+          )}
+
+          {/* Quick LTR / RTL Sheet Direction Toggle */}
+          <button
+            onClick={() => {
+              const nextRTL = !isRTL;
+              setIsRTL(nextRTL);
+              if (sheets[activeSheetKey]) {
+                const updated = {
+                  ...sheets,
+                  [activeSheetKey]: {
+                    ...sheets[activeSheetKey],
+                    isRTL: nextRTL,
+                  },
+                };
+                saveSheets(updated);
+              }
+            }}
+            className={`px-2 py-0.5 rounded text-[10px] font-bold transition flex items-center gap-1 border cursor-pointer ms-2 ${
+              isRTL ? 'bg-emerald-100 text-[#107c41] border-emerald-300' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-100'
+            }`}
+            title="تبديل اتجاه الورقة (ورقة من اليمين لليسار / ورقة من اليسار لليمين - Sheet Direction LTR/RTL)"
+          >
+            <ArrowRightLeft className="w-3 h-3 text-[#107c41]" />
+            <span>{isRTL ? 'ورقة: يمين ➔ يسار (RTL)' : 'ورقة: يسار ➔ يمين (LTR)'}</span>
           </button>
         </div>
 
@@ -3562,35 +4426,308 @@ export const SheetsApp: React.FC<Props> = ({
         isOpen={isPivotTableOpen}
         onClose={() => setIsPivotTableOpen(false)}
         data={data}
-        onInsertPivot={({ sheetName, cells, targetLocation }) => {
-          if (targetLocation === 'newSheet') {
-            const newKey = `sheet_pivot_${Date.now()}`;
-            const newLabel = `PivotTable ${Object.keys(sheets).length + 1}`;
-            const updatedSheets = {
-              ...sheets,
-              [newKey]: {
-                label: newLabel,
-                data: cells,
-              },
-            };
-            saveSheets(updatedSheets);
-            setActiveSheetKey(newKey);
-            setTableNotification(`تم إنشاء ورقة جدول محوري جديدة (${newLabel}) بنجاح!`);
-          } else {
-            const nextData = { ...data, ...cells };
-            saveSheets({
-              ...sheets,
-              [activeSheetKey]: {
-                ...currentSheet,
-                data: nextData,
-              },
-            });
-            setTableNotification('تم إدراج تقرير الجدول المحوري في ورقة العمل الحالية بنجاح!');
-          }
+        onInsertPivot={(pivotData, pivotTitle) => {
+          const newKey = `pivot_${Date.now()}`;
+          const updatedSheets = {
+            ...sheets,
+            [newKey]: {
+              label: pivotTitle,
+              data: pivotData,
+              colWidths: { A: 240, B: 180, C: 140 },
+              isRTL: true,
+            },
+          };
+          saveSheets(updatedSheets);
+          setActiveSheetKey(newKey);
           setIsPivotTableOpen(false);
+          setTableNotification(`تم إنشاء وتوليد ورقة عمل الجدول المحوري "${pivotTitle}" بنجاح!`);
           setTimeout(() => setTableNotification(null), 4000);
         }}
       />
+
+      {/* Excel 365 Sheet Tab Right-Click Context Menu (Matching image_3b0483bd.png) */}
+      {sheetContextMenu && sheetContextMenu.visible && (
+        <div
+          className="fixed z-50 bg-white border border-gray-300 rounded shadow-xl py-1 text-xs text-gray-800 w-52 select-none divide-y divide-gray-100 font-sans"
+          style={{
+            left: `${sheetContextMenu.x}px`,
+            top: `${sheetContextMenu.y}px`,
+          }}
+          dir="rtl"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {/* Main Context Menu Items */}
+          <div className="py-0.5">
+            <button
+              onClick={handleInsertSheet}
+              className="w-full flex items-center justify-between px-3 py-1.5 hover:bg-[#e5f1fb] text-right cursor-pointer group transition"
+            >
+              <div className="flex items-center gap-2">
+                <Plus className="w-3.5 h-3.5 text-gray-600 group-hover:text-emerald-700" />
+                <span>إدراج... (Insert...)</span>
+              </div>
+            </button>
+
+            <button
+              onClick={() => handleDeleteSheet(sheetContextMenu.sheetKey)}
+              className="w-full flex items-center justify-between px-3 py-1.5 hover:bg-[#e5f1fb] text-right cursor-pointer group transition text-red-600 hover:text-red-700"
+            >
+              <div className="flex items-center gap-2">
+                <Trash2 className="w-3.5 h-3.5 text-red-500" />
+                <span>حذف (Delete)</span>
+              </div>
+            </button>
+
+            <button
+              onClick={() => handleStartRenameSheet(sheetContextMenu.sheetKey)}
+              className="w-full flex items-center justify-between px-3 py-1.5 hover:bg-[#e5f1fb] text-right cursor-pointer group transition font-semibold"
+            >
+              <div className="flex items-center gap-2">
+                <Edit3 className="w-3.5 h-3.5 text-blue-600" />
+                <span>إعادة تسمية (Rename)</span>
+              </div>
+            </button>
+
+            <button
+              onClick={() => handleMoveOrCopySheet(sheetContextMenu.sheetKey)}
+              className="w-full flex items-center justify-between px-3 py-1.5 hover:bg-[#e5f1fb] text-right cursor-pointer group transition"
+            >
+              <div className="flex items-center gap-2">
+                <Copy className="w-3.5 h-3.5 text-gray-600" />
+                <span>نقل أو نسخ... (Move or Copy...)</span>
+              </div>
+            </button>
+          </div>
+
+          <div className="py-0.5">
+            <button
+              onClick={() => {
+                setViewCodeSheetKey(sheetContextMenu.sheetKey);
+                setIsViewCodeModalOpen(true);
+                setSheetContextMenu(null);
+              }}
+              className="w-full flex items-center justify-between px-3 py-1.5 hover:bg-[#e5f1fb] text-right cursor-pointer group transition"
+            >
+              <div className="flex items-center gap-2">
+                <Code className="w-3.5 h-3.5 text-gray-600 group-hover:text-blue-700" />
+                <span>عرض التعليمات البرمجية (View Code)</span>
+              </div>
+            </button>
+
+            <button
+              onClick={() => handleToggleProtectSheet(sheetContextMenu.sheetKey)}
+              className="w-full flex items-center justify-between px-3 py-1.5 hover:bg-[#e5f1fb] text-right cursor-pointer group transition"
+            >
+              <div className="flex items-center gap-2">
+                <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                <span>
+                  {protectedSheets.has(sheetContextMenu.sheetKey)
+                    ? 'إلغاء حماية الورقة... (Unprotect)'
+                    : 'حماية الورقة... (Protect Sheet...)'}
+                </span>
+              </div>
+            </button>
+
+            {/* Tab Color Submenu trigger */}
+            <div className="relative">
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsTabColorSubmenuOpen(!isTabColorSubmenuOpen);
+                }}
+                className="w-full flex items-center justify-between px-3 py-1.5 hover:bg-[#e5f1fb] text-right cursor-pointer group transition"
+              >
+                <div className="flex items-center gap-2">
+                  <Palette className="w-3.5 h-3.5 text-amber-600" />
+                  <span>لون علامة التبويب (Tab Color)</span>
+                </div>
+                <ChevronRight className="w-3.5 h-3.5 text-gray-400 rotate-180" />
+              </button>
+
+              {/* Tab Color Palette Flyout */}
+              {isTabColorSubmenuOpen && (
+                <div 
+                  className="absolute left-full top-0 -mt-1 ml-1 bg-white border border-gray-300 rounded shadow-2xl p-2 w-48 z-60"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div className="text-[10px] text-gray-500 font-bold mb-1.5 pb-1 border-b border-gray-200">
+                    ألوان Excel القياسية:
+                  </div>
+                  <div className="grid grid-cols-5 gap-1.5 mb-2">
+                    {[
+                      { name: 'أحمر', hex: '#dc2626' },
+                      { name: 'أزرق', hex: '#2563eb' },
+                      { name: 'أخضر', hex: '#16a34a' },
+                      { name: 'زمردي', hex: '#059669' },
+                      { name: 'برتقالي', hex: '#ea580c' },
+                      { name: 'كهرماني', hex: '#d97706' },
+                      { name: 'بنفسجي', hex: '#7c3aed' },
+                      { name: 'وردي', hex: '#db2777' },
+                      { name: 'سماوي', hex: '#0891b2' },
+                      { name: 'رمادي', hex: '#4b5563' },
+                    ].map((c) => (
+                      <button
+                        key={c.hex}
+                        onClick={() => handleSetTabColor(sheetContextMenu.sheetKey, c.hex)}
+                        className="w-7 h-7 rounded border border-gray-300 hover:scale-115 transition shadow-xs cursor-pointer"
+                        style={{ backgroundColor: c.hex }}
+                        title={c.name}
+                      />
+                    ))}
+                  </div>
+                  <button
+                    onClick={() => handleSetTabColor(sheetContextMenu.sheetKey, '')}
+                    className="w-full py-1 text-center bg-gray-100 hover:bg-gray-200 rounded text-[10.5px] text-gray-700 font-semibold cursor-pointer"
+                  >
+                    بلا لون (تلقائي)
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="py-0.5">
+            <button
+              onClick={() => handleHideSheet(sheetContextMenu.sheetKey)}
+              className="w-full flex items-center justify-between px-3 py-1.5 hover:bg-[#e5f1fb] text-right cursor-pointer group transition"
+            >
+              <div className="flex items-center gap-2">
+                <EyeOff className="w-3.5 h-3.5 text-gray-500" />
+                <span>إخفاء (Hide)</span>
+              </div>
+            </button>
+
+            <button
+              onClick={() => {
+                setIsUnhideModalOpen(true);
+                setSheetContextMenu(null);
+              }}
+              disabled={hiddenSheets.size === 0}
+              className={`w-full flex items-center justify-between px-3 py-1.5 text-right transition ${
+                hiddenSheets.size > 0
+                  ? 'hover:bg-[#e5f1fb] text-gray-800 cursor-pointer'
+                  : 'text-gray-400 cursor-not-allowed'
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                <Eye className="w-3.5 h-3.5" />
+                <span>إظهار... (Unhide...)</span>
+              </div>
+              {hiddenSheets.size > 0 && (
+                <span className="text-[10px] bg-emerald-100 text-emerald-800 px-1.5 py-0.2 rounded font-bold">
+                  {hiddenSheets.size}
+                </span>
+              )}
+            </button>
+          </div>
+
+          <div className="py-0.5">
+            <button
+              onClick={() => {
+                setTableNotification('تم تحديد كافة أوراق العمل في المصنف الحالي.');
+                setTimeout(() => setTableNotification(null), 3000);
+                setSheetContextMenu(null);
+              }}
+              className="w-full flex items-center justify-between px-3 py-1.5 hover:bg-[#e5f1fb] text-right cursor-pointer group transition text-gray-700"
+            >
+              <div className="flex items-center gap-2">
+                <CheckSquare className="w-3.5 h-3.5 text-emerald-600" />
+                <span>تحديد كافة الأوراق (Select All Sheets)</span>
+              </div>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Unhide Sheet Modal */}
+      {isUnhideModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-2xs p-4" dir="rtl">
+          <div className="bg-white rounded-lg shadow-2xl border border-gray-300 w-full max-w-sm overflow-hidden text-right">
+            <div className="flex items-center justify-between px-4 py-2.5 bg-[#107c41] text-white">
+              <span className="font-bold text-xs">إظهار ورقة العمل (Unhide)</span>
+              <button onClick={() => setIsUnhideModalOpen(false)} className="p-1 hover:bg-white/20 rounded">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="p-4 space-y-3 text-xs">
+              <span className="text-gray-700 block font-bold">إظهار الورقة:</span>
+              <div className="border border-gray-300 rounded divide-y divide-gray-100 max-h-48 overflow-y-auto bg-gray-50">
+                {Array.from(hiddenSheets).map((hKey) => (
+                  <button
+                    key={hKey}
+                    onClick={() => handleUnhideSheet(hKey)}
+                    className="w-full px-3 py-2 text-right hover:bg-emerald-50 hover:text-emerald-900 font-semibold flex items-center justify-between transition cursor-pointer"
+                  >
+                    <span>{sheets[hKey]?.label || hKey}</span>
+                    <span className="text-[10px] text-emerald-700 bg-white border border-emerald-300 px-2 py-0.5 rounded">
+                      إظهار الآن
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 p-3 bg-gray-50 border-t border-gray-200 text-xs">
+              <button
+                onClick={() => setIsUnhideModalOpen(false)}
+                className="px-4 py-1.5 bg-white border border-gray-300 text-gray-700 rounded hover:bg-gray-100"
+              >
+                إغلاق
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* View Code / Sheet Formulas Summary Modal */}
+      {isViewCodeModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-2xs p-4" dir="rtl">
+          <div className="bg-white rounded-xl shadow-2xl border border-gray-300 w-full max-w-lg overflow-hidden text-right">
+            <div className="flex items-center justify-between px-4 py-3 bg-[#1f4e78] text-white">
+              <div className="flex items-center gap-2">
+                <Code className="w-5 h-5 text-cyan-300" />
+                <span className="font-bold text-sm">التعليمات البرمجية والصيغ — {sheets[viewCodeSheetKey]?.label}</span>
+              </div>
+              <button onClick={() => setIsViewCodeModalOpen(false)} className="p-1 hover:bg-white/20 rounded">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="p-4 space-y-3 text-xs max-h-[60vh] overflow-y-auto">
+              <div className="p-3 bg-gray-900 text-green-400 font-mono text-[11px] rounded-lg space-y-1" dir="ltr">
+                <div>' Excel Worksheet Module</div>
+                <div>' Sheet: {sheets[viewCodeSheetKey]?.label}</div>
+                <div>' Total Active Cells: {Object.keys(sheets[viewCodeSheetKey]?.data || {}).length}</div>
+                <div>' Direction: {sheets[viewCodeSheetKey]?.isRTL ? 'Right-To-Left (RTL)' : 'Left-To-Right (LTR)'}</div>
+              </div>
+
+              <div>
+                <span className="font-bold text-gray-800 block mb-1">الصيغ والمعادلات النشطة في هذه الورقة:</span>
+                <div className="border border-gray-200 rounded divide-y divide-gray-100 bg-gray-50 max-h-40 overflow-y-auto">
+                  {Object.entries(sheets[viewCodeSheetKey]?.data || {})
+                    .filter(([_, cell]) => cell.formula)
+                    .map(([cid, cell]) => (
+                      <div key={cid} className="p-2 flex items-center justify-between font-mono text-xs" dir="ltr">
+                        <span className="font-bold text-blue-800">{cid}</span>
+                        <span className="text-emerald-700 font-semibold">{cell.formula}</span>
+                        <span className="text-gray-500 text-[10px]">= {String(cell.value)}</span>
+                      </div>
+                    ))}
+                  {Object.values(sheets[viewCodeSheetKey]?.data || {}).filter(c => c.formula).length === 0 && (
+                    <div className="p-3 text-center text-gray-400 text-xs">لا توجد صيغ أو معادلات معقدة في هذه الورقة</div>
+                  )}
+                </div>
+              </div>
+            </div>
+            <div className="flex justify-end p-3 bg-gray-50 border-t border-gray-200 text-xs">
+              <button
+                onClick={() => setIsViewCodeModalOpen(false)}
+                className="px-4 py-1.5 bg-[#1f4e78] text-white rounded font-bold hover:bg-[#163a59]"
+              >
+                إغلاق
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <ConditionalFormattingModal
         isOpen={isConditionalFormattingOpen}
@@ -3844,77 +4981,25 @@ export const SheetsApp: React.FC<Props> = ({
         onApply={handleApplyFormatCells}
       />
 
-      {/* 8. Excel Sheet Tab Right-Click Context Menu (image.png full fidelity) */}
-      {sheetContextMenu && (
-        <ExcelSheetTabContextMenu
-          x={sheetContextMenu.x}
-          y={sheetContextMenu.y}
-          sheetKey={sheetContextMenu.sheetKey}
-          sheetLabel={sheetContextMenu.sheetLabel}
-          isOnlySheet={Object.values(sheets).filter((s) => !(s as any).isHidden).length <= 1}
-          hasHiddenSheets={Object.values(sheets).some((s) => (s as any).isHidden)}
-          onClose={() => setSheetContextMenu(null)}
-          onInsert={handleAddSheet}
-          onDelete={(k) => handleDeleteSheet(k)}
-          onRename={(k) => {
-            setRenamingSheetKey(k);
-            setRenamingInput(sheets[k]?.label || '');
-          }}
-          onMoveOrCopy={() => setIsMoveCopyModalOpen(true)}
-          onViewCode={() => setIsViewCodeModalOpen(true)}
-          onProtectSheet={(k) => {
-            setProtectingSheetKey(k);
-            setIsProtectSheetModalOpen(true);
-          }}
-          onSetTabColor={(k, color) => handleSetTabColor(k, color)}
-          onHide={(k) => handleHideSheet(k)}
-          onUnhide={() => setIsUnhideModalOpen(true)}
-          onSelectAllSheets={handleSelectAllSheet}
-        />
-      )}
-
-      {/* 9. Move or Copy Sheet Modal */}
-      <MoveCopySheetModal
-        isOpen={isMoveCopyModalOpen}
-        onClose={() => setIsMoveCopyModalOpen(false)}
-        sheets={sheets}
-        activeSheetKey={sheetContextMenu?.sheetKey || activeSheetKey}
-        onConfirmMoveCopy={handleMoveOrCopySheet}
+      {/* 8. Excel 365 Backstage Modal (Templates & Multi-Format Save/Open) */}
+      <ExcelBackstageModal
+        isOpen={isExcelBackstageOpen}
+        onClose={() => setIsExcelBackstageOpen(false)}
+        documentTitle={docTitle}
+        onSelectTemplate={handleSelectTemplate}
+        onLoadExcelData={handleLoadExcelData}
+        onExport={handleExportMultiFormat}
+        sheetsData={sheets}
+        isSaved={isSaved}
+        onQuickSave={handleQuickSave}
       />
 
-      {/* 10. Unhide Sheet Modal */}
-      <UnhideSheetModal
-        isOpen={isUnhideModalOpen}
-        onClose={() => setIsUnhideModalOpen(false)}
-        hiddenSheets={Object.entries(sheets)
-          .filter(([_, s]) => (s as any).isHidden)
-          .map(([key, s]) => ({ key, label: s.label }))}
-        onConfirmUnhide={(k) => handleUnhideSheet(k)}
-      />
-
-      {/* 11. View VBA Code / Macros Modal */}
-      <ViewCodeModal
-        isOpen={isViewCodeModalOpen}
-        onClose={() => setIsViewCodeModalOpen(false)}
-        sheetLabel={sheets[sheetContextMenu?.sheetKey || activeSheetKey]?.label || 'ورقة العمل'}
-      />
-
-      {/* 12. Protect Sheet Modal */}
-      <ProtectSheetModal
-        isOpen={isProtectSheetModalOpen}
-        onClose={() => {
-          setIsProtectSheetModalOpen(false);
-          setProtectingSheetKey(null);
-        }}
-        sheetLabel={sheets[protectingSheetKey || activeSheetKey]?.label || 'ورقة العمل'}
-        isProtected={!!protectedSheets[protectingSheetKey || activeSheetKey]}
-        onToggleProtect={(_pwd) => {
-          const k = protectingSheetKey || activeSheetKey;
-          const nextVal = !protectedSheets[k];
-          setProtectedSheets((prev) => ({ ...prev, [k]: nextVal }));
-          setTableNotification(nextVal ? `تمت حماية الورقة (${sheets[k]?.label}) بنجاح!` : `تم إلغاء حماية الورقة بنجاح!`);
-          setTimeout(() => setTableNotification(null), 3000);
-        }}
+      {/* 9. Excel 365 Table Styles Gallery (Light 1-21, Medium 1-28, Dark 1-11) */}
+      <ExcelTableStylesGallery
+        isOpen={isTableStylesGalleryOpen}
+        onClose={() => setIsTableStylesGalleryOpen(false)}
+        activeStyleId={activeTableStyle}
+        onSelectStyle={(style) => handleApplyTableStyle(style)}
       />
     </div>
   );

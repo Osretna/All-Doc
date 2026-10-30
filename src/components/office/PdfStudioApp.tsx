@@ -119,10 +119,10 @@ export const PdfStudioApp: React.FC<Props> = ({
   });
   const imageInputRef = useRef<HTMLInputElement>(null);
 
-  // Configurations
+  // Configurations (default to clean blank document without watermark)
   const [watermarkConfig, setWatermarkConfig] = useState<PdfWatermarkConfig>({
-    enabled: true,
-    text: 'وثيقة رسمية معتمدة',
+    enabled: false,
+    text: '',
     color: '#ba141a',
     opacity: 0.12,
     rotation: -45,
@@ -130,20 +130,20 @@ export const PdfStudioApp: React.FC<Props> = ({
   });
 
   const [batesConfig, setBatesConfig] = useState<BatesNumberingConfig>({
-    enabled: true,
-    prefix: 'PALM-DOC-',
+    enabled: false,
+    prefix: '',
     startNumber: 1,
     digits: 6,
     position: 'bottom-right',
   });
 
   const [headerFooterConfig, setHeaderFooterConfig] = useState<HeaderFooterConfig>({
-    headerLeft: 'رقم السجل: MLK-9904',
-    headerCenter: 'اتحاد شاغلين برج النخيل - المحضر السنوي المالي',
-    headerRight: 'سري للغاية',
-    footerLeft: 'نظام ملاك السيادي 2026',
-    footerCenter: 'صفحة 1 من 3',
-    footerRight: 'مصدق إلكترونياً',
+    headerLeft: '',
+    headerCenter: '',
+    headerRight: '',
+    footerLeft: '',
+    footerCenter: '',
+    footerRight: '',
   });
 
   // Modal dialog states
@@ -728,12 +728,14 @@ export const PdfStudioApp: React.FC<Props> = ({
               transformOrigin: 'center center',
             }}
           >
-            {/* Header Overlay */}
-            <div className="w-full px-8 pt-4 pb-2 border-b border-gray-200 flex items-center justify-between text-[10px] text-gray-500 font-medium">
-              <span>{headerFooterConfig.headerRight}</span>
-              <span className="font-bold text-gray-700">{headerFooterConfig.headerCenter}</span>
-              <span>{headerFooterConfig.headerLeft}</span>
-            </div>
+            {/* Header Overlay (only rendered if configured) */}
+            {(headerFooterConfig.headerRight || headerFooterConfig.headerCenter || headerFooterConfig.headerLeft) && (
+              <div className="w-full px-8 pt-4 pb-2 border-b border-gray-200 flex items-center justify-between text-[10px] text-gray-500 font-medium">
+                <span>{headerFooterConfig.headerRight}</span>
+                <span className="font-bold text-gray-700">{headerFooterConfig.headerCenter}</span>
+                <span>{headerFooterConfig.headerLeft}</span>
+              </div>
+            )}
 
             {/* Document Content Area */}
             <div className="p-8 relative min-h-[720px] text-right" dir="rtl">
@@ -868,16 +870,17 @@ export const PdfStudioApp: React.FC<Props> = ({
                       setBlankPageContents((prev) => ({ ...prev, [currentPage]: html }));
                     }}
                     dangerouslySetInnerHTML={{
-                      __html: blankPageContents[currentPage] || `<p>صفحة بيضاء جديدة (${currentPage}) - انقر للكتابة مباشرة...</p>`
+                      __html: blankPageContents[currentPage] || ''
                     }}
-                    className="min-h-[480px] text-gray-900 leading-relaxed outline-none focus:ring-1 focus:ring-red-400 rounded-md p-4 text-sm bg-white/50 border border-dashed border-gray-200"
+                    data-placeholder="صفحة بيضاء فارغة - انقر هنا للبدء في كتابة المستند..."
+                    className="min-h-[480px] text-gray-900 leading-relaxed outline-none focus:ring-1 focus:ring-red-400 rounded-md p-4 text-sm bg-white/20 empty:before:content-[attr(data-placeholder)] empty:before:text-gray-300 empty:before:pointer-events-none"
                     style={{ fontFamily }}
                     dir="rtl"
                   />
 
                   {/* Subtle helper to open local file if wanted */}
-                  <div className="mt-4 pt-3 border-t border-gray-200 flex items-center justify-between text-xs text-gray-500 no-print">
-                    <span className="text-[11px]">جاهز للكتابة وإدراج الصور والأختام على هذه الصفحة البيضاء</span>
+                  <div className="mt-4 pt-3 border-t border-gray-100 flex items-center justify-between text-xs text-gray-400 no-print">
+                    <span className="text-[11px]">صفحة بيضاء فارغة 100% بدون علامة مائية</span>
                     <label className="flex items-center gap-1.5 px-3 py-1 rounded bg-gray-100 hover:bg-gray-200 text-gray-700 cursor-pointer font-bold transition text-[11px]">
                       <FolderOpen className="w-3.5 h-3.5 text-[#ba141a]" />
                       <span>فتح ملف PDF من جهازك بدلاً من ذلك</span>
@@ -1009,12 +1012,14 @@ export const PdfStudioApp: React.FC<Props> = ({
               )}
             </div>
 
-            {/* Footer Overlay */}
-            <div className="w-full px-8 pb-4 pt-2 border-t border-gray-200 flex items-center justify-between text-[10px] text-gray-500 font-medium">
-              <span>{headerFooterConfig.footerRight}</span>
-              <span className="font-mono">{headerFooterConfig.footerCenter.replace('[Page]', String(currentPage))}</span>
-              <span>{headerFooterConfig.footerLeft}</span>
-            </div>
+            {/* Footer Overlay (only rendered if configured) */}
+            {(headerFooterConfig.footerRight || headerFooterConfig.footerCenter || headerFooterConfig.footerLeft) && (
+              <div className="w-full px-8 pb-4 pt-2 border-t border-gray-200 flex items-center justify-between text-[10px] text-gray-500 font-medium">
+                <span>{headerFooterConfig.footerRight}</span>
+                <span className="font-mono">{headerFooterConfig.footerCenter.replace('[Page]', String(currentPage))}</span>
+                <span>{headerFooterConfig.footerLeft}</span>
+              </div>
+            )}
 
             {/* Bates Numbering Stamp at Corner */}
             {currentBatesStr && (

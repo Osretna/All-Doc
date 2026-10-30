@@ -57,6 +57,8 @@ import {
   Check
 } from 'lucide-react';
 import { SheetCell } from '../../../types';
+import { ExcelBorderDropdown, ExcelBorderType } from './ExcelBorderDropdown';
+import { ExcelColorPalette } from './ExcelColorPalette';
 
 export type ExcelRibbonTab = 'file' | 'home' | 'insert' | 'layout' | 'formulas' | 'data' | 'review' | 'view' | 'design';
 
@@ -74,7 +76,8 @@ interface Props {
   onPaste: () => void;
   onPasteSpecial: (type: 'values' | 'formats' | 'formulas') => void;
   onFormatRange: (key: keyof SheetCell, value: any) => void;
-  onSetBorder: (borderType: SheetCell['border']) => void;
+  onSetBorder: (borderType: SheetCell['border'], options?: { color?: string; style?: 'solid' | 'dashed' | 'dotted' | 'double' | 'thick' }) => void;
+  onOpenTableStylesGallery?: () => void;
   onSetAlignment: (hAlign: 'right' | 'center' | 'left', vAlign?: 'top' | 'middle' | 'bottom') => void;
   onToggleWrapText: () => void;
   onMergeAndCenter: () => void;
@@ -226,9 +229,12 @@ export const ExcelRibbon: React.FC<Props> = ({
   onResizeTable,
   onExportTable,
   onInsertSlicer,
+  onOpenTableStylesGallery,
 }) => {
   // Dropdown states
   const [showBorderMenu, setShowBorderMenu] = useState(false);
+  const [showFillColorPalette, setShowFillColorPalette] = useState(false);
+  const [showFontColorPalette, setShowFontColorPalette] = useState(false);
   const [showPasteSpecialMenu, setShowPasteSpecialMenu] = useState(false);
   const [showNumberFormatMenu, setShowNumberFormatMenu] = useState(false);
   const [showFormatCellsMenu, setShowFormatCellsMenu] = useState(false);
@@ -238,7 +244,6 @@ export const ExcelRibbon: React.FC<Props> = ({
   const [showFreezeMenu, setShowFreezeMenu] = useState(false);
   const [showShapesMenu, setShowShapesMenu] = useState(false);
   const [showImageMenu, setShowImageMenu] = useState(false);
-  const [showFormatTableMenu, setShowFormatTableMenu] = useState(false);
   const [showExportDataMenu, setShowExportDataMenu] = useState(false);
   const [selectedFont, setSelectedFont] = useState('Calibri');
   const [selectedFontSize, setSelectedFontSize] = useState(11);
@@ -513,75 +518,69 @@ export const ExcelRibbon: React.FC<Props> = ({
                   <div className="relative">
                     <button
                       onClick={() => setShowBorderMenu(!showBorderMenu)}
-                      className="p-1 hover:bg-gray-100 rounded flex items-center gap-0.5 text-gray-700"
+                      className="p-1 hover:bg-gray-100 rounded flex items-center gap-0.5 text-gray-700 cursor-pointer"
                       title="حدود الخلايا (Borders)"
                     >
                       <Grid className="w-3.5 h-3.5" />
                       <ChevronDown className="w-2.5 h-2.5" />
                     </button>
-                    {showBorderMenu && (
-                      <div className="absolute top-full left-0 mt-1 bg-white border border-gray-300 rounded shadow-xl py-1 z-50 w-44 text-right">
-                        <button
-                          onClick={() => { onSetBorder('all'); setShowBorderMenu(false); }}
-                          className="w-full px-3 py-1 text-right hover:bg-emerald-50 text-[11px] block"
-                        >
-                          كافة الحدود (All Borders)
-                        </button>
-                        <button
-                          onClick={() => { onSetBorder('outside'); setShowBorderMenu(false); }}
-                          className="w-full px-3 py-1 text-right hover:bg-emerald-50 text-[11px] block"
-                        >
-                          حدود خارجية مربعة
-                        </button>
-                        <button
-                          onClick={() => { onSetBorder('thick-bottom'); setShowBorderMenu(false); }}
-                          className="w-full px-3 py-1 text-right hover:bg-emerald-50 text-[11px] block"
-                        >
-                          حد سفلي سميك
-                        </button>
-                        <button
-                          onClick={() => { onSetBorder('double-bottom'); setShowBorderMenu(false); }}
-                          className="w-full px-3 py-1 text-right hover:bg-emerald-50 text-[11px] block"
-                        >
-                          حد سفلي مزدوج
-                        </button>
-                        <button
-                          onClick={() => { onSetBorder('bottom'); setShowBorderMenu(false); }}
-                          className="w-full px-3 py-1 text-right hover:bg-emerald-50 text-[11px] block"
-                        >
-                          حد سفلي فقط
-                        </button>
-                        <button
-                          onClick={() => { onSetBorder('none'); setShowBorderMenu(false); }}
-                          className="w-full px-3 py-1 text-right hover:bg-red-50 text-[11px] text-red-600 block"
-                        >
-                          بلا حدود (Clear Borders)
-                        </button>
-                      </div>
-                    )}
+                    <ExcelBorderDropdown
+                      isOpen={showBorderMenu}
+                      onClose={() => setShowBorderMenu(false)}
+                      onSelectBorder={onSetBorder}
+                      onOpenFormatCells={onOpenFormatCells}
+                    />
                   </div>
 
                   {/* Fill Color */}
-                  <label className="p-1 hover:bg-gray-100 rounded cursor-pointer relative" title="لون التعبئة">
-                    <div className="w-3.5 h-3.5 rounded-xs border border-gray-400 bg-amber-200" />
-                    <input
-                      type="color"
-                      defaultValue="#fef08a"
-                      onChange={(e) => onFormatRange('bg', e.target.value)}
-                      className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                  <div className="relative">
+                    <button
+                      onClick={() => {
+                        setShowFillColorPalette(!showFillColorPalette);
+                        setShowFontColorPalette(false);
+                      }}
+                      className="p-1 hover:bg-gray-100 rounded cursor-pointer flex items-center gap-0.5"
+                      title="لون التعبئة (Fill Color - Excel 365 Palettes)"
+                    >
+                      <div 
+                        className="w-3.5 h-3.5 rounded-xs border border-gray-400"
+                        style={{ backgroundColor: activeCellData?.bg || '#fef08a' }}
+                      />
+                      <ChevronDown className="w-2.5 h-2.5 text-gray-500" />
+                    </button>
+                    <ExcelColorPalette
+                      isOpen={showFillColorPalette}
+                      onClose={() => setShowFillColorPalette(false)}
+                      onSelectColor={(c) => onFormatRange('bg', c)}
+                      title="لون تعبئة الخلية (Fill Color)"
                     />
-                  </label>
+                  </div>
 
                   {/* Font Color */}
-                  <label className="p-1 hover:bg-gray-100 rounded cursor-pointer relative" title="لون النص">
-                    <div className="text-[11px] font-black underline text-red-600">A</div>
-                    <input
-                      type="color"
-                      defaultValue="#1e293b"
-                      onChange={(e) => onFormatRange('color', e.target.value)}
-                      className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                  <div className="relative">
+                    <button
+                      onClick={() => {
+                        setShowFontColorPalette(!showFontColorPalette);
+                        setShowFillColorPalette(false);
+                      }}
+                      className="p-1 hover:bg-gray-100 rounded cursor-pointer flex items-center gap-0.5"
+                      title="لون النص (Font Color - Excel 365 Palettes)"
+                    >
+                      <div 
+                        className="text-[11px] font-black underline"
+                        style={{ color: activeCellData?.color || '#ef4444' }}
+                      >
+                        A
+                      </div>
+                      <ChevronDown className="w-2.5 h-2.5 text-gray-500" />
+                    </button>
+                    <ExcelColorPalette
+                      isOpen={showFontColorPalette}
+                      onClose={() => setShowFontColorPalette(false)}
+                      onSelectColor={(c) => onFormatRange('color', c)}
+                      title="لون خط النص (Font Color)"
                     />
-                  </label>
+                  </div>
                 </div>
               </div>
               <div className="flex items-center justify-between px-1 text-[10px] text-gray-400 font-medium mt-1">
@@ -798,130 +797,24 @@ export const ExcelRibbon: React.FC<Props> = ({
                   <span className="text-[9.5px] font-semibold mt-0.5">تنسيق شرطي</span>
                 </button>
 
-                {/* Format as Table button with dropdown gallery */}
-                <div className="relative">
-                  <button
-                    onClick={() => setShowFormatTableMenu(!showFormatTableMenu)}
-                    className="flex flex-col items-center justify-center p-1 hover:bg-emerald-50 rounded text-gray-700 hover:text-[#107c41] cursor-pointer"
-                    title="تنسيق كجدول Excel رسمي مع اختيار النمط واللون"
-                  >
-                    <Table className="w-4 h-4 text-blue-600" />
-                    <span className="text-[9.5px] font-semibold mt-0.5 flex items-center gap-0.5">
-                      تنسيق كجدول <ChevronDown className="w-2.5 h-2.5 text-gray-500" />
-                    </span>
-                  </button>
-
-                  {showFormatTableMenu && (
-                    <div className="absolute top-full left-0 mt-1 bg-white border border-gray-300 rounded shadow-2xl p-2.5 z-50 w-64 text-right">
-                      <div className="text-[11px] font-bold text-gray-800 mb-2 border-b border-gray-100 pb-1">
-                        اختر نمط ولون الجدول (Table Styles):
-                      </div>
-                      <div className="grid grid-cols-3 gap-2">
-                        {/* Black Style (image__26__19d801cd.png) */}
-                        <div
-                          onClick={() => {
-                            if (onApplyTableStyle) onApplyTableStyle('black');
-                            if (onCreateTable) onCreateTable();
-                            setShowFormatTableMenu(false);
-                          }}
-                          className="border border-gray-300 hover:border-gray-900 rounded p-1 cursor-pointer flex flex-col gap-0.5 hover:shadow-xs transition"
-                          title="نمط داكن كلاسيكي (Black/Dark)"
-                        >
-                          <div className="h-3 bg-zinc-900 rounded-t-xs" />
-                          <div className="h-2 bg-zinc-200" />
-                          <div className="h-2 bg-white" />
-                          <div className="h-2 bg-zinc-200 rounded-b-xs" />
-                          <span className="text-[9px] text-center text-gray-600 font-semibold mt-0.5">داكن / أسود</span>
-                        </div>
-
-                        {/* Blue Style */}
-                        <div
-                          onClick={() => {
-                            if (onApplyTableStyle) onApplyTableStyle('blue');
-                            if (onCreateTable) onCreateTable();
-                            setShowFormatTableMenu(false);
-                          }}
-                          className="border border-gray-300 hover:border-blue-600 rounded p-1 cursor-pointer flex flex-col gap-0.5 hover:shadow-xs transition"
-                          title="نمط أزرق كلاسيكي (Blue Medium)"
-                        >
-                          <div className="h-3 bg-blue-600 rounded-t-xs" />
-                          <div className="h-2 bg-blue-100" />
-                          <div className="h-2 bg-white" />
-                          <div className="h-2 bg-blue-100 rounded-b-xs" />
-                          <span className="text-[9px] text-center text-gray-600 font-semibold mt-0.5">أزرق</span>
-                        </div>
-
-                        {/* Green Style */}
-                        <div
-                          onClick={() => {
-                            if (onApplyTableStyle) onApplyTableStyle('green');
-                            if (onCreateTable) onCreateTable();
-                            setShowFormatTableMenu(false);
-                          }}
-                          className="border border-gray-300 hover:border-emerald-600 rounded p-1 cursor-pointer flex flex-col gap-0.5 hover:shadow-xs transition"
-                          title="نمط أخضر إكسل (Excel Green)"
-                        >
-                          <div className="h-3 bg-[#107c41] rounded-t-xs" />
-                          <div className="h-2 bg-emerald-100" />
-                          <div className="h-2 bg-white" />
-                          <div className="h-2 bg-emerald-100 rounded-b-xs" />
-                          <span className="text-[9px] text-center text-gray-600 font-semibold mt-0.5">أخضر</span>
-                        </div>
-
-                        {/* Orange Style */}
-                        <div
-                          onClick={() => {
-                            if (onApplyTableStyle) onApplyTableStyle('orange');
-                            if (onCreateTable) onCreateTable();
-                            setShowFormatTableMenu(false);
-                          }}
-                          className="border border-gray-300 hover:border-orange-600 rounded p-1 cursor-pointer flex flex-col gap-0.5 hover:shadow-xs transition"
-                          title="نمط برتقالي دافئ (Warm Orange)"
-                        >
-                          <div className="h-3 bg-orange-600 rounded-t-xs" />
-                          <div className="h-2 bg-orange-100" />
-                          <div className="h-2 bg-white" />
-                          <div className="h-2 bg-orange-100 rounded-b-xs" />
-                          <span className="text-[9px] text-center text-gray-600 font-semibold mt-0.5">برتقالي</span>
-                        </div>
-
-                        {/* Teal Style */}
-                        <div
-                          onClick={() => {
-                            if (onApplyTableStyle) onApplyTableStyle('teal');
-                            if (onCreateTable) onCreateTable();
-                            setShowFormatTableMenu(false);
-                          }}
-                          className="border border-gray-300 hover:border-teal-600 rounded p-1 cursor-pointer flex flex-col gap-0.5 hover:shadow-xs transition"
-                          title="نمط بترولي (Teal)"
-                        >
-                          <div className="h-3 bg-teal-600 rounded-t-xs" />
-                          <div className="h-2 bg-teal-100" />
-                          <div className="h-2 bg-white" />
-                          <div className="h-2 bg-teal-100 rounded-b-xs" />
-                          <span className="text-[9px] text-center text-gray-600 font-semibold mt-0.5">بترولي</span>
-                        </div>
-
-                        {/* Gray Style */}
-                        <div
-                          onClick={() => {
-                            if (onApplyTableStyle) onApplyTableStyle('gray');
-                            if (onCreateTable) onCreateTable();
-                            setShowFormatTableMenu(false);
-                          }}
-                          className="border border-gray-300 hover:border-slate-600 rounded p-1 cursor-pointer flex flex-col gap-0.5 hover:shadow-xs transition"
-                          title="نمط رمادي أنيق (Gray Medium)"
-                        >
-                          <div className="h-3 bg-slate-600 rounded-t-xs" />
-                          <div className="h-2 bg-slate-100" />
-                          <div className="h-2 bg-white" />
-                          <div className="h-2 bg-slate-100 rounded-b-xs" />
-                          <span className="text-[9px] text-center text-gray-600 font-semibold mt-0.5">رمادي</span>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
+                <button
+                  onClick={() => {
+                    if (onOpenTableStylesGallery) {
+                      onOpenTableStylesGallery();
+                    } else if (onCreateTable) {
+                      onCreateTable();
+                    } else {
+                      onFormatRange('bg', '#107c41');
+                      onFormatRange('color', '#ffffff');
+                      onFormatRange('bold', true);
+                    }
+                  }}
+                  className="flex flex-col items-center justify-center p-1 hover:bg-emerald-50 rounded text-gray-700 hover:text-[#107c41] cursor-pointer"
+                  title="تنسيق كجدول Excel رسمي والمعرض الشامل (Alt + T / Ctrl + T)"
+                >
+                  <Table className="w-4 h-4 text-blue-600" />
+                  <span className="text-[9.5px] font-semibold mt-0.5">تنسيق كجدول</span>
+                </button>
 
                 {/* Cell styles picker */}
                 <div className="relative">
@@ -2135,7 +2028,7 @@ export const ExcelRibbon: React.FC<Props> = ({
                 <div
                   onClick={() => onApplyTableStyle?.('green')}
                   className={`w-14 h-12 rounded border p-0.5 cursor-pointer transition flex flex-col justify-between shrink-0 shadow-2xs ${
-                    activeTableStyle === 'green' ? 'ring-2 ring-[#107c41] border-[#107c41]' : 'border-gray-300 hover:border-gray-500'
+                    activeTableStyle === 'green' || activeTableStyle === 'emerald' ? 'ring-2 ring-[#107c41] border-[#107c41]' : 'border-gray-300 hover:border-gray-500'
                   }`}
                   title="نمط إكسيل الأخضر الكلاسيكي (Excel Green Medium)"
                 >
@@ -2149,7 +2042,7 @@ export const ExcelRibbon: React.FC<Props> = ({
                 <div
                   onClick={() => onApplyTableStyle?.('black')}
                   className={`w-14 h-12 rounded border p-0.5 cursor-pointer transition flex flex-col justify-between shrink-0 shadow-2xs ${
-                    activeTableStyle === 'black' ? 'ring-2 ring-gray-900 border-gray-900' : 'border-gray-300 hover:border-gray-500'
+                    activeTableStyle === 'black' || activeTableStyle === 'dark' || activeTableStyle === 'charcoal' ? 'ring-2 ring-gray-900 border-gray-900' : 'border-gray-300 hover:border-gray-500'
                   }`}
                   title="نمط إكسيل الأسود الداكن (Charcoal Dark)"
                 >
@@ -2163,7 +2056,7 @@ export const ExcelRibbon: React.FC<Props> = ({
                 <div
                   onClick={() => onApplyTableStyle?.('blue')}
                   className={`w-14 h-12 rounded border p-0.5 cursor-pointer transition flex flex-col justify-between shrink-0 shadow-2xs ${
-                    activeTableStyle === 'blue' ? 'ring-2 ring-blue-600 border-blue-600' : 'border-gray-300 hover:border-gray-500'
+                    activeTableStyle === 'blue' || activeTableStyle === 'light-blue' || activeTableStyle === 'sky' ? 'ring-2 ring-blue-600 border-blue-600' : 'border-gray-300 hover:border-gray-500'
                   }`}
                   title="نمط أوفيس الأزرق (Light Blue Medium)"
                 >
@@ -2177,7 +2070,7 @@ export const ExcelRibbon: React.FC<Props> = ({
                 <div
                   onClick={() => onApplyTableStyle?.('orange')}
                   className={`w-14 h-12 rounded border p-0.5 cursor-pointer transition flex flex-col justify-between shrink-0 shadow-2xs ${
-                    activeTableStyle === 'orange' ? 'ring-2 ring-amber-600 border-amber-600' : 'border-gray-300 hover:border-gray-500'
+                    activeTableStyle === 'orange' || activeTableStyle === 'warm-orange' || activeTableStyle === 'amber' ? 'ring-2 ring-amber-600 border-amber-600' : 'border-gray-300 hover:border-gray-500'
                   }`}
                   title="نمط برتقالي دافئ (Warm Orange Medium)"
                 >
@@ -2191,7 +2084,7 @@ export const ExcelRibbon: React.FC<Props> = ({
                 <div
                   onClick={() => onApplyTableStyle?.('gray')}
                   className={`w-14 h-12 rounded border p-0.5 cursor-pointer transition flex flex-col justify-between shrink-0 shadow-2xs ${
-                    activeTableStyle === 'gray' ? 'ring-2 ring-gray-600 border-gray-600' : 'border-gray-300 hover:border-gray-500'
+                    activeTableStyle === 'gray' || activeTableStyle === 'steel' ? 'ring-2 ring-gray-600 border-gray-600' : 'border-gray-300 hover:border-gray-500'
                   }`}
                   title="نمط رمادي أنيق (Steel Gray Medium)"
                 >
@@ -2205,7 +2098,7 @@ export const ExcelRibbon: React.FC<Props> = ({
                 <div
                   onClick={() => onApplyTableStyle?.('yellow')}
                   className={`w-14 h-12 rounded border p-0.5 cursor-pointer transition flex flex-col justify-between shrink-0 shadow-2xs ${
-                    activeTableStyle === 'yellow' ? 'ring-2 ring-amber-500 border-amber-500' : 'border-gray-300 hover:border-gray-500'
+                    activeTableStyle === 'yellow' || activeTableStyle === 'gold' ? 'ring-2 ring-amber-500 border-amber-500' : 'border-gray-300 hover:border-gray-500'
                   }`}
                   title="نمط ذهبي مالي (Gold Yellow Medium)"
                 >
@@ -2219,7 +2112,7 @@ export const ExcelRibbon: React.FC<Props> = ({
                 <div
                   onClick={() => onApplyTableStyle?.('navy')}
                   className={`w-14 h-12 rounded border p-0.5 cursor-pointer transition flex flex-col justify-between shrink-0 shadow-2xs ${
-                    activeTableStyle === 'navy' ? 'ring-2 ring-indigo-700 border-indigo-700' : 'border-gray-300 hover:border-gray-500'
+                    activeTableStyle === 'navy' || activeTableStyle === 'deep-blue' || activeTableStyle === 'indigo' ? 'ring-2 ring-indigo-700 border-indigo-700' : 'border-gray-300 hover:border-gray-500'
                   }`}
                   title="نمط كحلي داكن (Deep Navy Medium)"
                 >
@@ -2228,6 +2121,16 @@ export const ExcelRibbon: React.FC<Props> = ({
                   <div className="h-2 bg-white" />
                   <div className="h-2 bg-[#dbeafe] rounded-b-xs" />
                 </div>
+
+                {/* Full Gallery Button */}
+                <button
+                  onClick={() => onOpenTableStylesGallery?.()}
+                  className="w-14 h-12 rounded border border-emerald-400 bg-emerald-50 hover:bg-emerald-100 p-1 cursor-pointer transition flex flex-col items-center justify-center shrink-0 shadow-2xs text-[#107c41]"
+                  title="عرض كافة أنماط جداول Excel 365 (Light, Medium, Dark)"
+                >
+                  <Table className="w-4 h-4" />
+                  <span className="text-[8px] font-bold mt-0.5">كافة الأنماط</span>
+                </button>
               </div>
               <div className="text-[10px] text-gray-400 text-center font-medium mt-1">Table Styles</div>
             </div>
