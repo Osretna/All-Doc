@@ -63,7 +63,6 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = ({
   // Word Selection Right-Click Context Menu states
   const [contextMenuPos, setContextMenuPos] = useState<{ x: number; y: number } | null>(null);
   const [contextSelectedText, setContextSelectedText] = useState('');
-  const [contextTableElement, setContextTableElement] = useState<HTMLTableElement | null>(null);
 
   // Modals triggered from Word Context Menu
   const [isFontModalOpen, setIsFontModalOpen] = useState(false);
@@ -137,16 +136,13 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = ({
     if (sel && sel.rangeCount > 0) {
       savedRangeRef.current = sel.getRangeAt(0).cloneRange();
     }
-    const targetEl = e.target as HTMLElement;
-    const tableEl = targetEl?.closest('table') || null;
-    setContextTableElement(tableEl);
     setContextSelectedText(txt);
     setSelectedSnippet(txt);
     setMiniToolbarPos(null); // Full context menu already includes the top mini toolbar
     setContextMenuPos({ x: e.clientX, y: e.clientY });
   };
 
-  // Handle selection for floating mini-toolbar & context menu
+  // Handle selection for floating mini-toolbar
   const handleMouseUp = () => {
     captureCurrentRange();
 
@@ -177,6 +173,9 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = ({
       }
     }
 
+    // Don't show standalone mini toolbar if context menu is active
+    if (contextMenuPos) return;
+
     const selection = window.getSelection();
     if (!selection || selection.isCollapsed || !selection.toString().trim()) {
       setMiniToolbarPos(null);
@@ -192,15 +191,6 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = ({
       setMiniToolbarPos({
         x: rect.left + rect.width / 2,
         y: Math.max(10, rect.top - 45),
-      });
-
-      // Also trigger the complete floating context menu if text is selected
-      const targetEl = range.startContainer.parentElement;
-      setContextTableElement(targetEl?.closest('table') || null);
-      setContextSelectedText(text);
-      setContextMenuPos({
-        x: Math.min(window.innerWidth - 280, Math.max(10, rect.right + 12)),
-        y: Math.max(10, rect.top - 10),
       });
     }
   };
@@ -458,7 +448,6 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = ({
           }}
           onReplaceSelectedText={handleReplaceSelectedText}
           onFormatPainter={handleArmFormatPainter}
-          tableElement={contextTableElement}
         />
       )}
 
@@ -606,28 +595,6 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = ({
             suppressContentEditableWarning
             onInput={onContentChange}
             onContextMenu={handleContextMenu}
-            onKeyDown={(e) => {
-              if (e.key === 'Backspace' || e.key === 'Delete') {
-                const sel = window.getSelection();
-                if (sel && sel.anchorNode) {
-                  const node = sel.anchorNode.nodeType === Node.ELEMENT_NODE 
-                    ? (sel.anchorNode as HTMLElement) 
-                    : sel.anchorNode.parentElement;
-                  const table = node?.closest('table');
-                  if (table) {
-                    const selText = sel.toString().trim();
-                    const tableText = table.innerText.trim();
-                    // If table text is fully selected or empty
-                    if (selText.length > 0 && selText === tableText) {
-                      e.preventDefault();
-                      table.remove();
-                      onContentChange();
-                      return;
-                    }
-                  }
-                }
-              }
-            }}
             className={`word-editor relative z-10 text-base leading-relaxed text-slate-800 focus:outline-none min-h-[700px] select-text ${
               viewMode === 'outline' ? 'outline-mode' : ''
             }`}

@@ -9,7 +9,6 @@ export interface SaveFileOptions {
   mimeType: string;
   primaryExtension: string; // e.g. 'docx', 'xlsx', 'pptx', 'accdb', 'pdf'
   description?: string;
-  fileHandle?: any; // Existing FileSystemFileHandle
 }
 
 interface NativeSaveFilePickerOptions {
@@ -26,8 +25,7 @@ export async function saveFileDirectlyToDevice({
   mimeType,
   primaryExtension,
   description = 'ملف مستندات',
-  fileHandle,
-}: SaveFileOptions): Promise<{ success: boolean; filename: string; method: 'picker' | 'handle' | 'download'; fileHandle?: any }> {
+}: SaveFileOptions): Promise<{ success: boolean; filename: string; method: 'picker' | 'download' }> {
   const cleanExt = primaryExtension.replace(/^\./, '').toLowerCase();
   
   // Ensure the filename strictly ends with the primary extension
@@ -51,25 +49,7 @@ export async function saveFileDirectlyToDevice({
     blob = new Blob([data as unknown as BlobPart], { type: mimeType });
   }
 
-  // 1. Direct write to existing FileHandle if previously saved or opened
-  if (fileHandle && typeof fileHandle.createWritable === 'function') {
-    try {
-      const writableStream = await fileHandle.createWritable();
-      await writableStream.write(blob);
-      await writableStream.close();
-
-      return {
-        success: true,
-        filename: fileHandle.name || finalFilename,
-        method: 'handle',
-        fileHandle,
-      };
-    } catch (handleErr) {
-      console.warn('Direct write to existing handle failed, prompting picker:', handleErr);
-    }
-  }
-
-  // 2. Try Native File System Access API (showSaveFilePicker)
+  // 1. Try Native File System Access API (showSaveFilePicker)
   // This allows the user to select the exact destination folder on their computer
   if (typeof window !== 'undefined' && 'showSaveFilePicker' in window) {
     try {
@@ -85,16 +65,15 @@ export async function saveFileDirectlyToDevice({
         ],
       };
 
-      const newHandle = await (window as unknown as { showSaveFilePicker: (opts: NativeSaveFilePickerOptions) => Promise<FileSystemFileHandle> }).showSaveFilePicker(pickerOpts);
-      const writableStream = await newHandle.createWritable();
+      const fileHandle = await (window as unknown as { showSaveFilePicker: (opts: NativeSaveFilePickerOptions) => Promise<FileSystemFileHandle> }).showSaveFilePicker(pickerOpts);
+      const writableStream = await fileHandle.createWritable();
       await writableStream.write(blob);
       await writableStream.close();
 
       return {
         success: true,
-        filename: newHandle.name || finalFilename,
+        filename: fileHandle.name || finalFilename,
         method: 'picker',
-        fileHandle: newHandle,
       };
     } catch (err: unknown) {
       // User cancelled picker or permission was denied

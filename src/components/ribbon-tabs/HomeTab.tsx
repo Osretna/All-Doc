@@ -139,17 +139,10 @@ export const HomeTab: React.FC<HomeTabProps> = ({
         }
       }
     } catch (err) {
-      console.warn('Clipboard readText restricted or failed, using prompt fallback:', err);
+      console.warn('Clipboard readText failed, fallback to execCommand', err);
     }
-
-    const manual = prompt('الصق النص هنا بالضغط على Ctrl+V ثم اضغط موافق:', '');
-    if (manual) {
-      insertHTMLAtCursor(manual.replace(/\r\n/g, '<br>').replace(/\n/g, '<br>'));
-      onContentChange?.();
-    } else {
-      executeCommand('paste');
-      onContentChange?.();
-    }
+    executeCommand('paste');
+    onContentChange?.();
   };
 
   const handleToggleCase = () => {

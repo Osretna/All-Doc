@@ -96,12 +96,6 @@ export default function App() {
     return localVault.get('infinity_office_active_tab_id', 'tab_sheets_1');
   });
 
-  const [tabToCloseConfirm, setTabToCloseConfirm] = useState<{
-    tabId: string;
-    title: string;
-    tab: DocumentTabItem;
-  } | null>(null);
-
   const [wordInitialHtml, setWordInitialHtml] = useState<string>('<p><br></p>');
 
   useEffect(() => {
@@ -150,8 +144,32 @@ export default function App() {
 
   // Shared Suite File Data States (Excel, Slides, Access, PDF)
   const [excelData, setExcelDataState] = useState<Record<string, { label: string; data: SheetData }> | undefined>(() => {
-    return localVault.get(localVault.KEYS.SHEETS_DATA, undefined);
+    const fromVault = localVault.get(localVault.KEYS.SHEETS_DATA, undefined);
+    if (fromVault && Object.keys(fromVault).length > 0) return fromVault;
+    const savedTabs = localVault.get<DocumentTabItem[]>('infinity_office_tabs', []);
+    const activeId = localVault.get('infinity_office_active_tab_id', 'tab_sheets_1');
+    const curTab = savedTabs.find(t => t.id === activeId && t.appId === 'sheets');
+    if (curTab && curTab.content && Object.keys(curTab.content).length > 0) {
+      return curTab.content;
+    }
+    return undefined;
   });
+
+  // Ensure latest tab and document state are safely stored on page refresh / reload
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      localVault.set('infinity_office_tabs', tabs);
+      localVault.set('infinity_office_active_tab_id', activeTabId);
+      localVault.set(localVault.KEYS.ACTIVE_APP, activeApp);
+      localVault.set('infinity_office_active_section', activeSection);
+      localVault.set('infinity_office_doc_title', documentTitle);
+      if (excelData) {
+        localVault.set(localVault.KEYS.SHEETS_DATA, excelData);
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [tabs, activeTabId, activeApp, activeSection, documentTitle, excelData]);
   const [slidesData, setSlidesDataState] = useState<SlideItem[] | undefined>(() => {
     return localVault.get(localVault.KEYS.SLIDES_DATA, undefined);
   });
@@ -344,36 +362,8 @@ export default function App() {
     addNotification(`تم إنشاء تبويب جديد فارغ: ${defaultTitle}`, 'success');
   };
 
-  // Tab Close with Unsaved Changes Prompt (Excel dialog)
+  // Tab Close
   const handleCloseTab = (tabId: string) => {
-    const targetTab = tabs.find(t => t.id === tabId);
-    if (!targetTab) return;
-
-    // Check if the tab contains data or has been modified
-    let hasChanges = !!targetTab.isModified;
-    if (!hasChanges) {
-      if (targetTab.appId === 'sheets') {
-        const sData = targetTab.content || (targetTab.id === activeTabId ? excelData : undefined);
-        if (sData) {
-          hasChanges = Object.values(sData).some((s: any) => s.data && Object.keys(s.data).length > 0);
-        }
-      } else if (targetTab.appId === 'docs') {
-        const dContent = targetTab.content || (targetTab.id === activeTabId && editorRef.current ? editorRef.current.innerHTML : '');
-        if (typeof dContent === 'string') {
-          hasChanges = dContent.trim() !== '<p><br></p>' && dContent.trim().length > 15;
-        }
-      }
-    }
-
-    if (hasChanges) {
-      setTabToCloseConfirm({ tabId, title: targetTab.title, tab: targetTab });
-      return;
-    }
-
-    forceCloseTab(tabId);
-  };
-
-  const forceCloseTab = (tabId: string) => {
     if (tabs.length <= 1) {
       const current = tabs[0];
       const blankTitle = current.appId === 'docs' ? 'مستند 1 - فارغ' : current.appId === 'sheets' ? 'مصنف 1 - فارغ' : current.appId === 'slides' ? 'عرض تقديمي 1 - فارغ' : 'ملف فارغ';
@@ -381,9 +371,6 @@ export default function App() {
         ...current,
         title: blankTitle,
         content: current.appId === 'sheets' ? { sheet1: { label: 'ورقة 1', data: {} } } : undefined,
-        isModified: false,
-        fileHandle: undefined,
-        savedFilename: undefined,
       };
       setTabs([resetTab]);
       setDocumentTitleState(blankTitle);
@@ -400,7 +387,6 @@ export default function App() {
       } else if (current.appId === 'pdf') {
         setPdfFile(null);
       }
-      setIsSaved(true);
       addNotification('تم إغلاق الملف وإعادة ضبط التبويب إلى مستند فارغ', 'info');
       return;
     }
@@ -775,12 +761,7 @@ export default function App() {
   // Universal Save to Device at Chosen Location with Strict Primary Extension
   const handleSaveToDevice = async () => {
     try {
-      const currentTab = tabs.find(t => t.id === activeTabId);
-      const existingHandle = currentTab?.fileHandle;
-      const targetFilename = currentTab?.savedFilename || documentTitle;
-
       addNotification('جاري حفظ الملف على جهازك بالامتداد الأصلي...', 'info');
-      let saveRes: { success: boolean; filename: string; method: string; fileHandle?: any } | null = null;
 
       if (activeApp === 'docs') {
         const html = editorRef.current?.innerHTML || '<p>مستند فارغ</p>';
@@ -790,7 +771,7 @@ export default function App() {
 <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
 <head>
   <meta charset='utf-8'>
-  <title>${targetFilename}</title>
+  <title>${documentTitle}</title>
   <style>
     body { font-family: 'Cairo', Arial, sans-serif; direction: rtl; }
     table { border-collapse: collapse; width: 100%; }
@@ -805,15 +786,14 @@ export default function App() {
           { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' }
         );
 
-        saveRes = await saveFileDirectlyToDevice({
-          filename: targetFilename,
+        const res = await saveFileDirectlyToDevice({
+          filename: documentTitle,
           data: wordBlob,
           mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
           primaryExtension: 'docx',
           description: 'مستند وورد (Microsoft Word)',
-          fileHandle: existingHandle,
         });
-        addNotification(`تم حفظ المستند بنجاح على جهازك باسم (${saveRes.filename}) بالامتداد الأصلي .docx!`, 'success');
+        addNotification(`تم حفظ المستند بنجاح على جهازك باسم (${res.filename}) بالامتداد الأصلي .docx!`, 'success');
 
       } else if (activeApp === 'sheets') {
         const currentSheets = excelData || localVault.get<Record<string, { label: string; data: SheetData }>>(localVault.KEYS.SHEETS_DATA, {});
@@ -832,49 +812,46 @@ export default function App() {
         });
 
         const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
-        saveRes = await saveFileDirectlyToDevice({
-          filename: targetFilename,
+        const res = await saveFileDirectlyToDevice({
+          filename: documentTitle,
           data: wbout,
           mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
           primaryExtension: 'xlsx',
           description: 'مصنف إكسل (Microsoft Excel)',
-          fileHandle: existingHandle,
         });
-        addNotification(`تم حفظ جدول الإكسل بنجاح على جهازك باسم (${saveRes.filename}) بالامتداد الأصلي .xlsx!`, 'success');
+        addNotification(`تم حفظ جدول الإكسل بنجاح على جهازك باسم (${res.filename}) بالامتداد الأصلي .xlsx!`, 'success');
 
       } else if (activeApp === 'slides') {
         const curSlides = slidesData || localVault.get<SlideItem[]>(localVault.KEYS.SLIDES_DATA, []);
         const zip = new JSZip();
-        zip.file('presentation.json', JSON.stringify({ title: targetFilename, slides: curSlides }, null, 2));
+        zip.file('presentation.json', JSON.stringify({ title: documentTitle, slides: curSlides }, null, 2));
         zip.file('[Content_Types].xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="xml" ContentType="application/xml"/><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Override PartName="/ppt/presentation.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml"/></Types>`);
         const pptxBlob = await zip.generateAsync({ type: 'blob' });
 
-        saveRes = await saveFileDirectlyToDevice({
-          filename: targetFilename,
+        const res = await saveFileDirectlyToDevice({
+          filename: documentTitle,
           data: pptxBlob,
           mimeType: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
           primaryExtension: 'pptx',
           description: 'عرض تقديمي باور بوينت (PowerPoint)',
-          fileHandle: existingHandle,
         });
-        addNotification(`تم حفظ العرض التقديمي بنجاح على جهازك باسم (${saveRes.filename}) بالامتداد الأصلي .pptx!`, 'success');
+        addNotification(`تم حفظ العرض التقديمي بنجاح على جهازك باسم (${res.filename}) بالامتداد الأصلي .pptx!`, 'success');
 
       } else if (activeApp === 'base') {
         const curTables = accessData || localVault.get<DbTable[]>(localVault.KEYS.BASE_DATA, []);
         const dbPackage = {
-          databaseName: targetFilename,
+          databaseName: documentTitle,
           tables: curTables,
           exportDate: new Date().toISOString(),
         };
-        saveRes = await saveFileDirectlyToDevice({
-          filename: targetFilename,
+        const res = await saveFileDirectlyToDevice({
+          filename: documentTitle,
           data: JSON.stringify(dbPackage, null, 2),
           mimeType: 'application/x-msaccess',
           primaryExtension: 'accdb',
           description: 'قاعدة بيانات أكسس (MS Access)',
-          fileHandle: existingHandle,
         });
-        addNotification(`تم حفظ قاعدة بيانات أكسس بنجاح على جهازك باسم (${saveRes.filename}) بالامتداد الأصلي .accdb!`, 'success');
+        addNotification(`تم حفظ قاعدة بيانات أكسس بنجاح على جهازك باسم (${res.filename}) بالامتداد الأصلي .accdb!`, 'success');
 
       } else if (activeApp === 'pdf') {
         let pdfData: Blob;
@@ -883,42 +860,25 @@ export default function App() {
         } else {
           pdfData = new Blob(['%PDF-1.4\n%EOF'], { type: 'application/pdf' });
         }
-        saveRes = await saveFileDirectlyToDevice({
-          filename: targetFilename,
+        const res = await saveFileDirectlyToDevice({
+          filename: documentTitle,
           data: pdfData,
           mimeType: 'application/pdf',
           primaryExtension: 'pdf',
           description: 'ملف وثيقة رقمية (Adobe PDF)',
-          fileHandle: existingHandle,
         });
-        addNotification(`تم حفظ ملف الـ PDF بنجاح على جهازك باسم (${saveRes.filename}) بالامتداد الأصلي .pdf!`, 'success');
+        addNotification(`تم حفظ ملف الـ PDF بنجاح على جهازك باسم (${res.filename}) بالامتداد الأصلي .pdf!`, 'success');
 
       } else {
         // Fallback for other apps (Notes, Photo)
-        saveRes = await saveFileDirectlyToDevice({
-          filename: targetFilename,
+        const res = await saveFileDirectlyToDevice({
+          filename: documentTitle,
           data: 'MY-DOC Office Sovereign Document',
           mimeType: 'text/plain',
           primaryExtension: activeApp === 'photo' ? 'png' : 'txt',
           description: 'مستند سيادي',
-          fileHandle: existingHandle,
         });
-        addNotification(`تم حفظ الملف باسم (${saveRes.filename}) بنجاح!`, 'success');
-      }
-
-      if (saveRes && saveRes.success) {
-        const savedName = saveRes.filename;
-        setDocumentTitleState(savedName);
-        localVault.set('infinity_office_doc_title', savedName);
-        setTabs(prev => prev.map(t => t.id === activeTabId ? {
-          ...t,
-          title: savedName,
-          savedFilename: savedName,
-          fileHandle: saveRes?.fileHandle || t.fileHandle,
-          isModified: false,
-        } : t));
-        setIsSaved(true);
-        setAutoSaveCountdown(300);
+        addNotification(`تم حفظ الملف باسم (${res.filename}) بنجاح!`, 'success');
       }
     } catch (err: unknown) {
       if (err instanceof Error && err.message.includes('إلغاء')) {
@@ -1406,6 +1366,29 @@ export default function App() {
                 initialSheets={excelData}
                 onSheetsChange={setExcelData}
                 onOpenBackstage={() => setIsBackstageOpen(true)}
+                onOpenNewWorkbookTab={(title, newSheets, handle) => {
+                  const newTabId = `tab_sheets_${Date.now()}`;
+                  const newTab: DocumentTabItem = {
+                    id: newTabId,
+                    appId: 'sheets',
+                    title: title,
+                    content: newSheets,
+                    fileHandle: handle,
+                    createdAt: Date.now(),
+                  };
+                  setTabs((prev) => [...prev, newTab]);
+                  setActiveTabId(newTabId);
+                  setExcelDataState(newSheets);
+                  localVault.set(localVault.KEYS.SHEETS_DATA, newSheets);
+                  setDocumentTitleState(title);
+                  localVault.set('infinity_office_doc_title', title);
+                  setActiveAppState('sheets');
+                  addNotification(`تم فتح مصنف Excel "${title}" في تبويب مستقل جديد بنجاح!`, 'success');
+                }}
+                activeFileHandle={tabs.find(t => t.id === activeTabId)?.fileHandle}
+                onSaveFileHandle={(handle) => {
+                  setTabs(prev => prev.map(t => t.id === activeTabId ? { ...t, fileHandle: handle } : t));
+                }}
               />
             </div>
           ) : activeApp === 'slides' ? (
@@ -1519,12 +1502,22 @@ export default function App() {
           setActiveSection('office');
         }}
         onLoadExcelData={(sheets, title) => {
+          const newTabId = `tab_sheets_${Date.now()}`;
+          const newTab: DocumentTabItem = {
+            id: newTabId,
+            appId: 'sheets',
+            title: title,
+            content: sheets,
+            createdAt: Date.now(),
+          };
+          setTabs((prev) => [...prev, newTab]);
+          setActiveTabId(newTabId);
           setExcelData(sheets);
           localVault.set(localVault.KEYS.SHEETS_DATA, sheets);
           setDocumentTitle(title);
           setActiveApp('sheets');
           setActiveSection('office');
-          addNotification(`تم استيراد مصنف Excel "${title}" بنجاح!`, 'success');
+          addNotification(`تم فتح مصنف Excel "${title}" في تبويب مستقل بنجاح!`, 'success');
         }}
         onLoadSlidesData={(slides, title) => {
           setSlidesData(slides);
@@ -1618,65 +1611,6 @@ export default function App() {
           handleContentChange();
         }}
       />
-
-      {/* Excel / Word Official Unsaved Changes Confirmation Dialog */}
-      {tabToCloseConfirm && (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 backdrop-blur-2xs p-4 select-none" dir="rtl">
-          <div className="w-full max-w-md bg-white rounded-lg shadow-2xl border border-gray-300 overflow-hidden text-right font-sans text-xs animate-in fade-in zoom-in-95 duration-100">
-            <div className="flex items-center justify-between px-4 py-2 bg-[#107c41] text-white">
-              <span className="font-bold">Microsoft Excel - تنبيه حفظ التغييرات</span>
-              <button 
-                onClick={() => setTabToCloseConfirm(null)}
-                className="hover:bg-white/20 p-1 rounded text-white"
-              >
-                ✕
-              </button>
-            </div>
-            <div className="p-5 flex items-start gap-4">
-              <div className="w-10 h-10 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center shrink-0 text-xl font-bold">
-                ⚠️
-              </div>
-              <div className="flex-1 space-y-1.5">
-                <p className="text-sm font-bold text-gray-900 leading-snug">
-                  هل تريد حفظ التغييرات التي أجريتها على "{tabToCloseConfirm.title}"؟
-                </p>
-                <p className="text-gray-500 text-xs leading-relaxed">
-                  إذا نقرت فوق "عدم الحفظ"، فستفقد كافة التغييرات والبيانات الأخيرة التي تم إدخالها على هذا الملف بشكل نهائي.
-                </p>
-              </div>
-            </div>
-            <div className="px-4 py-3 bg-[#f3f2f1] border-t border-gray-300 flex items-center justify-end gap-2.5">
-              <button
-                onClick={async () => {
-                  const targetTab = tabToCloseConfirm.tab;
-                  setTabToCloseConfirm(null);
-                  await handleSaveToDevice();
-                  forceCloseTab(targetTab.id);
-                }}
-                className="px-5 py-2 bg-[#107c41] hover:bg-[#0b5a2f] text-white font-bold rounded shadow-xs cursor-pointer min-w-20 transition"
-              >
-                حفظ
-              </button>
-              <button
-                onClick={() => {
-                  const id = tabToCloseConfirm.tabId;
-                  setTabToCloseConfirm(null);
-                  forceCloseTab(id);
-                }}
-                className="px-5 py-2 bg-white hover:bg-gray-100 text-gray-800 font-bold border border-gray-300 rounded shadow-2xs cursor-pointer min-w-20 transition"
-              >
-                عدم الحفظ
-              </button>
-              <button
-                onClick={() => setTabToCloseConfirm(null)}
-                className="px-4 py-2 bg-white hover:bg-gray-100 text-gray-600 border border-gray-300 rounded shadow-2xs cursor-pointer min-w-16 transition"
-              >
-                إلغاء الأمر
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Notifications Toast */}
       <ToastContainer toasts={toasts} onDismiss={(id) => setToasts(toasts.filter(t => t.id !== id))} />
