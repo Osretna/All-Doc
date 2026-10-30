@@ -31,7 +31,6 @@ interface Props {
   onOpenNewComment: () => void;
   onReplaceSelectedText: (newText: string) => void;
   onFormatPainter?: () => void;
-  tableElement?: HTMLTableElement | null;
 }
 
 const COMMON_SYNONYMS: Record<string, string[]> = {
@@ -120,7 +119,6 @@ export const WordContextMenu: React.FC<Props> = ({
   onOpenNewComment,
   onReplaceSelectedText,
   onFormatPainter,
-  tableElement,
 }) => {
   const menuRef = useRef<HTMLDivElement>(null);
   const [synonymsSubmenuOpen, setSynonymsSubmenuOpen] = useState(false);
@@ -206,31 +204,22 @@ export const WordContextMenu: React.FC<Props> = ({
 
   const handlePaste = async (mode: 'source' | 'merge' | 'text') => {
     try {
-      if (navigator.clipboard && navigator.clipboard.readText) {
-        const text = await navigator.clipboard.readText();
-        if (text) {
-          if (mode === 'text' || mode === 'merge') {
-            onExecCommand('insertText', text);
-          } else {
-            onExecCommand('insertHTML', text.replace(/\r\n/g, '<br>').replace(/\n/g, '<br>'));
-          }
-          onClose();
-          return;
+      const text = await navigator.clipboard.readText();
+      if (text) {
+        if (mode === 'text') {
+          // Paste pure unformatted text
+          onExecCommand('insertText', text);
+        } else if (mode === 'merge') {
+          onExecCommand('insertText', text);
+        } else {
+          // Keep source formatting
+          onExecCommand('insertHTML', text);
         }
+      } else {
+        document.execCommand('paste');
       }
     } catch {
-      // ignore
-    }
-
-    const manual = prompt('الصق النص هنا بالضغط على Ctrl+V ثم اضغط موافق:', '');
-    if (manual) {
-      if (mode === 'text' || mode === 'merge') {
-        onExecCommand('insertText', manual);
-      } else {
-        onExecCommand('insertHTML', manual.replace(/\r\n/g, '<br>').replace(/\n/g, '<br>'));
-      }
-    } else {
-      onExecCommand('paste');
+      document.execCommand('paste');
     }
     onClose();
   };
@@ -778,36 +767,6 @@ export const WordContextMenu: React.FC<Props> = ({
             <span>New Co<span className="underline">m</span>ment</span>
           </div>
         </button>
-
-        {/* Table Operations if right clicked inside a table */}
-        {tableElement && (
-          <>
-            <div className="h-[1px] bg-slate-200 my-1" />
-            <button
-              onClick={() => {
-                tableElement.remove();
-                onClose();
-              }}
-              className="w-full px-3 py-1.5 flex items-center justify-between hover:bg-red-50 text-red-600 text-left cursor-pointer group font-semibold"
-            >
-              <div className="flex items-center gap-2">
-                <span>✕</span>
-                <span>Delete Table (حذف الجدول)</span>
-              </div>
-            </button>
-            <button
-              onClick={() => {
-                const sel = window.getSelection();
-                const tr = sel?.anchorNode ? (sel.anchorNode.nodeType === Node.ELEMENT_NODE ? (sel.anchorNode as HTMLElement) : sel.anchorNode.parentElement)?.closest('tr') : null;
-                if (tr) tr.remove();
-                onClose();
-              }}
-              className="w-full px-3 py-1.5 flex items-center justify-between hover:bg-red-50 text-red-600 text-left cursor-pointer group"
-            >
-              <span>Delete Row (حذف الصف)</span>
-            </button>
-          </>
-        )}
       </div>
     </div>
   );
