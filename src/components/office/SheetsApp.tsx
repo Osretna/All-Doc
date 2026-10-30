@@ -651,7 +651,7 @@ export const SheetsApp: React.FC<Props> = ({
 
   const handleSelectTemplate = (template: ExcelTemplateDefinition) => {
     setSheets(template.sheets);
-    const targetKey = template.sheets['sheet3'] ? 'sheet3' : (Object.keys(template.sheets)[0] || 'sheet1');
+    const targetKey = template.defaultSheetKey || (template.id === 'formula_tutorial' && template.sheets['sheet3'] ? 'sheet3' : Object.keys(template.sheets)[0] || 'sheet1');
     setActiveSheetKey(targetKey);
     const sheet = template.sheets[targetKey];
     if (sheet?.colWidths) setColWidths(sheet.colWidths);
