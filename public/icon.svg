@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0f172a" />
+      <stop offset="50%" stop-color="#1e293b" />
+      <stop offset="100%" stop-color="#0284c7" />
+    </linearGradient>
+    <linearGradient id="infGrad1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#2563eb" />
+      <stop offset="50%" stop-color="#06b6d4" />
+      <stop offset="100%" stop-color="#10b981" />
+    </linearGradient>
+    <linearGradient id="infGrad2" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#f59e0b" />
+      <stop offset="50%" stop-color="#ef4444" />
+      <stop offset="100%" stop-color="#8b5cf6" />
+    </linearGradient>
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="12" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+  </defs>
+
+  <!-- Background rounded rect -->
+  <rect width="512" height="512" rx="112" fill="url(#bgGrad)" />
+
+  <!-- Inner subtle border -->
+  <rect x="12" y="12" width="488" height="488" rx="100" fill="none" stroke="rgba(255,255,255,0.15)" stroke-width="4" />
+
+  <!-- Office Apps Accent Ribbon Badges -->
+  <g opacity="0.85">
+    <circle cx="110" cy="110" r="14" fill="#2563eb" /> <!-- Word Blue -->
+    <circle cx="150" cy="95" r="11" fill="#10b981" /> <!-- Excel Green -->
+    <circle cx="190" cy="90" r="9" fill="#f97316" /> <!-- PPT Orange -->
+    <circle cx="322" cy="90" r="9" fill="#8b5cf6" /> <!-- OneNote Violet -->
+    <circle cx="362" cy="95" r="11" fill="#ec4899" /> <!-- Base Rose -->
+    <circle cx="402" cy="110" r="14" fill="#ef4444" /> <!-- PDF Red -->
+  </g>
+
+  <!-- Glowing Infinity Emblem -->
+  <g filter="url(#glow)">
+    <path d="M165 180 C110 180 70 215 70 260 C70 305 110 340 165 340 C220 340 256 295 256 260 C256 225 292 180 347 180 C402 180 442 215 442 260 C442 305 402 340 347 340 C292 340 256 295 256 260 C256 225 220 180 165 180 Z"
+          fill="none" stroke="url(#infGrad1)" stroke-width="36" stroke-linecap="round" stroke-linejoin="round" />
+    <path d="M256 260 C292 225 347 180 402 200 C430 210 442 235 442 260 C442 305 402 340 347 340 C292 340 256 295 256 260 Z"
+          fill="none" stroke="url(#infGrad2)" stroke-width="34" stroke-linecap="round" opacity="0.9" />
+  </g>
+
+  <!-- Central Sovereign Shield & Star -->
+  <g transform="translate(230, 234)">
+    <circle cx="26" cy="26" r="30" fill="#0f172a" stroke="#38bdf8" stroke-width="4" />
+    <polygon points="26,10 31,21 43,22 34,30 37,42 26,35 15,42 18,30 9,22 21,21" fill="#f8fafc" />
+  </g>
+
+  <!-- Subtitle Text -->
+  <text x="256" y="420" text-anchor="middle" font-family="'Cairo', system-ui, sans-serif" font-size="28" font-weight="800" fill="#f8fafc" letter-spacing="3">
+    INFINITY TECH
+  </text>
+  <text x="256" y="455" text-anchor="middle" font-family="'Cairo', system-ui, sans-serif" font-size="16" font-weight="600" fill="#94a3b8" letter-spacing="1.5">
+    SOVEREIGN OFFICE SUITE
+  </text>
+</svg>

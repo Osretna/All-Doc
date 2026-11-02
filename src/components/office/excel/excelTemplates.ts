@@ -1,0 +1,1281 @@
+import { SheetData } from '../../../types';
+
+export interface ExcelTemplateDefinition {
+  id: string;
+  title: string;
+  titleEn: string;
+  category: 'business' | 'personal' | 'planners' | 'lists' | 'budgets' | 'charts' | 'calendars' | 'tutorials';
+  badge?: string;
+  accentColor: string;
+  iconType: 'grid' | 'formulas' | 'tour' | 'powerquery' | 'pivottable' | 'charts' | 'calendar' | 'budget' | 'invoice' | 'checklist' | 'gantt' | 'inventory' | 'attendance' | 'loan';
+  description: string;
+  defaultSheetKey?: string;
+  sheets: Record<string, {
+    label: string;
+    data: SheetData;
+    colWidths?: Record<string, number>;
+    rowHeights?: Record<number, number>;
+    isRTL?: boolean;
+    tabColor?: string;
+    floatingObjects?: any[];
+  }>;
+}
+
+export const EXCEL_SUGGESTED_CATEGORIES = [
+  { id: 'all', label: 'الكل (All)', en: 'All' },
+  { id: 'business', label: 'أعمال (Business)', en: 'Business' },
+  { id: 'personal', label: 'شخصي (Personal)', en: 'Personal' },
+  { id: 'planners', label: 'مخططات وتتبع (Planners and Trackers)', en: 'Planners and Trackers' },
+  { id: 'lists', label: 'قوائم (Lists)', en: 'Lists' },
+  { id: 'budgets', label: 'ميزانيات (Budgets)', en: 'Budgets' },
+  { id: 'charts', label: 'رسوم بيانية (Charts)', en: 'Charts' },
+  { id: 'calendars', label: 'تقويمات (Calendars)', en: 'Calendars' },
+] as const;
+
+export const EXCEL_TEMPLATES: ExcelTemplateDefinition[] = [
+  // 1. Blank Workbook
+  {
+    id: 'blank',
+    title: 'مصنف فارغ',
+    titleEn: 'Blank workbook',
+    category: 'personal',
+    accentColor: '#107c41',
+    iconType: 'grid',
+    description: 'إنشاء مصنف إكسيل 365 فارغ والبدء من الصفر بحرية تامة.',
+    defaultSheetKey: 'sheet1',
+    sheets: {
+      sheet1: {
+        label: 'ورقة 1',
+        data: {},
+        isRTL: false,
+      },
+    },
+  },
+
+  // 2. Official Microsoft Excel Formula Tutorial (Exact match to image_04849535.png)
+  {
+    id: 'formula_tutorial',
+    title: 'بدء استخدام الصيغ والدوال',
+    titleEn: 'Formula tutorial',
+    category: 'tutorials',
+    badge: 'fx',
+    accentColor: '#107c41',
+    iconType: 'formulas',
+    description: 'دليل تفاعلي رسمي مطابق لـ Microsoft Excel 365 للتعرف على الجمع التلقائي والصيغ والدوال مع 11 ورقة عمل متكاملة.',
+    defaultSheetKey: 'sheet3',
+    sheets: {
+      sheet1: {
+        label: 'Start',
+        isRTL: false,
+        colWidths: { A: 32, B: 480, C: 120, D: 120, E: 120 },
+        rowHeights: { 1: 20, 2: 40, 3: 28, 4: 24, 5: 24, 6: 24 },
+        data: {
+          B2: { value: 'Welcome to Excel', bold: true, fontSize: 20, color: '#262626' },
+          B3: { value: '', border: 'bottom', borderColor: '#107c41', borderStyle: 'thick' },
+          B4: { value: '10 quick steps to get you calculating in Excel', fontSize: 13, color: '#595959', bold: true },
+          B6: { value: 'This tutorial walks you through everything you need to become proficient with formulas and functions in Excel 365.', color: '#333333', wrapText: true },
+          B8: { value: 'Click the "Introduction to Functions" tab at the bottom to jump right into functions, or click Basics to start from scratch.', color: '#595959', wrapText: true },
+        },
+      },
+      sheet2: {
+        label: 'Basics',
+        isRTL: false,
+        colWidths: { A: 32, B: 430, C: 24, D: 140, E: 110 },
+        rowHeights: { 1: 18, 2: 36, 3: 26, 4: 24, 5: 22, 6: 22, 7: 22, 8: 26 },
+        data: {
+          B2: { value: 'Basic math in Excel', bold: true, fontSize: 18, color: '#262626' },
+          B3: { value: '', border: 'bottom', borderColor: '#107c41', borderStyle: 'thick' },
+          B4: { value: 'To write a formula in Excel, always start with an equal sign (=). Then enter numbers or cell coordinates.', color: '#333333', wrapText: true },
+          B6: { value: 'Try entering formulas in the yellow cells on the right to perform basic calculations.', color: '#595959', wrapText: true },
+          D3: { value: 'Operation', bg: '#107c41', color: '#ffffff', bold: true, align: 'left', border: 'all', borderColor: '#0d6535' },
+          E3: { value: 'Result', bg: '#107c41', color: '#ffffff', bold: true, align: 'right', border: 'all', borderColor: '#0d6535' },
+          D4: { value: 'Add (=1+2)', border: 'all', borderColor: '#d4d4d4', align: 'left' },
+          E4: { value: '3', formula: '=1+2', bold: true, align: 'right', bg: '#fff2cc', border: 'all', borderColor: '#d4d4d4' },
+          D5: { value: 'Subtract (=5-3)', border: 'all', borderColor: '#d4d4d4', align: 'left' },
+          E5: { value: '2', formula: '=5-3', bold: true, align: 'right', bg: '#fff2cc', border: 'all', borderColor: '#d4d4d4' },
+          D6: { value: 'Multiply (=4*5)', border: 'all', borderColor: '#d4d4d4', align: 'left' },
+          E6: { value: '20', formula: '=4*5', bold: true, align: 'right', bg: '#fff2cc', border: 'all', borderColor: '#d4d4d4' },
+          D7: { value: 'Divide (=20/4)', border: 'all', borderColor: '#d4d4d4', align: 'left' },
+          E7: { value: '5', formula: '=20/4', bold: true, align: 'right', bg: '#fff2cc', border: 'all', borderColor: '#d4d4d4' },
+        },
+      },
+      sheet3: {
+        label: 'Introduction to Functions',
+        isRTL: false,
+        colWidths: { A: 32, B: 440, C: 24, D: 115, E: 85, F: 24, G: 115, H: 85, I: 40, J: 40, K: 40, L: 40 },
+        rowHeights: { 1: 18, 2: 36, 3: 26, 4: 24, 5: 20, 6: 22, 7: 22, 8: 26, 9: 20, 10: 22, 11: 26, 12: 22, 13: 22, 14: 22, 15: 22, 16: 22, 17: 26 },
+        data: {
+          B2: { value: 'Introduction to functions', bold: true, fontSize: 18, color: '#262626' },
+          B3: { value: '', border: 'bottom', borderColor: '#107c41', borderStyle: 'thick' },
+          B4: { value: "Functions give you the ability to do a variety of things, like perform mathematical operations, look up values, or even calculate dates and times. Let's try a few ways to add up values with the SUM function.", color: '#333333', wrapText: true },
+          B6: { value: "1. Under the Amount column for Fruit (cell D7), enter =SUM(D3:D6), or type =SUM(, then select that range with the mouse, and press Enter. This will sum the values in cells D3, D4, D5, and D6. Your answer should be 170.", color: '#333333', wrapText: true },
+          B10: { value: "2. Now let's try AutoSum. Select the yellow cell under the column for Meat (cell G7), then go to Formulas > AutoSum > select SUM. You'll see Excel automatically enter the formula for you. Press Enter to confirm it. The AutoSum feature has all of the most common functions.", color: '#333333', wrapText: true },
+          B15: { value: "3. Here's a neat keyboard shortcut. Select cell D15, then press Alt = then, Enter. This automatically enters SUM for you.", color: '#333333', wrapText: true },
+          B18: { value: '', border: 'bottom', borderColor: '#e2e8f0' },
+          B19: { value: 'Dive down for more detail          Next step ➔', bold: true, color: '#107c41' },
+          B24: { value: 'More about functions', bold: true, fontSize: 16, color: '#262626' },
+          B26: { value: 'Go to the Formulas tab and browse through the Function Library, where functions are listed by category, like Text, Date & Time, etc.', color: '#333333', wrapText: true },
+          
+          // Table 1 (Fruit) - Columns D & E
+          D3: { value: 'Fruit', bg: '#107c41', color: '#ffffff', bold: true, align: 'left', border: 'all', borderColor: '#0d6535' },
+          E3: { value: 'Amount', bg: '#107c41', color: '#ffffff', bold: true, align: 'right', border: 'all', borderColor: '#0d6535' },
+          D4: { value: 'Apples', border: 'all', borderColor: '#d4d4d4', align: 'left' },
+          E4: { value: '50', format: 'number', border: 'all', borderColor: '#d4d4d4', align: 'right' },
+          D5: { value: 'Oranges', border: 'all', borderColor: '#d4d4d4', align: 'left' },
+          E5: { value: '20', format: 'number', border: 'all', borderColor: '#d4d4d4', align: 'right' },
+          D6: { value: 'Bananas', border: 'all', borderColor: '#d4d4d4', align: 'left' },
+          E6: { value: '60', format: 'number', border: 'all', borderColor: '#d4d4d4', align: 'right' },
+          D7: { value: 'Lemons', border: 'all', borderColor: '#d4d4d4', align: 'left' },
+          E7: { value: '40', format: 'number', border: 'all', borderColor: '#d4d4d4', align: 'right' },
+          D8: { value: 'SUM >', bold: true, align: 'right' },
+          E8: { value: '170', formula: '=SUM(E4:E7)', bold: true, align: 'right', bg: '#fff2cc', border: 'all', borderColor: '#d4d4d4' },
+
+          // Table 2 (Meat) - Columns G & H
+          G3: { value: 'Meat', bg: '#107c41', color: '#ffffff', bold: true, align: 'left', border: 'all', borderColor: '#0d6535' },
+          H3: { value: 'Amount', bg: '#107c41', color: '#ffffff', bold: true, align: 'right', border: 'all', borderColor: '#0d6535' },
+          G4: { value: 'Beef', border: 'all', borderColor: '#d4d4d4', align: 'left' },
+          H4: { value: '50', format: 'number', border: 'all', borderColor: '#d4d4d4', align: 'right' },
+          G5: { value: 'Chicken', border: 'all', borderColor: '#d4d4d4', align: 'left' },
+          H5: { value: '30', format: 'number', border: 'all', borderColor: '#d4d4d4', align: 'right' },
+          G6: { value: 'Pork', border: 'all', borderColor: '#d4d4d4', align: 'left' },
+          H6: { value: '10', format: 'number', border: 'all', borderColor: '#d4d4d4', align: 'right' },
+          G7: { value: 'Fish', border: 'all', borderColor: '#d4d4d4', align: 'left' },
+          H7: { value: '50', format: 'number', border: 'all', borderColor: '#d4d4d4', align: 'right' },
+          G8: { value: 'SUM >', bold: true, align: 'right' },
+          H8: { value: '140', formula: '=SUM(H4:H7)', bg: '#fff2cc', border: 'all', borderColor: '#d4d4d4', align: 'right' },
+
+          // Lower Left Table (Item) - Rows 11-17
+          D11: { value: 'Item', bg: '#107c41', color: '#ffffff', bold: true, align: 'left', border: 'all', borderColor: '#0d6535' },
+          E11: { value: 'Amount', bg: '#107c41', color: '#ffffff', bold: true, align: 'right', border: 'all', borderColor: '#0d6535' },
+          D12: { value: 'Bread', border: 'all', borderColor: '#d4d4d4', align: 'left' },
+          E12: { value: '50', format: 'number', border: 'all', borderColor: '#d4d4d4', align: 'right' },
+          D13: { value: 'Donuts', border: 'all', borderColor: '#d4d4d4', align: 'left' },
+          E13: { value: '100', format: 'number', border: 'all', borderColor: '#d4d4d4', align: 'right' },
+          D14: { value: 'Cookies', border: 'all', borderColor: '#d4d4d4', align: 'left' },
+          E14: { value: '40', format: 'number', border: 'all', borderColor: '#d4d4d4', align: 'right' },
+          D15: { value: 'Cakes', border: 'all', borderColor: '#d4d4d4', align: 'left' },
+          E15: { value: '50', format: 'number', border: 'all', borderColor: '#d4d4d4', align: 'right' },
+          D16: { value: 'Pies', border: 'all', borderColor: '#d4d4d4', align: 'left' },
+          E16: { value: '20', format: 'number', border: 'all', borderColor: '#d4d4d4', align: 'right' },
+          D17: { value: 'SUM >', bold: true, align: 'right' },
+          E17: { value: '260', formula: '=SUM(E12:E16)', bg: '#fff2cc', border: 'all', borderColor: '#d4d4d4', align: 'right' },
+
+          // Lower Right Table (Item) - Rows 11-17
+          G11: { value: 'Item', bg: '#107c41', color: '#ffffff', bold: true, align: 'left', border: 'all', borderColor: '#0d6535' },
+          H11: { value: 'Amount', bg: '#107c41', color: '#ffffff', bold: true, align: 'right', border: 'all', borderColor: '#0d6535' },
+          G12: { value: 'Bread', border: 'all', borderColor: '#d4d4d4', align: 'left' },
+          H12: { value: '50', format: 'number', border: 'all', borderColor: '#d4d4d4', align: 'right' },
+          G13: { value: 'Donuts', border: 'all', borderColor: '#d4d4d4', align: 'left' },
+          H13: { value: '100', format: 'number', border: 'all', borderColor: '#d4d4d4', align: 'right' },
+          G14: { value: 'Cookies', border: 'all', borderColor: '#d4d4d4', align: 'left' },
+          H14: { value: '40', format: 'number', border: 'all', borderColor: '#d4d4d4', align: 'right' },
+          G15: { value: 'Cakes', border: 'all', borderColor: '#d4d4d4', align: 'left' },
+          H15: { value: '50', format: 'number', border: 'all', borderColor: '#d4d4d4', align: 'right' },
+          G16: { value: 'Pies', border: 'all', borderColor: '#d4d4d4', align: 'left' },
+          H16: { value: '20', format: 'number', border: 'all', borderColor: '#d4d4d4', align: 'right' },
+          G17: { value: 'COUNT >', bold: true, align: 'right' },
+          H17: { value: '5', formula: '=COUNT(H12:H16)', border: 'outside', borderColor: '#ed7d31', borderStyle: 'thick', bg: '#ffedd5', bold: true, align: 'right' },
+        },
+      },
+      sheet4: {
+        label: 'AVERAGE',
+        isRTL: false,
+        colWidths: { A: 32, B: 420, C: 24, D: 140, E: 110 },
+        rowHeights: { 1: 18, 2: 36, 3: 26, 4: 24, 5: 22, 6: 22, 7: 22, 8: 26 },
+        data: {
+          B2: { value: 'The AVERAGE function', bold: true, fontSize: 18, color: '#262626' },
+          B3: { value: '', border: 'bottom', borderColor: '#107c41', borderStyle: 'thick' },
+          B4: { value: 'Use the AVERAGE function to find the mathematical mean of a set of numbers.', color: '#333333', wrapText: true },
+          D3: { value: 'Bakery Item', bg: '#107c41', color: '#ffffff', bold: true, align: 'left', border: 'all', borderColor: '#0d6535' },
+          E3: { value: 'Daily Sales', bg: '#107c41', color: '#ffffff', bold: true, align: 'right', border: 'all', borderColor: '#0d6535' },
+          D4: { value: 'Croissant', border: 'all', borderColor: '#d4d4d4' },
+          E4: { value: '140', format: 'number', border: 'all', borderColor: '#d4d4d4', align: 'right' },
+          D5: { value: 'Muffin', border: 'all', borderColor: '#d4d4d4' },
+          E5: { value: '95', format: 'number', border: 'all', borderColor: '#d4d4d4', align: 'right' },
+          D6: { value: 'Baguette', border: 'all', borderColor: '#d4d4d4' },
+          E6: { value: '210', format: 'number', border: 'all', borderColor: '#d4d4d4', align: 'right' },
+          D7: { value: 'Bagel', border: 'all', borderColor: '#d4d4d4' },
+          E7: { value: '115', format: 'number', border: 'all', borderColor: '#d4d4d4', align: 'right' },
+          D8: { value: 'AVERAGE >', bold: true, align: 'right' },
+          E8: { value: '140', formula: '=AVERAGE(E4:E7)', bold: true, align: 'right', bg: '#fff2cc', border: 'all', borderColor: '#d4d4d4' },
+        },
+      },
+      sheet5: {
+        label: 'MIN & MAX',
+        isRTL: false,
+        colWidths: { A: 32, B: 420, C: 24, D: 130, E: 110 },
+        data: {
+          B2: { value: 'MIN and MAX functions', bold: true, fontSize: 18, color: '#262626' },
+          B3: { value: '', border: 'bottom', borderColor: '#107c41', borderStyle: 'thick' },
+          B4: { value: 'Use MIN to get the smallest number, and MAX to get the highest number in a range.', color: '#333333', wrapText: true },
+          D3: { value: 'Student', bg: '#107c41', color: '#ffffff', bold: true },
+          E3: { value: 'Score', bg: '#107c41', color: '#ffffff', bold: true, align: 'right' },
+          D4: { value: 'Alex', border: 'all' },
+          E4: { value: '88', border: 'all', align: 'right' },
+          D5: { value: 'Sarah', border: 'all' },
+          E5: { value: '96', border: 'all', align: 'right' },
+          D6: { value: 'Omar', border: 'all' },
+          E6: { value: '72', border: 'all', align: 'right' },
+          D7: { value: 'MAX >', bold: true, align: 'right' },
+          E7: { value: '96', formula: '=MAX(E4:E6)', bold: true, bg: '#fff2cc', border: 'all', align: 'right' },
+          D8: { value: 'MIN >', bold: true, align: 'right' },
+          E8: { value: '72', formula: '=MIN(E4:E6)', bold: true, bg: '#fff2cc', border: 'all', align: 'right' },
+        },
+      },
+      sheet6: {
+        label: 'Date & Time',
+        isRTL: false,
+        colWidths: { A: 32, B: 420, C: 24, D: 160, E: 150 },
+        data: {
+          B2: { value: 'Date & Time Functions', bold: true, fontSize: 18, color: '#262626' },
+          B3: { value: '', border: 'bottom', borderColor: '#107c41', borderStyle: 'thick' },
+          B4: { value: 'Excel stores dates as sequential numbers so they can be easily manipulated in calculations.', color: '#333333', wrapText: true },
+          D3: { value: 'Function', bg: '#107c41', color: '#ffffff', bold: true },
+          E3: { value: 'Result', bg: '#107c41', color: '#ffffff', bold: true, align: 'right' },
+          D4: { value: 'TODAY()', border: 'all' },
+          E4: { value: '2026/10/30', formula: '=TODAY()', border: 'all', bg: '#fff2cc', align: 'right' },
+          D5: { value: 'YEAR(TODAY())', border: 'all' },
+          E5: { value: '2026', formula: '=YEAR(TODAY())', border: 'all', bg: '#fff2cc', align: 'right' },
+        },
+      },
+      sheet7: {
+        label: 'Joining text',
+        isRTL: false,
+        colWidths: { A: 32, B: 420, C: 24, D: 110, E: 110, F: 170 },
+        data: {
+          B2: { value: 'Joining text and numbers', bold: true, fontSize: 18, color: '#262626' },
+          B3: { value: '', border: 'bottom', borderColor: '#107c41', borderStyle: 'thick' },
+          B4: { value: 'Combine text from multiple cells using CONCAT or the ampersand operator (&).', color: '#333333', wrapText: true },
+          D3: { value: 'First Name', bg: '#107c41', color: '#ffffff', bold: true },
+          E3: { value: 'Last Name', bg: '#107c41', color: '#ffffff', bold: true },
+          F3: { value: 'Full Name', bg: '#107c41', color: '#ffffff', bold: true },
+          D4: { value: 'Nancy', border: 'all' },
+          E4: { value: 'Freehafer', border: 'all' },
+          F4: { value: 'Nancy Freehafer', formula: '=CONCAT(D4," ",E4)', border: 'all', bg: '#fff2cc' },
+        },
+      },
+      sheet8: {
+        label: 'IF statements',
+        isRTL: false,
+        colWidths: { A: 32, B: 420, C: 24, D: 110, E: 110, F: 130 },
+        data: {
+          B2: { value: 'The IF statement', bold: true, fontSize: 18, color: '#262626' },
+          B3: { value: '', border: 'bottom', borderColor: '#107c41', borderStyle: 'thick' },
+          B4: { value: 'The IF function lets you make a logical comparison between a condition and what you expect.', color: '#333333', wrapText: true },
+          D3: { value: 'Sales Rep', bg: '#107c41', color: '#ffffff', bold: true },
+          E3: { value: 'Sales', bg: '#107c41', color: '#ffffff', bold: true, align: 'right' },
+          F3: { value: 'Commission', bg: '#107c41', color: '#ffffff', bold: true, align: 'right' },
+          D4: { value: 'Robert', border: 'all' },
+          E4: { value: '15000', border: 'all', align: 'right' },
+          F4: { value: '1500', formula: '=IF(E4>10000, E4*0.1, 0)', border: 'all', bg: '#fff2cc', align: 'right' },
+        },
+      },
+      sheet9: {
+        label: 'VLOOKUP',
+        isRTL: false,
+        colWidths: { A: 32, B: 420, C: 24, D: 100, E: 150, F: 110 },
+        data: {
+          B2: { value: 'The VLOOKUP function', bold: true, fontSize: 18, color: '#262626' },
+          B3: { value: '', border: 'bottom', borderColor: '#107c41', borderStyle: 'thick' },
+          B4: { value: 'Use VLOOKUP to retrieve data from a table organized vertically.', color: '#333333', wrapText: true },
+          D3: { value: 'ID', bg: '#107c41', color: '#ffffff', bold: true },
+          E3: { value: 'Product', bg: '#107c41', color: '#ffffff', bold: true },
+          F3: { value: 'Price', bg: '#107c41', color: '#ffffff', bold: true, align: 'right' },
+          D4: { value: '101', border: 'all' },
+          E4: { value: 'Chai Tea', border: 'all' },
+          F4: { value: '$18.00', border: 'all', align: 'right' },
+        },
+      },
+      sheet10: {
+        label: 'Conditional Functions',
+        isRTL: false,
+        colWidths: { A: 32, B: 420, C: 24, D: 130, E: 130 },
+        data: {
+          B2: { value: 'SUMIF and COUNTIF', bold: true, fontSize: 18, color: '#262626' },
+          B3: { value: '', border: 'bottom', borderColor: '#107c41', borderStyle: 'thick' },
+          B4: { value: 'Perform aggregations conditionally using SUMIF and COUNTIF.', color: '#333333', wrapText: true },
+          D3: { value: 'Category', bg: '#107c41', color: '#ffffff', bold: true },
+          E3: { value: 'Amount', bg: '#107c41', color: '#ffffff', bold: true, align: 'right' },
+          D4: { value: 'Food', border: 'all' },
+          E4: { value: '500', border: 'all', align: 'right' },
+          D5: { value: 'Travel', border: 'all' },
+          E5: { value: '1200', border: 'all', align: 'right' },
+        },
+      },
+    },
+  },
+
+  // 3. Welcome to Excel (Take a tour)
+  {
+    id: 'take_a_tour',
+    title: 'جولة تعريفية في إكسيل 365',
+    titleEn: 'Welcome to Excel',
+    category: 'tutorials',
+    badge: '➔',
+    accentColor: '#008272',
+    iconType: 'tour',
+    description: 'تعرف على أهم ميزات إكسيل 365 الحديثة: الجداول الذكية، التحليل السريع، والتعبئة التلقائية.',
+    defaultSheetKey: 'sheet1',
+    sheets: {
+      sheet1: {
+        label: 'Take a tour',
+        colWidths: { A: 40, B: 240, C: 120, D: 120, E: 120, F: 120, G: 130 },
+        rowHeights: { 1: 20, 2: 38, 3: 26, 4: 24, 5: 24, 6: 28, 7: 24, 8: 24, 9: 24, 10: 24, 11: 26 },
+        data: {
+          B2: { value: 'Welcome to Excel: Take a tour', bold: true, fontSize: 20, color: '#008272' },
+          B3: { value: '', border: 'bottom', borderColor: '#008272', borderStyle: 'thick' },
+          B4: { value: 'Discover the power of modern spreadsheets with instant calculations, clean layouts, and rich tables.', color: '#555555' },
+          B6: { value: 'Product Line', bold: true, bg: '#008272', color: '#ffffff', border: 'all' },
+          C6: { value: 'Q1 Sales', bold: true, bg: '#008272', color: '#ffffff', border: 'all', align: 'right' },
+          D6: { value: 'Q2 Sales', bold: true, bg: '#008272', color: '#ffffff', border: 'all', align: 'right' },
+          E6: { value: 'Q3 Sales', bold: true, bg: '#008272', color: '#ffffff', border: 'all', align: 'right' },
+          F6: { value: 'Q4 Sales', bold: true, bg: '#008272', color: '#ffffff', border: 'all', align: 'right' },
+          G6: { value: 'Total Revenue', bold: true, bg: '#008272', color: '#ffffff', border: 'all', align: 'right' },
+          B7: { value: 'Surface Laptops & Pro', border: 'all' },
+          C7: { value: '$45,000', border: 'all', align: 'right' },
+          D7: { value: '$52,500', border: 'all', align: 'right' },
+          E7: { value: '$61,200', border: 'all', align: 'right' },
+          F7: { value: '$74,800', border: 'all', align: 'right' },
+          G7: { value: '$233,500', formula: '=SUM(C7:F7)', bold: true, border: 'all', bg: '#f0fdfa', align: 'right' },
+          B8: { value: 'Xbox Consoles & Games', border: 'all' },
+          C8: { value: '$28,000', border: 'all', align: 'right' },
+          D8: { value: '$31,400', border: 'all', align: 'right' },
+          E8: { value: '$35,900', border: 'all', align: 'right' },
+          F8: { value: '$48,200', border: 'all', align: 'right' },
+          G8: { value: '$143,500', formula: '=SUM(C8:F8)', bold: true, border: 'all', bg: '#f0fdfa', align: 'right' },
+          B9: { value: 'Cloud Subscriptions', border: 'all' },
+          C9: { value: '$84,000', border: 'all', align: 'right' },
+          D9: { value: '$92,000', border: 'all', align: 'right' },
+          E9: { value: '$104,500', border: 'all', align: 'right' },
+          F9: { value: '$118,000', border: 'all', align: 'right' },
+          G9: { value: '$398,500', formula: '=SUM(C9:F9)', bold: true, border: 'all', bg: '#f0fdfa', align: 'right' },
+          B10: { value: 'Total Company Sales', bold: true, bg: '#ccfbf1', border: 'double-bottom' },
+          C10: { value: '$157,000', formula: '=SUM(C7:C9)', bold: true, bg: '#ccfbf1', border: 'double-bottom', align: 'right' },
+          D10: { value: '$175,900', formula: '=SUM(D7:D9)', bold: true, bg: '#ccfbf1', border: 'double-bottom', align: 'right' },
+          E10: { value: '$201,600', formula: '=SUM(E7:E9)', bold: true, bg: '#ccfbf1', border: 'double-bottom', align: 'right' },
+          F10: { value: '$241,000', formula: '=SUM(F7:F9)', bold: true, bg: '#ccfbf1', border: 'double-bottom', align: 'right' },
+          G10: { value: '$775,500', formula: '=SUM(G7:G9)', bold: true, bg: '#99f6e4', color: '#115e59', border: 'double-bottom', align: 'right' },
+        },
+      },
+    },
+  },
+
+  // 4. Power Query Tutorial
+  {
+    id: 'power_query_tutorial',
+    title: 'تعلم استعلامات Power Query',
+    titleEn: 'Power Query tutorial',
+    category: 'tutorials',
+    badge: 'ETL',
+    accentColor: '#107c41',
+    iconType: 'powerquery',
+    description: 'دمج البيانات وتنظيفها وتوحيد مصادر متعددة تلقائياً عبر Power Query.',
+    defaultSheetKey: 'sheet1',
+    sheets: {
+      sheet1: {
+        label: 'Transform Data',
+        colWidths: { A: 40, B: 120, C: 200, D: 140, E: 120, F: 130 },
+        rowHeights: { 1: 20, 2: 36, 3: 24, 4: 26, 5: 22, 6: 22, 7: 22, 8: 26 },
+        data: {
+          B2: { value: 'Power Query: Transform & Clean Data', bold: true, fontSize: 18, color: '#107c41' },
+          B3: { value: 'Source data cleaned and formatted ready for enterprise modeling and DAX analysis.', color: '#666666' },
+          B5: { value: 'Order ID', bold: true, bg: '#107c41', color: '#ffffff', border: 'all' },
+          C5: { value: 'Customer Name', bold: true, bg: '#107c41', color: '#ffffff', border: 'all' },
+          D5: { value: 'Territory', bold: true, bg: '#107c41', color: '#ffffff', border: 'all' },
+          E5: { value: 'Category', bold: true, bg: '#107c41', color: '#ffffff', border: 'all' },
+          F5: { value: 'Amount', bold: true, bg: '#107c41', color: '#ffffff', border: 'all', align: 'right' },
+          B6: { value: 'ORD-9021', border: 'all' }, C6: { value: 'Acme Global Corp', border: 'all' }, D6: { value: 'North America', border: 'all' }, E6: { value: 'Enterprise', border: 'all' }, F6: { value: '$24,500', border: 'all', align: 'right' },
+          B7: { value: 'ORD-9022', border: 'all' }, C7: { value: 'Starlight Retailers', border: 'all' }, D7: { value: 'EMEA', border: 'all' }, E7: { value: 'Retail', border: 'all' }, F7: { value: '$38,200', border: 'all', align: 'right' },
+          B8: { value: 'ORD-9023', border: 'all' }, C8: { value: 'Hyperion Systems', border: 'all' }, D8: { value: 'APAC', border: 'all' }, E8: { value: 'Enterprise', border: 'all' }, F8: { value: '$45,100', border: 'all', align: 'right' },
+          B9: { value: 'Total Processed', bold: true, bg: '#dcfce7', border: 'double-bottom' },
+          F9: { value: '$107,800', formula: '=SUM(F6:F8)', bold: true, bg: '#dcfce7', color: '#166534', border: 'double-bottom', align: 'right' },
+        },
+      },
+    },
+  },
+
+  // 5. PivotTable Tutorial
+  {
+    id: 'pivottable_tutorial',
+    title: 'إنشاء أول جدول محوري PivotTable',
+    titleEn: 'Make your first PivotTable',
+    category: 'tutorials',
+    badge: 'Pivot',
+    accentColor: '#0078d4',
+    iconType: 'pivottable',
+    description: 'تلخيص ملايين الصفوف بضغطة زر وتصنيف المبيعات والمصروفات بدقة متناهية.',
+    defaultSheetKey: 'sheet1',
+    sheets: {
+      sheet1: {
+        label: 'PivotTable Summary',
+        colWidths: { A: 40, B: 160, C: 130, D: 130, E: 130, F: 140 },
+        rowHeights: { 1: 20, 2: 36, 3: 24, 4: 26, 5: 22, 6: 22, 7: 22, 8: 26 },
+        data: {
+          B2: { value: 'PivotTable Sales Summary', bold: true, fontSize: 18, color: '#0078d4' },
+          B3: { value: 'Drag and drop rows, columns, and values to instantly aggregate key metrics.', color: '#666666' },
+          B5: { value: 'Region', bold: true, bg: '#0078d4', color: '#ffffff', border: 'all' },
+          C5: { value: 'Electronics', bold: true, bg: '#0078d4', color: '#ffffff', border: 'all', align: 'right' },
+          D5: { value: 'Furniture', bold: true, bg: '#0078d4', color: '#ffffff', border: 'all', align: 'right' },
+          E5: { value: 'Appliances', bold: true, bg: '#0078d4', color: '#ffffff', border: 'all', align: 'right' },
+          F5: { value: 'Grand Total', bold: true, bg: '#0078d4', color: '#ffffff', border: 'all', align: 'right' },
+          B6: { value: 'Central Region', border: 'all' }, C6: { value: '$45,000', border: 'all', align: 'right' }, D6: { value: '$28,500', border: 'all', align: 'right' }, E6: { value: '$33,000', border: 'all', align: 'right' }, F6: { value: '$106,500', formula: '=SUM(C6:E6)', bold: true, border: 'all', bg: '#eff6ff', align: 'right' },
+          B7: { value: 'Western Region', border: 'all' }, C7: { value: '$52,000', border: 'all', align: 'right' }, D7: { value: '$34,000', border: 'all', align: 'right' }, E7: { value: '$41,500', border: 'all', align: 'right' }, F7: { value: '$127,500', formula: '=SUM(C7:E7)', bold: true, border: 'all', bg: '#eff6ff', align: 'right' },
+          B8: { value: 'Eastern Region', border: 'all' }, C8: { value: '$61,500', border: 'all', align: 'right' }, D8: { value: '$29,000', border: 'all', align: 'right' }, E8: { value: '$38,200', border: 'all', align: 'right' }, F8: { value: '$128,700', formula: '=SUM(C8:E8)', bold: true, border: 'all', bg: '#eff6ff', align: 'right' },
+          B9: { value: 'Total Aggregate', bold: true, bg: '#dbeafe', border: 'double-bottom' },
+          C9: { value: '$158,500', formula: '=SUM(C6:C8)', bold: true, bg: '#dbeafe', border: 'double-bottom', align: 'right' },
+          D9: { value: '$91,500', formula: '=SUM(D6:D8)', bold: true, bg: '#dbeafe', border: 'double-bottom', align: 'right' },
+          E9: { value: '$112,700', formula: '=SUM(E6:E8)', bold: true, bg: '#dbeafe', border: 'double-bottom', align: 'right' },
+          F9: { value: '$362,700', formula: '=SUM(F6:F8)', bold: true, bg: '#bfdbfe', color: '#1e40af', border: 'double-bottom', align: 'right' },
+        },
+      },
+    },
+  },
+
+  // 6. Beyond Pie Charts Tutorial
+  {
+    id: 'beyond_pie_charts',
+    title: 'تخطي المخططات الدائرية (مخططات متقدمة)',
+    titleEn: 'Going beyond Pie charts',
+    category: 'charts',
+    badge: 'Charts',
+    accentColor: '#107c41',
+    iconType: 'charts',
+    description: 'استخدام مخططات الأعمدة المكدسة، التدرج، والمخططات المركبة للتحليل المالي المتفوق.',
+    defaultSheetKey: 'sheet1',
+    sheets: {
+      sheet1: {
+        label: 'Advanced Charts',
+        colWidths: { A: 40, B: 200, C: 120, D: 120, E: 120, F: 130 },
+        rowHeights: { 1: 20, 2: 36, 3: 24, 4: 26, 5: 22, 6: 22, 7: 22, 8: 26 },
+        data: {
+          B2: { value: 'Going Beyond Pie Charts: Stacked Comparisons', bold: true, fontSize: 18, color: '#107c41' },
+          B3: { value: 'Compare multidimensional market share shifts over successive financial years.', color: '#666666' },
+          B5: { value: 'Industry Sector', bold: true, bg: '#107c41', color: '#ffffff', border: 'all' },
+          C5: { value: 'Year 2024', bold: true, bg: '#107c41', color: '#ffffff', border: 'all', align: 'right' },
+          D5: { value: 'Year 2025', bold: true, bg: '#107c41', color: '#ffffff', border: 'all', align: 'right' },
+          E5: { value: 'Year 2026', bold: true, bg: '#107c41', color: '#ffffff', border: 'all', align: 'right' },
+          F5: { value: 'YoY Growth', bold: true, bg: '#107c41', color: '#ffffff', border: 'all', align: 'right' },
+          B6: { value: 'Cloud Infrastructure', border: 'all' }, C6: { value: '45%', border: 'all', align: 'right' }, D6: { value: '55%', border: 'all', align: 'right' }, E6: { value: '68%', border: 'all', align: 'right' }, F6: { value: '+23%', bold: true, bg: '#dcfce7', color: '#166534', border: 'all', align: 'right' },
+          B7: { value: 'Artificial Intelligence', border: 'all' }, C7: { value: '30%', border: 'all', align: 'right' }, D7: { value: '48%', border: 'all', align: 'right' }, E7: { value: '72%', border: 'all', align: 'right' }, F7: { value: '+42%', bold: true, bg: '#dcfce7', color: '#166534', border: 'all', align: 'right' },
+          B8: { value: 'Cybersecurity Ops', border: 'all' }, C8: { value: '50%', border: 'all', align: 'right' }, D8: { value: '60%', border: 'all', align: 'right' }, E8: { value: '80%', border: 'all', align: 'right' }, F8: { value: '+30%', bold: true, bg: '#dcfce7', color: '#166534', border: 'all', align: 'right' },
+        },
+      },
+    },
+  },
+
+  // 7. Seasonal Photo Calendar
+  {
+    id: 'seasonal_photo_calendar',
+    title: 'تقويم الفصول المصور',
+    titleEn: 'Seasonal photo calendar',
+    category: 'calendars',
+    accentColor: '#16a34a',
+    iconType: 'calendar',
+    description: 'تقويم سنوي وشهري منظم لمتابعة المواعيد والمناسبات الموسمية بتصميم أنيق.',
+    defaultSheetKey: 'sheet1',
+    sheets: {
+      sheet1: {
+        label: 'April 2026',
+        colWidths: { A: 40, B: 110, C: 110, D: 110, E: 110, F: 110, G: 110, H: 110 },
+        rowHeights: { 1: 20, 2: 36, 3: 24, 4: 28, 5: 36, 6: 36, 7: 36, 8: 36, 9: 36 },
+        data: {
+          B2: { value: 'April 2026 - Spring Edition', bold: true, fontSize: 20, color: '#15803d' },
+          B3: { value: 'Seasonal planning calendar with automated day distribution.', color: '#666666' },
+          B4: { value: 'Sun', bold: true, bg: '#dcfce7', color: '#166534', align: 'center', border: 'all' },
+          C4: { value: 'Mon', bold: true, bg: '#dcfce7', color: '#166534', align: 'center', border: 'all' },
+          D4: { value: 'Tue', bold: true, bg: '#dcfce7', color: '#166534', align: 'center', border: 'all' },
+          E4: { value: 'Wed', bold: true, bg: '#dcfce7', color: '#166534', align: 'center', border: 'all' },
+          F4: { value: 'Thu', bold: true, bg: '#dcfce7', color: '#166534', align: 'center', border: 'all' },
+          G4: { value: 'Fri', bold: true, bg: '#dcfce7', color: '#166534', align: 'center', border: 'all' },
+          H4: { value: 'Sat', bold: true, bg: '#dcfce7', color: '#166534', align: 'center', border: 'all' },
+          B5: { value: '29', color: '#a3a3a3', align: 'center', border: 'all' }, C5: { value: '30', color: '#a3a3a3', align: 'center', border: 'all' }, D5: { value: '31', color: '#a3a3a3', align: 'center', border: 'all' }, E5: { value: '1', align: 'center', border: 'all' }, F5: { value: '2', align: 'center', border: 'all' }, G5: { value: '3', align: 'center', border: 'all' }, H5: { value: '4', align: 'center', border: 'all' },
+          B6: { value: '5', align: 'center', border: 'all' }, C6: { value: '6', align: 'center', border: 'all' }, D6: { value: '7', align: 'center', border: 'all' }, E6: { value: '8', align: 'center', border: 'all' }, F6: { value: '9', align: 'center', border: 'all' }, G6: { value: '10', align: 'center', border: 'all' }, H6: { value: '11', align: 'center', border: 'all' },
+          B7: { value: '12', align: 'center', border: 'all' }, C7: { value: '13', align: 'center', border: 'all' }, D7: { value: '14', align: 'center', border: 'all' }, E7: { value: '15', align: 'center', border: 'all' }, F7: { value: '16', align: 'center', border: 'all' }, G7: { value: '17', align: 'center', border: 'all' }, H7: { value: '18', align: 'center', border: 'all' },
+          B8: { value: '19', align: 'center', border: 'all' }, C8: { value: '20', align: 'center', border: 'all' }, D8: { value: '21', align: 'center', border: 'all' }, E8: { value: '22', align: 'center', border: 'all' }, F8: { value: '23', align: 'center', border: 'all' }, G8: { value: '24', align: 'center', border: 'all' }, H8: { value: '25', align: 'center', border: 'all' },
+          B9: { value: '26', align: 'center', border: 'all' }, C9: { value: '27', align: 'center', border: 'all' }, D9: { value: '28', align: 'center', border: 'all' }, E9: { value: '29', align: 'center', border: 'all' }, F9: { value: '30', align: 'center', border: 'all' }, G9: { value: '1', color: '#a3a3a3', align: 'center', border: 'all' }, H9: { value: '2', color: '#a3a3a3', align: 'center', border: 'all' },
+        },
+      },
+    },
+  },
+
+  // 8. Personal Monthly Budget (Official Excel 365 Layout)
+  {
+    id: 'personal_monthly_budget',
+    title: 'الميزانية الشهرية الشخصية',
+    titleEn: 'Personal monthly budget',
+    category: 'budgets',
+    accentColor: '#0284c7',
+    iconType: 'budget',
+    description: 'تتبع الدخل الشهري مقابل المصروفات الفعلية مع حساب صافي التوفير بصيغ تلقائية.',
+    defaultSheetKey: 'sheet1',
+    sheets: {
+      sheet1: {
+        label: 'Monthly Budget',
+        colWidths: { A: 32, B: 220, C: 120, D: 120, E: 120, F: 40, G: 220, H: 120, I: 120, J: 120 },
+        rowHeights: { 1: 16, 2: 36, 3: 20, 4: 24, 5: 28, 6: 22, 7: 24, 8: 26, 9: 22, 10: 22, 11: 22, 12: 24, 13: 20, 14: 26, 15: 22, 16: 22, 17: 22, 18: 22, 19: 24 },
+        data: {
+          B2: { value: 'Personal Monthly Budget', bold: true, fontSize: 20, color: '#0369a1' },
+          B4: { value: 'PROJECTED MONTHLY INCOME', bold: true, fontSize: 10, color: '#0284c7' },
+          B5: { value: '$5,000.00', bold: true, fontSize: 16, color: '#0f172a', bg: '#f0f9ff', border: 'all', borderColor: '#bae6fd' },
+          D4: { value: 'ACTUAL MONTHLY INCOME', bold: true, fontSize: 10, color: '#0284c7' },
+          D5: { value: '$5,450.00', bold: true, fontSize: 16, color: '#0f172a', bg: '#f0f9ff', border: 'all', borderColor: '#bae6fd' },
+          G4: { value: 'PROJECTED BALANCE (DIFFERENCE)', bold: true, fontSize: 10, color: '#0284c7' },
+          G5: { value: '$1,200.00', formula: '=B5-C12', bold: true, fontSize: 16, color: '#16a34a', bg: '#f0fdf4', border: 'all', borderColor: '#bbf7d0' },
+          I4: { value: 'ACTUAL BALANCE (DIFFERENCE)', bold: true, fontSize: 10, color: '#0284c7' },
+          I5: { value: '$1,520.00', formula: '=D5-D12', bold: true, fontSize: 16, color: '#16a34a', bg: '#f0fdf4', border: 'all', borderColor: '#bbf7d0' },
+
+          // Income Breakdown Table
+          B7: { value: 'INCOME', bold: true, bg: '#0284c7', color: '#ffffff', border: 'all' },
+          C7: { value: 'Projected', bold: true, bg: '#0284c7', color: '#ffffff', border: 'all', align: 'right' },
+          D7: { value: 'Actual', bold: true, bg: '#0284c7', color: '#ffffff', border: 'all', align: 'right' },
+          E7: { value: 'Difference', bold: true, bg: '#0284c7', color: '#ffffff', border: 'all', align: 'right' },
+          B8: { value: 'Salary / Wages', border: 'all' }, C8: { value: '$4,500.00', border: 'all', align: 'right' }, D8: { value: '$4,500.00', border: 'all', align: 'right' }, E8: { value: '$0.00', formula: '=D8-C8', border: 'all', align: 'right' },
+          B9: { value: 'Freelance & Consulting', border: 'all' }, C9: { value: '$500.00', border: 'all', align: 'right' }, D9: { value: '$950.00', border: 'all', align: 'right' }, E9: { value: '$450.00', formula: '=D9-C9', border: 'all', align: 'right', color: '#16a34a', bold: true },
+          B10: { value: 'Dividends & Interest', border: 'all' }, C10: { value: '$0.00', border: 'all', align: 'right' }, D10: { value: '$0.00', border: 'all', align: 'right' }, E10: { value: '$0.00', formula: '=D10-C10', border: 'all', align: 'right' },
+          B11: { value: 'Total Monthly Income', bold: true, bg: '#e0f2fe', border: 'double-bottom' },
+          C11: { value: '$5,000.00', formula: '=SUM(C8:C10)', bold: true, bg: '#e0f2fe', border: 'double-bottom', align: 'right' },
+          D11: { value: '$5,450.00', formula: '=SUM(D8:D10)', bold: true, bg: '#e0f2fe', border: 'double-bottom', align: 'right' },
+          E11: { value: '$450.00', formula: '=SUM(E8:E10)', bold: true, bg: '#e0f2fe', color: '#0284c7', border: 'double-bottom', align: 'right' },
+
+          // Expenses Breakdown Table
+          G7: { value: 'HOUSING & EXPENSES', bold: true, bg: '#0284c7', color: '#ffffff', border: 'all' },
+          H7: { value: 'Projected', bold: true, bg: '#0284c7', color: '#ffffff', border: 'all', align: 'right' },
+          I7: { value: 'Actual', bold: true, bg: '#0284c7', color: '#ffffff', border: 'all', align: 'right' },
+          J7: { value: 'Difference', bold: true, bg: '#0284c7', color: '#ffffff', border: 'all', align: 'right' },
+          G8: { value: 'Rent / Mortgage', border: 'all' }, H8: { value: '$1,600.00', border: 'all', align: 'right' }, I8: { value: '$1,600.00', border: 'all', align: 'right' }, J8: { value: '$0.00', formula: '=H8-I8', border: 'all', align: 'right' },
+          G9: { value: 'Groceries & Household', border: 'all' }, H9: { value: '$650.00', border: 'all', align: 'right' }, I9: { value: '$620.00', border: 'all', align: 'right' }, J9: { value: '$30.00', formula: '=H9-I9', border: 'all', align: 'right' },
+          G10: { value: 'Utilities (Electric/Water)', border: 'all' }, H10: { value: '$250.00', border: 'all', align: 'right' }, I10: { value: '$240.00', border: 'all', align: 'right' }, J10: { value: '$10.00', formula: '=H10-I10', border: 'all', align: 'right' },
+          G11: { value: 'Transportation & Fuel', border: 'all' }, H11: { value: '$350.00', border: 'all', align: 'right' }, I11: { value: '$320.00', border: 'all', align: 'right' }, J11: { value: '$30.00', formula: '=H11-I11', border: 'all', align: 'right' },
+          G12: { value: 'Insurance & Healthcare', border: 'all' }, H12: { value: '$250.00', border: 'all', align: 'right' }, I12: { value: '$250.00', border: 'all', align: 'right' }, J12: { value: '$0.00', formula: '=H12-I12', border: 'all', align: 'right' },
+          G13: { value: 'Entertainment & Dining', border: 'all' }, H13: { value: '$400.00', border: 'all', align: 'right' }, I13: { value: '$450.00', border: 'all', align: 'right' }, J13: { value: '-$50.00', formula: '=H13-I13', border: 'all', align: 'right', color: '#dc2626' },
+          G14: { value: 'Total Expenses', bold: true, bg: '#e0f2fe', border: 'double-bottom' },
+          H14: { value: '$3,800.00', formula: '=SUM(H8:H13)', bold: true, bg: '#e0f2fe', border: 'double-bottom', align: 'right' },
+          I14: { value: '$3,930.00', formula: '=SUM(I8:I13)', bold: true, bg: '#e0f2fe', border: 'double-bottom', align: 'right' },
+          J14: { value: '-$130.00', formula: '=SUM(J8:J13)', bold: true, bg: '#e0f2fe', border: 'double-bottom', align: 'right' },
+        },
+      },
+    },
+  },
+
+  // 9. Seasonal Illustrated Any Year Calendar (Exact match to image_e4041b99.png)
+  {
+    id: 'seasonal_illustrated_calendar',
+    title: 'تقويم الفصول المصور لجميع السنوات',
+    titleEn: 'Seasonal illustrated any year calendar',
+    category: 'calendars',
+    accentColor: '#3b82f6',
+    iconType: 'calendar',
+    description: 'تقويم شهري مصور لجميع السنوات مع 12 ورقة عمل ملونة وإعدادات التقويم.',
+    defaultSheetKey: 'january',
+    sheets: {
+      january: {
+        label: 'January',
+        isRTL: false,
+        tabColor: '#107c41',
+        colWidths: { A: 40, B: 110, C: 110, D: 110, E: 110, F: 110, G: 110, H: 110, I: 50, J: 120, K: 120 },
+        rowHeights: { 1: 52, 2: 24, 3: 28, 4: 24, 5: 36, 6: 24, 7: 36, 8: 24, 9: 36, 10: 24, 11: 36, 12: 24, 13: 36 },
+        floatingObjects: [
+          {
+            id: 'winter_houses_banner',
+            type: 'image',
+            title: 'Winter Town Houses Banner',
+            imageSrc: '/assets/aistudio/image_e4041b99.png',
+            x: 580,
+            y: 10,
+            width: 280,
+            height: 90,
+          },
+        ],
+        data: {
+          // Comment box in A1 / B1
+          A1: { value: 'Create a custom one-month calendar in this workbook. Customize year and starting day of the week for all months with this January worksheet. Each month is on a separate worksheet.', bg: '#fef9c3', color: '#854d0e', fontSize: 10, border: 'all', wrapText: true },
+          B1: { value: 'January 2026', bold: true, fontSize: 26, color: '#1e3a8a' },
+
+          // Days Header (Row 3)
+          B3: { value: 'Sunday', bold: true, color: '#1e3a8a', border: 'bottom', borderColor: '#1e3a8a', borderStyle: 'thick' },
+          C3: { value: 'Monday', bold: true, color: '#1e3a8a', border: 'bottom', borderColor: '#1e3a8a', borderStyle: 'thick' },
+          D3: { value: 'Tuesday', bold: true, color: '#1e3a8a', border: 'bottom', borderColor: '#1e3a8a', borderStyle: 'thick' },
+          E3: { value: 'Wednesday', bold: true, color: '#1e3a8a', border: 'bottom', borderColor: '#1e3a8a', borderStyle: 'thick' },
+          F3: { value: 'Thursday', bold: true, color: '#1e3a8a', border: 'bottom', borderColor: '#1e3a8a', borderStyle: 'thick' },
+          G3: { value: 'Friday', bold: true, color: '#1e3a8a', border: 'bottom', borderColor: '#1e3a8a', borderStyle: 'thick' },
+          H3: { value: 'Saturday', bold: true, color: '#1e3a8a', border: 'bottom', borderColor: '#1e3a8a', borderStyle: 'thick' },
+
+          // Calendar Settings (Row 3-5 on columns J & K)
+          J3: { value: 'Calendar Settings', bold: true, color: '#1e3a8a', border: 'bottom', borderColor: '#1e3a8a', borderStyle: 'thick' },
+          K3: { value: '', border: 'bottom', borderColor: '#1e3a8a', borderStyle: 'thick' },
+          J4: { value: 'Year', align: 'center', color: '#595959' },
+          K4: { value: 'Week Start', align: 'center', color: '#595959' },
+          J5: { value: '2026', bold: true, align: 'center', bg: '#dbeafe', color: '#1e3a8a' },
+          K5: { value: 'Sunday', bold: true, align: 'center', bg: '#dbeafe', color: '#1e3a8a' },
+
+          // Dates Row 4 & Soft Blue Event Block Row 5
+          B4: { value: '28', color: '#737373' }, C4: { value: '29', color: '#737373' }, D4: { value: '30', color: '#737373' }, E4: { value: '31', color: '#737373' }, F4: { value: '1' }, G4: { value: '2' }, H4: { value: '3' },
+          B5: { value: '', bg: '#dbeafe' }, C5: { value: '', bg: '#dbeafe' }, D5: { value: '', bg: '#dbeafe' }, E5: { value: '', bg: '#dbeafe' }, F5: { value: '', bg: '#dbeafe' }, G5: { value: '', bg: '#dbeafe' }, H5: { value: '', bg: '#dbeafe' },
+
+          // Dates Row 6 & Row 7
+          B6: { value: '4' }, C6: { value: '5' }, D6: { value: '6' }, E6: { value: '7' }, F6: { value: '8' }, G6: { value: '9' }, H6: { value: '10' },
+          B7: { value: '', bg: '#dbeafe' }, C7: { value: '', bg: '#dbeafe' }, D7: { value: '', bg: '#dbeafe' }, E7: { value: '', bg: '#dbeafe' }, F7: { value: '', bg: '#dbeafe' }, G7: { value: '', bg: '#dbeafe' }, H7: { value: '', bg: '#dbeafe' },
+
+          // Dates Row 8 & Row 9
+          B8: { value: '11' }, C8: { value: '12' }, D8: { value: '13' }, E8: { value: '14' }, F8: { value: '15' }, G8: { value: '16' }, H8: { value: '17' },
+          B9: { value: '', bg: '#dbeafe' }, C9: { value: '', bg: '#dbeafe' }, D9: { value: '', bg: '#dbeafe' }, E9: { value: '', bg: '#dbeafe' }, F9: { value: '', bg: '#dbeafe' }, G9: { value: '', bg: '#dbeafe' }, H9: { value: '', bg: '#dbeafe' },
+
+          // Dates Row 10 & Row 11
+          B10: { value: '18' }, C10: { value: '19' }, D10: { value: '20' }, E10: { value: '21' }, F10: { value: '22' }, G10: { value: '23' }, H10: { value: '24' },
+          B11: { value: '', bg: '#dbeafe' }, C11: { value: '', bg: '#dbeafe' }, D11: { value: '', bg: '#dbeafe' }, E11: { value: '', bg: '#dbeafe' }, F11: { value: '', bg: '#dbeafe' }, G11: { value: '', bg: '#dbeafe' }, H11: { value: '', bg: '#dbeafe' },
+
+          // Dates Row 12 & Row 13
+          B12: { value: '25' }, C12: { value: '26' }, D12: { value: '27' }, E12: { value: '28' }, F12: { value: '29' }, G12: { value: '30' }, H12: { value: '31' },
+          B13: { value: '', bg: '#dbeafe' }, C13: { value: '', bg: '#dbeafe' }, D13: { value: '', bg: '#dbeafe' }, E13: { value: '', bg: '#dbeafe' }, F13: { value: '', bg: '#dbeafe' }, G13: { value: '', bg: '#dbeafe' }, H13: { value: '', bg: '#dbeafe' },
+        },
+      },
+      february: {
+        label: 'February',
+        isRTL: false,
+        tabColor: '#2563eb',
+        colWidths: { A: 40, B: 110, C: 110, D: 110, E: 110, F: 110, G: 110, H: 110 },
+        data: {
+          B1: { value: 'February 2026', bold: true, fontSize: 26, color: '#1e40af' },
+          B3: { value: 'Sunday', bold: true, color: '#1e40af', border: 'bottom', borderColor: '#1e40af' },
+          C3: { value: 'Monday', bold: true, color: '#1e40af', border: 'bottom', borderColor: '#1e40af' },
+          D3: { value: 'Tuesday', bold: true, color: '#1e40af', border: 'bottom', borderColor: '#1e40af' },
+          E3: { value: 'Wednesday', bold: true, color: '#1e40af', border: 'bottom', borderColor: '#1e40af' },
+          F3: { value: 'Thursday', bold: true, color: '#1e40af', border: 'bottom', borderColor: '#1e40af' },
+          G3: { value: 'Friday', bold: true, color: '#1e40af', border: 'bottom', borderColor: '#1e40af' },
+          H3: { value: 'Saturday', bold: true, color: '#1e40af', border: 'bottom', borderColor: '#1e40af' },
+          B4: { value: '1' }, C4: { value: '2' }, D4: { value: '3' }, E4: { value: '4' }, F4: { value: '5' }, G4: { value: '6' }, H4: { value: '7' },
+        },
+      },
+      march: { label: 'March', isRTL: false, tabColor: '#84cc16', data: { B1: { value: 'March 2026', bold: true, fontSize: 26, color: '#3f6212' } } },
+      april: { label: 'April', isRTL: false, tabColor: '#10b981', data: { B1: { value: 'April 2026', bold: true, fontSize: 26, color: '#047857' } } },
+      may: { label: 'May', isRTL: false, tabColor: '#a3e635', data: { B1: { value: 'May 2026', bold: true, fontSize: 26, color: '#4d7c0f' } } },
+      june: { label: 'June', isRTL: false, tabColor: '#facc15', data: { B1: { value: 'June 2026', bold: true, fontSize: 26, color: '#854d0e' } } },
+      july: { label: 'July', isRTL: false, tabColor: '#fbbf24', data: { B1: { value: 'July 2026', bold: true, fontSize: 26, color: '#b45309' } } },
+      august: { label: 'August', isRTL: false, tabColor: '#fb923c', data: { B1: { value: 'August 2026', bold: true, fontSize: 26, color: '#c2410c' } } },
+      september: { label: 'September', isRTL: false, tabColor: '#fdba74', data: { B1: { value: 'September 2026', bold: true, fontSize: 26, color: '#9a3412' } } },
+      october: { label: 'October', isRTL: false, tabColor: '#f97316', data: { B1: { value: 'October 2026', bold: true, fontSize: 26, color: '#c2410c' } } },
+      november: { label: 'November', isRTL: false, tabColor: '#f87171', data: { B1: { value: 'November 2026', bold: true, fontSize: 26, color: '#b91c1c' } } },
+      december: { label: 'December', isRTL: false, tabColor: '#60a5fa', data: { B1: { value: 'December 2026', bold: true, fontSize: 26, color: '#1d4ed8' } } },
+    },
+  },
+
+  // 10. Any Year One-Month Calendar
+  {
+    id: 'any_year_one_month_calendar',
+    title: 'تقويم شهري لأي سنة',
+    titleEn: 'Any year one-month calendar',
+    category: 'calendars',
+    accentColor: '#475569',
+    iconType: 'calendar',
+    description: 'اختر الشهر والسنة ليتم بناء تواريخ أيام الشهر وتوزيعها آلياً.',
+    defaultSheetKey: 'sheet1',
+    sheets: {
+      sheet1: {
+        label: 'Calendar',
+        colWidths: { A: 32, B: 110, C: 110, D: 110, E: 110, F: 110, G: 110, H: 110 },
+        rowHeights: { 1: 18, 2: 36, 3: 24, 4: 26, 5: 32, 6: 32, 7: 32 },
+        data: {
+          B2: { value: 'YEAR: 2026   JANUARY', bold: true, fontSize: 18, color: '#334155' },
+          B4: { value: 'Sun', bold: true, bg: '#f1f5f9', border: 'all', align: 'center' },
+          C4: { value: 'Mon', bold: true, bg: '#f1f5f9', border: 'all', align: 'center' },
+          D4: { value: 'Tue', bold: true, bg: '#f1f5f9', border: 'all', align: 'center' },
+          E4: { value: 'Wed', bold: true, bg: '#f1f5f9', border: 'all', align: 'center' },
+          F4: { value: 'Thu', bold: true, bg: '#f1f5f9', border: 'all', align: 'center' },
+          G4: { value: 'Fri', bold: true, bg: '#f1f5f9', border: 'all', align: 'center' },
+          H4: { value: 'Sat', bold: true, bg: '#f1f5f9', border: 'all', align: 'center' },
+          B5: { value: '1', align: 'center', border: 'all' }, C5: { value: '2', align: 'center', border: 'all' }, D5: { value: '3', align: 'center', border: 'all' }, E5: { value: '4', align: 'center', border: 'all' }, F5: { value: '5', align: 'center', border: 'all' }, G5: { value: '6', align: 'center', border: 'all' }, H5: { value: '7', align: 'center', border: 'all' },
+        },
+      },
+    },
+  },
+
+  // 11. Academic Calendar (Solid Black Bar Theme)
+  {
+    id: 'academic_calendar',
+    title: 'التقويم الأكاديمي والجامعي',
+    titleEn: 'Academic calendar',
+    category: 'calendars',
+    accentColor: '#0f172a',
+    iconType: 'calendar',
+    description: 'جدول الفصول الدراسية، فترات الاختبارات النصفية والنهائية، ومواعيد الإجازات.',
+    defaultSheetKey: 'sheet1',
+    sheets: {
+      sheet1: {
+        label: 'Academic Schedule',
+        colWidths: { A: 32, B: 110, C: 110, D: 110, E: 110, F: 110, G: 110, H: 110 },
+        rowHeights: { 1: 16, 2: 44, 3: 26, 4: 34, 5: 34, 6: 34, 7: 34 },
+        data: {
+          B2: { value: 'September 20YY', bold: true, fontSize: 22, color: '#ffffff', bg: '#000000', align: 'center' },
+          C2: { value: '', bg: '#000000' }, D2: { value: '', bg: '#000000' }, E2: { value: '', bg: '#000000' }, F2: { value: '', bg: '#000000' }, G2: { value: '', bg: '#000000' }, H2: { value: '', bg: '#000000' },
+          B3: { value: 'MON', bold: true, bg: '#f4f4f5', align: 'center', border: 'all' },
+          C3: { value: 'TUE', bold: true, bg: '#f4f4f5', align: 'center', border: 'all' },
+          D3: { value: 'WED', bold: true, bg: '#f4f4f5', align: 'center', border: 'all' },
+          E3: { value: 'THU', bold: true, bg: '#f4f4f5', align: 'center', border: 'all' },
+          F3: { value: 'FRI', bold: true, bg: '#f4f4f5', align: 'center', border: 'all' },
+          G3: { value: 'SAT', bold: true, bg: '#f4f4f5', align: 'center', border: 'all' },
+          H3: { value: 'SUN', bold: true, bg: '#f4f4f5', align: 'center', border: 'all' },
+          B4: { value: '01', align: 'center', border: 'all' }, C4: { value: '02', align: 'center', border: 'all' }, D4: { value: '03', align: 'center', border: 'all' }, E4: { value: '04', align: 'center', border: 'all' }, F4: { value: '05', align: 'center', border: 'all' }, G4: { value: '06', align: 'center', border: 'all' }, H4: { value: '07', align: 'center', border: 'all' },
+          B5: { value: '08', align: 'center', border: 'all' }, C5: { value: '09', align: 'center', border: 'all' }, D5: { value: '10 (Classes Start)', bold: true, bg: '#fef08a', align: 'center', border: 'all' }, E5: { value: '11', align: 'center', border: 'all' }, F5: { value: '12', align: 'center', border: 'all' }, G5: { value: '13', align: 'center', border: 'all' }, H5: { value: '14', align: 'center', border: 'all' },
+        },
+      },
+    },
+  },
+
+  // 12. Monthly Company Budget (Caneiro Group)
+  {
+    id: 'monthly_company_budget',
+    title: 'ميزانية الشركة الشهرية',
+    titleEn: 'Monthly company budget',
+    category: 'budgets',
+    accentColor: '#1e40af',
+    iconType: 'budget',
+    description: 'متابعة المبيعات المؤسسية وتكاليف التشغيل والرواتب والتسويق مع هوامش الربح التشغيلي.',
+    defaultSheetKey: 'sheet1',
+    sheets: {
+      sheet1: {
+        label: 'Company Budget',
+        colWidths: { A: 32, B: 240, C: 130, D: 130, E: 130 },
+        rowHeights: { 1: 18, 2: 24, 3: 36, 4: 20, 5: 26, 6: 22, 7: 22, 8: 24, 9: 20, 10: 26, 11: 22, 12: 22, 13: 24 },
+        data: {
+          B2: { value: 'CANEIRO GROUP', bold: true, fontSize: 11, color: '#64748b' },
+          B3: { value: 'MONTHLY BUDGET', bold: true, fontSize: 20, color: '#1e3a8a' },
+          B5: { value: 'BUDGET TOTALS', bold: true, bg: '#1e40af', color: '#ffffff', border: 'all' },
+          C5: { value: 'ESTIMATED', bold: true, bg: '#1e40af', color: '#ffffff', border: 'all', align: 'right' },
+          D5: { value: 'ACTUAL', bold: true, bg: '#1e40af', color: '#ffffff', border: 'all', align: 'right' },
+          E5: { value: 'DIFFERENCE', bold: true, bg: '#1e40af', color: '#ffffff', border: 'all', align: 'right' },
+          B6: { value: 'Gross Operating Income', border: 'all' }, C6: { value: '$75,000.00', border: 'all', align: 'right' }, D6: { value: '$78,450.00', border: 'all', align: 'right' }, E6: { value: '$3,450.00', formula: '=D6-C6', bold: true, color: '#16a34a', border: 'all', align: 'right' },
+          B7: { value: 'Total Operating Expenses', border: 'all' }, C7: { value: '$46,500.00', border: 'all', align: 'right' }, D7: { value: '$44,820.00', border: 'all', align: 'right' }, E7: { value: '$1,680.00', formula: '=C7-D7', bold: true, color: '#16a34a', border: 'all', align: 'right' },
+          B8: { value: 'Net Operating Profit', bold: true, bg: '#dbeafe', border: 'double-bottom' },
+          C8: { value: '$28,500.00', formula: '=C6-C7', bold: true, bg: '#dbeafe', border: 'double-bottom', align: 'right' },
+          D8: { value: '$33,630.00', formula: '=D6-D7', bold: true, bg: '#dbeafe', border: 'double-bottom', align: 'right' },
+          E8: { value: '$5,130.00', formula: '=E6+E7', bold: true, bg: '#bfdbfe', color: '#1e40af', border: 'double-bottom', align: 'right' },
+        },
+      },
+    },
+  },
+
+  // 13. Household Monthly Budget (Budget Overview)
+  {
+    id: 'household_monthly_budget',
+    title: 'ميزانية الأسرة والمنزل',
+    titleEn: 'Household monthly budget',
+    category: 'budgets',
+    accentColor: '#059669',
+    iconType: 'budget',
+    description: 'توزيع مصروفات الأسرة بين الأساسيات، الادخار، الترفيه والطوارئ لضبط الإنفاق العائلي.',
+    defaultSheetKey: 'sheet1',
+    sheets: {
+      sheet1: {
+        label: 'Budget Overview',
+        colWidths: { A: 32, B: 240, C: 120, D: 120, E: 120 },
+        rowHeights: { 1: 18, 2: 36, 3: 24, 4: 26, 5: 22, 6: 22, 7: 24 },
+        data: {
+          B2: { value: 'BUDGET OVERVIEW - HOUSEHOLD', bold: true, fontSize: 18, color: '#047857' },
+          B4: { value: 'Expense Category', bold: true, bg: '#059669', color: '#ffffff', border: 'all' },
+          C4: { value: 'Allocated', bold: true, bg: '#059669', color: '#ffffff', border: 'all', align: 'right' },
+          D4: { value: 'Spent', bold: true, bg: '#059669', color: '#ffffff', border: 'all', align: 'right' },
+          E4: { value: 'Remaining', bold: true, bg: '#059669', color: '#ffffff', border: 'all', align: 'right' },
+          B5: { value: 'Utilities & Internet', border: 'all' }, C5: { value: '$350.00', border: 'all', align: 'right' }, D5: { value: '$310.00', border: 'all', align: 'right' }, E5: { value: '$40.00', formula: '=C5-D5', border: 'all', align: 'right' },
+          B6: { value: 'Groceries & Supplies', border: 'all' }, C6: { value: '$950.00', border: 'all', align: 'right' }, D6: { value: '$920.00', border: 'all', align: 'right' }, E6: { value: '$30.00', formula: '=C6-D6', border: 'all', align: 'right' },
+          B7: { value: 'Total Household', bold: true, bg: '#d1fae5', border: 'double-bottom' },
+          C7: { value: '$1,300.00', formula: '=SUM(C5:C6)', bold: true, bg: '#d1fae5', border: 'double-bottom', align: 'right' },
+          D7: { value: '$1,230.00', formula: '=SUM(D5:D6)', bold: true, bg: '#d1fae5', border: 'double-bottom', align: 'right' },
+          E7: { value: '$70.00', formula: '=SUM(E5:E6)', bold: true, bg: '#a7f3d0', color: '#065f46', border: 'double-bottom', align: 'right' },
+        },
+      },
+    },
+  },
+
+  // 14. Premium Weekly Chore Schedule
+  {
+    id: 'weekly_chore_schedule',
+    title: 'جدول المهام والأعمال الأسبوعي المميز',
+    titleEn: 'Premium weekly chore schedule',
+    category: 'planners',
+    accentColor: '#84cc16',
+    iconType: 'checklist',
+    description: 'متابعة المهام المنزلية وفريق العمل على مدار أيام الأسبوع مع خانات إنجاز مرئية.',
+    defaultSheetKey: 'sheet1',
+    sheets: {
+      sheet1: {
+        label: 'Weekly Chores',
+        colWidths: { A: 32, B: 200, C: 120, D: 60, E: 60, F: 60, G: 60, H: 60, I: 60, J: 60 },
+        rowHeights: { 1: 18, 2: 36, 3: 24, 4: 26, 5: 22, 6: 22, 7: 22 },
+        data: {
+          B2: { value: 'Weekly Chore Schedule', bold: true, fontSize: 18, color: '#4d7c0f' },
+          B4: { value: 'Chore Description', bold: true, bg: '#65a30d', color: '#ffffff', border: 'all' },
+          C4: { value: 'Assignee', bold: true, bg: '#65a30d', color: '#ffffff', border: 'all' },
+          D4: { value: 'Sun', bold: true, bg: '#ecfccb', border: 'all', align: 'center' },
+          E4: { value: 'Mon', bold: true, bg: '#ecfccb', border: 'all', align: 'center' },
+          F4: { value: 'Tue', bold: true, bg: '#ecfccb', border: 'all', align: 'center' },
+          G4: { value: 'Wed', bold: true, bg: '#ecfccb', border: 'all', align: 'center' },
+          H4: { value: 'Thu', bold: true, bg: '#ecfccb', border: 'all', align: 'center' },
+          I4: { value: 'Fri', bold: true, bg: '#ecfccb', border: 'all', align: 'center' },
+          J4: { value: 'Sat', bold: true, bg: '#ecfccb', border: 'all', align: 'center' },
+          B5: { value: 'Clean Living Room & Dusting', border: 'all' }, C5: { value: 'Alex', border: 'all' }, D5: { value: '✓', align: 'center', border: 'all' }, E5: { value: '', border: 'all' }, F5: { value: '✓', align: 'center', border: 'all' }, G5: { value: '', border: 'all' }, H5: { value: '✓', align: 'center', border: 'all' }, I5: { value: '', border: 'all' }, J5: { value: '✓', align: 'center', border: 'all' },
+          B6: { value: 'Dishes & Kitchen Counter', border: 'all' }, C6: { value: 'Sarah', border: 'all' }, D6: { value: '✓', align: 'center', border: 'all' }, E6: { value: '✓', align: 'center', border: 'all' }, F6: { value: '✓', align: 'center', border: 'all' }, G6: { value: '✓', align: 'center', border: 'all' }, H6: { value: '✓', align: 'center', border: 'all' }, I6: { value: '✓', align: 'center', border: 'all' }, J6: { value: '✓', align: 'center', border: 'all' },
+        },
+      },
+    },
+  },
+
+  // 15. Basic Business Invoice (Company Name / Item Description)
+  {
+    id: 'basic_business_invoice',
+    title: 'فاتورة أعمال تجارية أساسية',
+    titleEn: 'Basic business invoice',
+    category: 'business',
+    accentColor: '#0284c7',
+    iconType: 'invoice',
+    description: 'فاتورة ضريبية رسمية تتضمن حساب الضريبة VAT، الخصومات، وصافي المبلغ المطلوب.',
+    defaultSheetKey: 'sheet1',
+    sheets: {
+      sheet1: {
+        label: 'Invoice',
+        colWidths: { A: 32, B: 240, C: 80, D: 120, E: 130 },
+        rowHeights: { 1: 18, 2: 36, 3: 20, 4: 22, 5: 22, 6: 26, 7: 22, 8: 22, 9: 22, 10: 24, 11: 22, 12: 26 },
+        data: {
+          B2: { value: 'CONTOSO CORPORATION', bold: true, fontSize: 20, color: '#0369a1' },
+          B4: { value: 'INVOICE # 1001', bold: true, fontSize: 13, color: '#1e293b' },
+          D4: { value: 'Date: 2026/10/30', align: 'right' },
+          B6: { value: 'ITEM DESCRIPTION', bold: true, bg: '#0284c7', color: '#ffffff', border: 'all' },
+          C6: { value: 'QTY', bold: true, bg: '#0284c7', color: '#ffffff', border: 'all', align: 'center' },
+          D6: { value: 'UNIT PRICE', bold: true, bg: '#0284c7', color: '#ffffff', border: 'all', align: 'right' },
+          E6: { value: 'AMOUNT', bold: true, bg: '#0284c7', color: '#ffffff', border: 'all', align: 'right' },
+          B7: { value: 'Cloud Architecture Consulting', border: 'all' }, C7: { value: '10', border: 'all', align: 'center' }, D7: { value: '$150.00', border: 'all', align: 'right' }, E7: { value: '$1,500.00', formula: '=C7*D7', border: 'all', align: 'right' },
+          B8: { value: 'Full-Stack Software Engineering', border: 'all' }, C8: { value: '25', border: 'all', align: 'center' }, D8: { value: '$120.00', border: 'all', align: 'right' }, E8: { value: '$3,000.00', formula: '=C8*D8', border: 'all', align: 'right' },
+          B9: { value: 'Subtotal', bold: true, border: 'all' }, E9: { value: '$4,500.00', formula: '=SUM(E7:E8)', bold: true, border: 'all', align: 'right' },
+          B10: { value: 'Sales Tax (15%)', border: 'all' }, E10: { value: '$675.00', formula: '=E9*0.15', border: 'all', align: 'right' },
+          B11: { value: 'TOTAL DUE', bold: true, bg: '#e0f2fe', color: '#0369a1', border: 'double-bottom' },
+          E11: { value: '$5,175.00', formula: '=E9+E10', bold: true, bg: '#e0f2fe', color: '#0369a1', border: 'double-bottom', align: 'right' },
+        },
+      },
+    },
+  },
+
+  // 16. Basic Balance Sheet (Assets & Liabilities)
+  {
+    id: 'basic_balance_sheet',
+    title: 'الميزانية العمومية وقائمة المركز المالي',
+    titleEn: 'Basic balance sheet',
+    category: 'business',
+    accentColor: '#1e3a8a',
+    iconType: 'budget',
+    description: 'قائمة الأصول والخصوم وحقوق الملكية وفق معايير المحاسبة الدولية.',
+    defaultSheetKey: 'sheet1',
+    sheets: {
+      sheet1: {
+        label: 'Balance Sheet',
+        colWidths: { A: 32, B: 240, C: 140 },
+        rowHeights: { 1: 18, 2: 36, 3: 24, 4: 26, 5: 22, 6: 22, 7: 24, 8: 26, 9: 22, 10: 24 },
+        data: {
+          B2: { value: 'STATEMENT OF FINANCIAL POSITION', bold: true, fontSize: 18, color: '#1e3a8a' },
+          B4: { value: 'CURRENT ASSETS', bold: true, bg: '#1e3a8a', color: '#ffffff', border: 'all' },
+          C4: { value: 'BALANCE', bold: true, bg: '#1e3a8a', color: '#ffffff', border: 'all', align: 'right' },
+          B5: { value: 'Cash & Cash Equivalents', border: 'all' }, C5: { value: '$145,000.00', border: 'all', align: 'right' },
+          B6: { value: 'Accounts Receivable', border: 'all' }, C6: { value: '$88,000.00', border: 'all', align: 'right' },
+          B7: { value: 'Total Current Assets', bold: true, bg: '#e0e7ff', border: 'all' }, C7: { value: '$233,000.00', formula: '=SUM(C5:C6)', bold: true, bg: '#e0e7ff', border: 'all', align: 'right' },
+          B8: { value: 'CURRENT LIABILITIES', bold: true, bg: '#991b1b', color: '#ffffff', border: 'all' },
+          C8: { value: 'BALANCE', bold: true, bg: '#991b1b', color: '#ffffff', border: 'all', align: 'right' },
+          B9: { value: 'Accounts Payable', border: 'all' }, C9: { value: '$52,000.00', border: 'all', align: 'right' },
+          B10: { value: 'Total Liabilities', bold: true, bg: '#fee2e2', border: 'double-bottom' }, C10: { value: '$52,000.00', formula: '=C9', bold: true, bg: '#fee2e2', border: 'double-bottom', align: 'right' },
+        },
+      },
+    },
+  },
+
+  // 17. Student Schedule (Class Schedule)
+  {
+    id: 'student_schedule',
+    title: 'الجدول الدراسي الأسبوعي للطلاب',
+    titleEn: 'Student schedule',
+    category: 'planners',
+    accentColor: '#d97706',
+    iconType: 'checklist',
+    description: 'تنظيم الحصص والمحاضرات الجامعية وساعات المذاكرة مع رمز ملون لكل مادة.',
+    defaultSheetKey: 'sheet1',
+    sheets: {
+      sheet1: {
+        label: 'Class Schedule',
+        colWidths: { A: 32, B: 120, C: 120, D: 120, E: 120, F: 120 },
+        rowHeights: { 1: 18, 2: 36, 3: 24, 4: 26, 5: 32, 6: 32 },
+        data: {
+          B2: { value: 'Weekly Class Schedule', bold: true, fontSize: 18, color: '#b45309' },
+          B4: { value: 'Time', bold: true, bg: '#fef3c7', color: '#92400e', border: 'all', align: 'center' },
+          C4: { value: 'Monday', bold: true, bg: '#fef3c7', color: '#92400e', border: 'all', align: 'center' },
+          D4: { value: 'Tuesday', bold: true, bg: '#fef3c7', color: '#92400e', border: 'all', align: 'center' },
+          E4: { value: 'Wednesday', bold: true, bg: '#fef3c7', color: '#92400e', border: 'all', align: 'center' },
+          F4: { value: 'Thursday', bold: true, bg: '#fef3c7', color: '#92400e', border: 'all', align: 'center' },
+          B5: { value: '09:00 - 10:30', border: 'all', align: 'center' }, C5: { value: 'Computer Science 101', bg: '#e0f2fe', border: 'all' }, D5: { value: 'Algorithms', bg: '#fef08a', border: 'all' }, E5: { value: 'Computer Science 101', bg: '#e0f2fe', border: 'all' }, F5: { value: 'Algorithms', bg: '#fef08a', border: 'all' },
+        },
+      },
+    },
+  },
+
+  // 18. Weekly Attendance Report
+  {
+    id: 'weekly_attendance_report',
+    title: 'تقرير الحضور والغياب الأسبوعي',
+    titleEn: 'Weekly attendance report',
+    category: 'business',
+    accentColor: '#eab308',
+    iconType: 'attendance',
+    description: 'كشف حضور وغياب الموظفين أو الطلاب مع احتساب نسب الحضور والغياب والأعذار آلياً.',
+    defaultSheetKey: 'sheet1',
+    sheets: {
+      sheet1: {
+        label: 'Attendance',
+        colWidths: { A: 32, B: 180, C: 70, D: 70, E: 70, F: 70, G: 70, H: 100 },
+        rowHeights: { 1: 18, 2: 36, 3: 24, 4: 26, 5: 22, 6: 22 },
+        data: {
+          B2: { value: 'Weekly Attendance Report', bold: true, fontSize: 18, color: '#a16207' },
+          B4: { value: 'Student / Employee', bold: true, bg: '#ca8a04', color: '#ffffff', border: 'all' },
+          C4: { value: 'Mon', bold: true, bg: '#ca8a04', color: '#ffffff', border: 'all', align: 'center' },
+          D4: { value: 'Tue', bold: true, bg: '#ca8a04', color: '#ffffff', border: 'all', align: 'center' },
+          E4: { value: 'Wed', bold: true, bg: '#ca8a04', color: '#ffffff', border: 'all', align: 'center' },
+          F4: { value: 'Thu', bold: true, bg: '#ca8a04', color: '#ffffff', border: 'all', align: 'center' },
+          G4: { value: 'Fri', bold: true, bg: '#ca8a04', color: '#ffffff', border: 'all', align: 'center' },
+          H4: { value: 'Total Days', bold: true, bg: '#fef08a', border: 'all', align: 'center' },
+          B5: { value: 'Sarah Jenkins', border: 'all' }, C5: { value: 'P', align: 'center', border: 'all' }, D5: { value: 'P', align: 'center', border: 'all' }, E5: { value: 'P', align: 'center', border: 'all' }, F5: { value: 'P', align: 'center', border: 'all' }, G5: { value: 'P', align: 'center', border: 'all' }, H5: { value: '5', bold: true, align: 'center', border: 'all' },
+          B6: { value: 'Michael Chang', border: 'all' }, C6: { value: 'P', align: 'center', border: 'all' }, D6: { value: 'A', bg: '#fee2e2', color: '#dc2626', align: 'center', border: 'all' }, E6: { value: 'P', align: 'center', border: 'all' }, F6: { value: 'P', align: 'center', border: 'all' }, G6: { value: 'P', align: 'center', border: 'all' }, H6: { value: '4', bold: true, align: 'center', border: 'all' },
+        },
+      },
+    },
+  },
+
+  // 19. Simple Invoice
+  {
+    id: 'simple_invoice',
+    title: 'فاتورة بسيطة وأنيقة',
+    titleEn: 'Simple invoice',
+    category: 'business',
+    accentColor: '#334155',
+    iconType: 'invoice',
+    description: 'نموذج فاتورة سريعة مناسب للخدمات المستقلة والشركات الناشئة والمتاجر.',
+    defaultSheetKey: 'sheet1',
+    sheets: {
+      sheet1: {
+        label: 'Invoice',
+        colWidths: { A: 32, B: 240, C: 80, D: 110, E: 120 },
+        rowHeights: { 1: 18, 2: 36, 3: 20, 4: 26, 5: 22, 6: 24 },
+        data: {
+          B2: { value: 'Elegant Embrace INVOICE', bold: true, fontSize: 18, color: '#1e293b' },
+          B4: { value: 'Service Description', bold: true, bg: '#334155', color: '#ffffff', border: 'all' },
+          C4: { value: 'Qty', bold: true, bg: '#334155', color: '#ffffff', border: 'all', align: 'center' },
+          D4: { value: 'Price', bold: true, bg: '#334155', color: '#ffffff', border: 'all', align: 'right' },
+          E4: { value: 'Total', bold: true, bg: '#334155', color: '#ffffff', border: 'all', align: 'right' },
+          B5: { value: 'Brand Identity Design', border: 'all' }, C5: { value: '1', border: 'all', align: 'center' }, D5: { value: '$2,500.00', border: 'all', align: 'right' }, E5: { value: '$2,500.00', formula: '=C5*D5', border: 'all', align: 'right' },
+          B6: { value: 'Net Payable', bold: true, bg: '#f1f5f9', border: 'double-bottom' }, E6: { value: '$2,500.00', formula: '=SUM(E5)', bold: true, bg: '#f1f5f9', border: 'double-bottom', align: 'right' },
+        },
+      },
+    },
+  },
+
+  // 20. Sales Invoice Tracker
+  {
+    id: 'sales_invoice_tracker',
+    title: 'متتبع فواتير المبيعات والتحصيل',
+    titleEn: 'Sales invoice tracker',
+    category: 'business',
+    accentColor: '#0284c7',
+    iconType: 'invoice',
+    description: 'متابعة الفواتير المصدرة وتواريخ الاستحقاق والمدفوعة وغير المدفوعة.',
+    defaultSheetKey: 'sheet1',
+    sheets: {
+      sheet1: {
+        label: 'Tracker',
+        colWidths: { A: 32, B: 110, C: 200, D: 110, E: 120, F: 110 },
+        rowHeights: { 1: 18, 2: 36, 3: 20, 4: 26, 5: 22, 6: 22 },
+        data: {
+          B2: { value: 'Sales Invoice Tracker', bold: true, fontSize: 18, color: '#0284c7' },
+          B4: { value: 'Invoice #', bold: true, bg: '#0284c7', color: '#ffffff', border: 'all' },
+          C4: { value: 'Client Name', bold: true, bg: '#0284c7', color: '#ffffff', border: 'all' },
+          D4: { value: 'Issue Date', bold: true, bg: '#0284c7', color: '#ffffff', border: 'all' },
+          E4: { value: 'Total Amount', bold: true, bg: '#0284c7', color: '#ffffff', border: 'all', align: 'right' },
+          F4: { value: 'Status', bold: true, bg: '#0284c7', color: '#ffffff', border: 'all', align: 'center' },
+          B5: { value: 'INV-1001', border: 'all' }, C5: { value: 'Horizon Technologies', border: 'all' }, D5: { value: '2026/10/01', border: 'all' }, E5: { value: '$12,500.00', border: 'all', align: 'right' }, F5: { value: 'Paid', bg: '#dcfce7', color: '#166534', bold: true, align: 'center', border: 'all' },
+        },
+      },
+    },
+  },
+
+  // 21. Home Inventory
+  {
+    id: 'home_inventory',
+    title: 'جرد أصول ومقتنيات المنزل',
+    titleEn: 'Home inventory',
+    category: 'lists',
+    accentColor: '#0d9488',
+    iconType: 'inventory',
+    description: 'تسجيل الأجهزة والإلكترونيات والأثاث مع التكلفة وتاريخ الشراء لأغراض التأمين والضمان.',
+    defaultSheetKey: 'sheet1',
+    sheets: {
+      sheet1: {
+        label: 'Contents List',
+        colWidths: { A: 32, B: 140, C: 180, D: 140, E: 120 },
+        rowHeights: { 1: 18, 2: 36, 3: 24, 4: 26, 5: 22, 6: 24 },
+        data: {
+          B2: { value: 'Home Inventory: Contents List', bold: true, fontSize: 18, color: '#0f766e' },
+          B4: { value: 'Room / Area', bold: true, bg: '#0d9488', color: '#ffffff', border: 'all' },
+          C4: { value: 'Item Description', bold: true, bg: '#0d9488', color: '#ffffff', border: 'all' },
+          D4: { value: 'Manufacturer / Model', bold: true, bg: '#0d9488', color: '#ffffff', border: 'all' },
+          E4: { value: 'Est. Value', bold: true, bg: '#0d9488', color: '#ffffff', border: 'all', align: 'right' },
+          B5: { value: 'Living Room', border: 'all' }, C5: { value: 'Smart 4K OLED TV 65"', border: 'all' }, D5: { value: 'LG C3 Series', border: 'all' }, E5: { value: '$1,800.00', border: 'all', align: 'right' },
+          B6: { value: 'Total Estimated Value', bold: true, bg: '#ccfbf1', border: 'double-bottom' }, E6: { value: '$1,800.00', formula: '=SUM(E5)', bold: true, bg: '#ccfbf1', border: 'double-bottom', align: 'right' },
+        },
+      },
+    },
+  },
+
+  // 22. Inventory List with Highlight
+  {
+    id: 'inventory_list_with_highlight',
+    title: 'قائمة جرد المخزون مع تنبيه النقص',
+    titleEn: 'Inventory list with highlight',
+    category: 'lists',
+    accentColor: '#65a30d',
+    iconType: 'inventory',
+    description: 'تنبيه لوني تلقائي عند انخفاض كمية المخزون تحت حد إعادة الطلب الأدنى.',
+    defaultSheetKey: 'sheet1',
+    sheets: {
+      sheet1: {
+        label: 'Stock List',
+        colWidths: { A: 32, B: 110, C: 200, D: 100, E: 100, F: 120 },
+        rowHeights: { 1: 18, 2: 36, 3: 20, 4: 26, 5: 22, 6: 22 },
+        data: {
+          B2: { value: 'Inventory List: Stock Levels', bold: true, fontSize: 18, color: '#3f6212' },
+          B4: { value: 'SKU Code', bold: true, bg: '#65a30d', color: '#ffffff', border: 'all' },
+          C4: { value: 'Product Name', bold: true, bg: '#65a30d', color: '#ffffff', border: 'all' },
+          D4: { value: 'In Stock', bold: true, bg: '#65a30d', color: '#ffffff', border: 'all', align: 'center' },
+          E4: { value: 'Reorder Level', bold: true, bg: '#65a30d', color: '#ffffff', border: 'all', align: 'center' },
+          F4: { value: 'Inventory Status', bold: true, bg: '#65a30d', color: '#ffffff', border: 'all', align: 'center' },
+          B5: { value: 'SKU-001', border: 'all' }, C5: { value: 'Fiber Patch Cable 10m', border: 'all' }, D5: { value: '12', border: 'all', align: 'center' }, E5: { value: '25', border: 'all', align: 'center' }, F5: { value: 'REORDER NOW', bg: '#fee2e2', color: '#991b1b', bold: true, align: 'center', border: 'all' },
+        },
+      },
+    },
+  },
+
+  // 23. Employee Absence Schedule
+  {
+    id: 'employee_absence_schedule',
+    title: 'جدول إجازات وغياب الموظفين السنوي',
+    titleEn: 'Employee absence schedule',
+    category: 'business',
+    accentColor: '#2563eb',
+    iconType: 'attendance',
+    description: 'تتبع رصيد الإجازات السنوية، المرضية، والاضطرارية لجميع أعضاء الفريق على مدار العام.',
+    defaultSheetKey: 'sheet1',
+    sheets: {
+      sheet1: {
+        label: 'Absence Schedule',
+        colWidths: { A: 32, B: 180, C: 100, D: 100, E: 110 },
+        rowHeights: { 1: 18, 2: 36, 3: 20, 4: 26, 5: 22 },
+        data: {
+          B2: { value: 'January - Employee Absence Schedule', bold: true, fontSize: 18, color: '#1d4ed8' },
+          B4: { value: 'Employee Name', bold: true, bg: '#2563eb', color: '#ffffff', border: 'all' },
+          C4: { value: 'Total Allowed', bold: true, bg: '#2563eb', color: '#ffffff', border: 'all', align: 'center' },
+          D4: { value: 'Days Taken', bold: true, bg: '#2563eb', color: '#ffffff', border: 'all', align: 'center' },
+          E4: { value: 'Balance Remaining', bold: true, bg: '#2563eb', color: '#ffffff', border: 'all', align: 'center' },
+          B5: { value: 'David Miller', border: 'all' }, C5: { value: '30', border: 'all', align: 'center' }, D5: { value: '8', border: 'all', align: 'center' }, E5: { value: '22', formula: '=C5-D5', bold: true, bg: '#eff6ff', align: 'center', border: 'all' },
+        },
+      },
+    },
+  },
+
+  // 24. Loan Calculator
+  {
+    id: 'loan_calculator',
+    title: 'حاسبة القروض والتمويل',
+    titleEn: 'Loan calculator',
+    category: 'budgets',
+    accentColor: '#ea580c',
+    iconType: 'loan',
+    description: 'حساب القسط الشهري، إجمالي الفوائد، وتكلفة التمويل الإجمالية بدقة تامة.',
+    defaultSheetKey: 'sheet1',
+    sheets: {
+      sheet1: {
+        label: 'Calculator',
+        colWidths: { A: 32, B: 220, C: 140 },
+        rowHeights: { 1: 18, 2: 36, 3: 24, 4: 26, 5: 22, 6: 22, 7: 22, 8: 26 },
+        data: {
+          B2: { value: 'Simple Loan Calculator', bold: true, fontSize: 18, color: '#c2410c' },
+          B4: { value: 'Loan Parameters', bold: true, bg: '#ea580c', color: '#ffffff', border: 'all' },
+          C4: { value: 'Values', bold: true, bg: '#ea580c', color: '#ffffff', border: 'all', align: 'right' },
+          B5: { value: 'Loan Amount', border: 'all' }, C5: { value: '$50,000.00', border: 'all', align: 'right' },
+          B6: { value: 'Annual Interest Rate', border: 'all' }, C6: { value: '6.50%', border: 'all', align: 'right' },
+          B7: { value: 'Loan Period in Years', border: 'all' }, C7: { value: '5', border: 'all', align: 'right' },
+          B8: { value: 'Estimated Monthly Payment', bold: true, bg: '#ffedd5', border: 'double-bottom' }, C8: { value: '$978.31', bold: true, bg: '#ffedd5', color: '#c2410c', border: 'double-bottom', align: 'right' },
+        },
+      },
+    },
+  },
+
+  // 25. Loan Amortization Schedule
+  {
+    id: 'loan_amortization_schedule',
+    title: 'جدول استهلاك وسداد القرض',
+    titleEn: 'Loan amortization schedule',
+    category: 'budgets',
+    accentColor: '#059669',
+    iconType: 'loan',
+    description: 'جدول تفصيلي يوضح حصة الأصل وحصة الفائدة والرصيد المتبقي لكل دفعة شهرية.',
+    defaultSheetKey: 'sheet1',
+    sheets: {
+      sheet1: {
+        label: 'Amortization',
+        colWidths: { A: 32, B: 60, C: 120, D: 110, E: 110, F: 110, G: 120 },
+        rowHeights: { 1: 18, 2: 36, 3: 24, 4: 26, 5: 22, 6: 22 },
+        data: {
+          B2: { value: 'Loan Amortization Schedule', bold: true, fontSize: 18, color: '#047857' },
+          B4: { value: 'Pmt #', bold: true, bg: '#059669', color: '#ffffff', border: 'all', align: 'center' },
+          C4: { value: 'Beginning Balance', bold: true, bg: '#059669', color: '#ffffff', border: 'all', align: 'right' },
+          D4: { value: 'Payment', bold: true, bg: '#059669', color: '#ffffff', border: 'all', align: 'right' },
+          E4: { value: 'Principal', bold: true, bg: '#059669', color: '#ffffff', border: 'all', align: 'right' },
+          F4: { value: 'Interest', bold: true, bg: '#059669', color: '#ffffff', border: 'all', align: 'right' },
+          G4: { value: 'Ending Balance', bold: true, bg: '#059669', color: '#ffffff', border: 'all', align: 'right' },
+          B5: { value: '1', border: 'all', align: 'center' }, C5: { value: '$50,000.00', border: 'all', align: 'right' }, D5: { value: '$978.31', border: 'all', align: 'right' }, E5: { value: '$707.48', border: 'all', align: 'right' }, F5: { value: '$270.83', border: 'all', align: 'right' }, G5: { value: '$49,292.52', formula: '=C5-E5', border: 'all', align: 'right' },
+        },
+      },
+    },
+  },
+
+  // 26. Bill Paying Checklist
+  {
+    id: 'bill_paying_checklist',
+    title: 'قائمة متابعة ودفع الفواتير الدورية',
+    titleEn: 'Bill paying checklist',
+    category: 'lists',
+    accentColor: '#d97706',
+    iconType: 'checklist',
+    description: 'قائمة شهرية مجمعة لفواتير الكهرباء والمياه والإنترنت وبطاقات الائتمان لتجنب التأخير.',
+    defaultSheetKey: 'sheet1',
+    sheets: {
+      sheet1: {
+        label: 'Checklist',
+        colWidths: { A: 32, B: 200, C: 120, D: 100, E: 100, F: 100 },
+        rowHeights: { 1: 18, 2: 36, 3: 20, 4: 26, 5: 22 },
+        data: {
+          B2: { value: 'Bill Paying Checklist', bold: true, fontSize: 18, color: '#b45309' },
+          B4: { value: 'Bill Category', bold: true, bg: '#d97706', color: '#ffffff', border: 'all' },
+          C4: { value: 'Due Day', bold: true, bg: '#d97706', color: '#ffffff', border: 'all' },
+          D4: { value: 'January', bold: true, bg: '#fef3c7', border: 'all', align: 'right' },
+          E4: { value: 'February', bold: true, bg: '#fee2e2', border: 'all', align: 'right' },
+          F4: { value: 'March', bold: true, bg: '#fef08a', border: 'all', align: 'right' },
+          B5: { value: 'Electric & Gas Bill', border: 'all' }, C5: { value: '25th of month', border: 'all' }, D5: { value: '$145.00', border: 'all', align: 'right' }, E5: { value: '$160.00', border: 'all', align: 'right' }, F5: { value: '$135.00', border: 'all', align: 'right' },
+        },
+      },
+    },
+  },
+
+  // 27. Household To-Do List
+  {
+    id: 'household_todo_list',
+    title: 'قائمة مهام المنزل اليومية',
+    titleEn: 'Household to-do list',
+    category: 'lists',
+    accentColor: '#0d9488',
+    iconType: 'checklist',
+    description: 'تنظيم مهام الصيانة المنزلية والترتيب مع أولويات الإنجاز (عالية / متوسطة / منخفضة).',
+    defaultSheetKey: 'sheet1',
+    sheets: {
+      sheet1: {
+        label: 'Tasks',
+        colWidths: { A: 32, B: 60, C: 240, D: 110, E: 100 },
+        rowHeights: { 1: 18, 2: 36, 3: 20, 4: 26, 5: 22 },
+        data: {
+          B2: { value: 'Household To-Do List', bold: true, fontSize: 18, color: '#0f766e' },
+          B4: { value: 'Done', bold: true, bg: '#0d9488', color: '#ffffff', border: 'all', align: 'center' },
+          C4: { value: 'Task Description', bold: true, bg: '#0d9488', color: '#ffffff', border: 'all' },
+          D4: { value: 'Due Date', bold: true, bg: '#0d9488', color: '#ffffff', border: 'all' },
+          E4: { value: 'Priority', bold: true, bg: '#0d9488', color: '#ffffff', border: 'all', align: 'center' },
+          B5: { value: '✓', align: 'center', bg: '#dcfce7', color: '#166534', bold: true, border: 'all' }, C5: { value: 'Inspect HVAC Air Filters', border: 'all' }, D5: { value: '2026/11/05', border: 'all' }, E5: { value: 'High', bg: '#fee2e2', color: '#991b1b', bold: true, align: 'center', border: 'all' },
+        },
+      },
+    },
+  },
+
+  // 28. Gantt Project Planner
+  {
+    id: 'gantt_project_planner',
+    title: 'مخطط جانت لإدارة المشاريع',
+    titleEn: 'Gantt project planner',
+    category: 'planners',
+    accentColor: '#7c3aed',
+    iconType: 'gantt',
+    description: 'جدول زمني أفقي يوضح مراحل المشروع وفترات البدء والانتهاء ونسب الإنجاز.',
+    defaultSheetKey: 'sheet1',
+    sheets: {
+      sheet1: {
+        label: 'Project Planner',
+        colWidths: { A: 32, B: 220, C: 110, D: 80, E: 80, F: 140 },
+        rowHeights: { 1: 18, 2: 36, 3: 20, 4: 26, 5: 22, 6: 22 },
+        data: {
+          B2: { value: 'Project Planner: Gantt Timeline', bold: true, fontSize: 18, color: '#6d28d9' },
+          B4: { value: 'Task Name', bold: true, bg: '#7c3aed', color: '#ffffff', border: 'all' },
+          C4: { value: 'Start Date', bold: true, bg: '#7c3aed', color: '#ffffff', border: 'all' },
+          D4: { value: 'Days', bold: true, bg: '#7c3aed', color: '#ffffff', border: 'all', align: 'center' },
+          E4: { value: '% Done', bold: true, bg: '#7c3aed', color: '#ffffff', border: 'all', align: 'center' },
+          F4: { value: 'Progress Bar', bold: true, bg: '#ede9fe', border: 'all', align: 'center' },
+          B5: { value: 'Architecture & System Design', border: 'all' }, C5: { value: '2026/11/01', border: 'all' }, D5: { value: '14', border: 'all', align: 'center' }, E5: { value: '100%', bg: '#dcfce7', bold: true, align: 'center', border: 'all' }, F5: { value: '██████████', color: '#7c3aed', align: 'center', border: 'all' },
+          B6: { value: 'Frontend UI Implementation', border: 'all' }, C6: { value: '2026/11/15', border: 'all' }, D6: { value: '21', border: 'all', align: 'center' }, E6: { value: '65%', bg: '#fef3c7', bold: true, align: 'center', border: 'all' }, F6: { value: '██████░░░░', color: '#7c3aed', align: 'center', border: 'all' },
+        },
+      },
+    },
+  },
+
+  // 29. Agile Gantt Chart
+  {
+    id: 'agile_gantt_chart',
+    title: 'مخطط جانت المرن لمنهجية Agile و Scrum',
+    titleEn: 'Agile Gantt chart',
+    category: 'planners',
+    accentColor: '#2563eb',
+    iconType: 'gantt',
+    description: 'تتبع السبرنتات (Sprints) وقصص المستخدمين ومراحل الإصدار البرمجي السريع.',
+    defaultSheetKey: 'sheet1',
+    sheets: {
+      sheet1: {
+        label: 'Agile Sprints',
+        colWidths: { A: 32, B: 240, C: 80, D: 120, E: 120 },
+        rowHeights: { 1: 18, 2: 36, 3: 20, 4: 26, 5: 22 },
+        data: {
+          B2: { value: 'Agile Gantt: Sprints & Milestones', bold: true, fontSize: 18, color: '#1d4ed8' },
+          B4: { value: 'Sprint Feature / Story', bold: true, bg: '#2563eb', color: '#ffffff', border: 'all' },
+          C4: { value: 'Points', bold: true, bg: '#2563eb', color: '#ffffff', border: 'all', align: 'center' },
+          D4: { value: 'Assignee', bold: true, bg: '#2563eb', color: '#ffffff', border: 'all' },
+          E4: { value: 'Status', bold: true, bg: '#2563eb', color: '#ffffff', border: 'all', align: 'center' },
+          B5: { value: 'Full Excel Formula Engine V2', border: 'all' }, C5: { value: '13', border: 'all', align: 'center' }, D5: { value: 'Core Team', border: 'all' }, E5: { value: 'Completed', bg: '#dcfce7', color: '#166534', bold: true, align: 'center', border: 'all' },
+        },
+      },
+    },
+  },
+
+  // 30. Get More Out of PivotTables
+  {
+    id: 'pivot_advanced_guide',
+    title: 'تحقيق أقصى استفادة من الجداول المحورية',
+    titleEn: 'Get more out of PivotTables',
+    category: 'tutorials',
+    badge: 'Pivot+',
+    accentColor: '#107c41',
+    iconType: 'pivottable',
+    description: 'الحقول المحسوبة، التجميع بالتواريخ، ومقاسم البيانات (Slicers) لتحليل الأعمال المتقدم.',
+    defaultSheetKey: 'sheet1',
+    sheets: {
+      sheet1: {
+        label: 'Advanced Pivot',
+        colWidths: { A: 32, B: 110, C: 80, D: 160, E: 120, F: 120 },
+        rowHeights: { 1: 18, 2: 36, 3: 20, 4: 26, 5: 22 },
+        data: {
+          B2: { value: 'Get More Out of PivotTables & Slicers', bold: true, fontSize: 18, color: '#107c41' },
+          B4: { value: 'Year', bold: true, bg: '#107c41', color: '#ffffff', border: 'all', align: 'center' },
+          C4: { value: 'Quarter', bold: true, bg: '#107c41', color: '#ffffff', border: 'all', align: 'center' },
+          D4: { value: 'Commercial Division', bold: true, bg: '#107c41', color: '#ffffff', border: 'all' },
+          E4: { value: 'Actual Sales', bold: true, bg: '#107c41', color: '#ffffff', border: 'all', align: 'right' },
+          F4: { value: 'Target', bold: true, bg: '#107c41', color: '#ffffff', border: 'all', align: 'right' },
+          B5: { value: '2026', border: 'all', align: 'center' }, C5: { value: 'Q1', border: 'all', align: 'center' }, D5: { value: 'Enterprise Software', border: 'all' }, E5: { value: '$450,000.00', border: 'all', align: 'right' }, F5: { value: '$400,000.00', border: 'all', align: 'right' },
+        },
+      },
+    },
+  },
+];

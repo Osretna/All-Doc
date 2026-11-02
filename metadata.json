@@ -1,0 +1,8 @@
+{
+  "name": "MY-DOC",
+  "description": "الجناح المكتبي السيادي المتكامل MY-DOC (Docs, Sheets, Slides, Access, OneNote, PDF Studio, Photo Studio) بتصميم مايكروسوفت أوفيس ودعم PWA والعمل أوفلاين 100%.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
