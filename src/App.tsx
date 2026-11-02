@@ -70,6 +70,21 @@ import * as XLSX from 'xlsx';
 import JSZip from 'jszip';
 import { UploadCloud } from 'lucide-react';
 
+// Clean session detection: when user closes the application/browser and reopens, start completely fresh with blank files
+if (typeof window !== 'undefined' && !sessionStorage.getItem('infinity_office_session_active')) {
+  localVault.remove('infinity_office_tabs');
+  localVault.remove('infinity_office_active_tab_id');
+  localVault.remove(localVault.KEYS.SHEETS_DATA);
+  localVault.remove(localVault.KEYS.SLIDES_DATA);
+  localVault.remove(localVault.KEYS.BASE_DATA);
+  localVault.remove(localVault.KEYS.DOCS_CONTENT);
+  localVault.remove('infinity_office_doc_title');
+  localVault.remove('infinity_office_excel_persistent_clipboard');
+  localVault.remove('infinity_office_excel_sheet_colors');
+  localVault.remove('infinity_office_excel_active_style');
+  sessionStorage.setItem('infinity_office_session_active', 'true');
+}
+
 export default function App() {
   // Navigation & Suite State (persisted across browser refresh so active app & data never get lost)
   const [activeSection, setActiveSectionState] = useState<MainNavSection>(() => localVault.get('infinity_office_active_section', 'office'));
@@ -219,10 +234,85 @@ export default function App() {
     }, 4000);
   };
 
-  // Tab Selection
+  // Open any file or template in a brand new tab without overwriting or closing the currently open tab
+  const openInNewTab = (
+    appId: OfficeAppId,
+    title: string,
+    content: any,
+    handle?: any
+  ) => {
+    // 1. Snapshot and preserve the current active tab's latest content
+    const updatedTabs = tabs.map((t) => {
+      if (t.id !== activeTabId) return t;
+      if (t.appId === 'docs' && editorRef.current) return { ...t, content: editorRef.current.innerHTML };
+      if (t.appId === 'sheets' && excelData) return { ...t, content: excelData };
+      if (t.appId === 'slides' && slidesData) return { ...t, content: slidesData };
+      if (t.appId === 'base' && accessData) return { ...t, content: accessData };
+      if (t.appId === 'pdf' && pdfFile) return { ...t, content: pdfFile };
+      return t;
+    });
+
+    // 2. Create the brand new tab
+    const newTabId = `tab_${appId}_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+    const newTab: DocumentTabItem = {
+      id: newTabId,
+      appId,
+      title,
+      content,
+      fileHandle: handle,
+      createdAt: Date.now(),
+    };
+
+    setTabs([...updatedTabs, newTab]);
+    setActiveTabId(newTabId);
+    localVault.set('infinity_office_active_tab_id', newTabId);
+
+    setActiveAppState(appId);
+    localVault.set(localVault.KEYS.ACTIVE_APP, appId);
+    setActiveSectionState('office');
+    localVault.set('infinity_office_active_section', 'office');
+    setDocumentTitleState(title);
+    localVault.set('infinity_office_doc_title', title);
+
+    // 3. Load content into active app state
+    if (appId === 'docs') {
+      const html = typeof content === 'string' ? content : '<p><br></p>';
+      setWordInitialHtml(html);
+      if (editorRef.current) {
+        editorRef.current.innerHTML = html;
+        handleContentChange();
+      }
+    } else if (appId === 'sheets') {
+      setExcelDataState(content);
+      if (content) localVault.set(localVault.KEYS.SHEETS_DATA, content);
+    } else if (appId === 'slides') {
+      setSlidesDataState(content);
+      if (content) localVault.set(localVault.KEYS.SLIDES_DATA, content);
+    } else if (appId === 'base') {
+      setAccessDataState(content);
+      if (content) localVault.set(localVault.KEYS.BASE_DATA, content);
+    } else if (appId === 'pdf') {
+      setPdfFile(content instanceof File ? content : null);
+    }
+
+    addNotification(`تم فتح "${title}" في تبويب مستقل جديد بنجاح!`, 'success');
+  };
+
+  // Tab Selection (Safely preserves current tab content before switching)
   const handleSelectTab = (tabId: string) => {
     const targetTab = tabs.find(t => t.id === tabId);
     if (!targetTab) return;
+
+    // Snapshot current active tab before switching!
+    setTabs(prev => prev.map(t => {
+      if (t.id !== activeTabId) return t;
+      if (t.appId === 'docs' && editorRef.current) return { ...t, content: editorRef.current.innerHTML };
+      if (t.appId === 'sheets' && excelData) return { ...t, content: excelData };
+      if (t.appId === 'slides' && slidesData) return { ...t, content: slidesData };
+      if (t.appId === 'base' && accessData) return { ...t, content: accessData };
+      if (t.appId === 'pdf' && pdfFile) return { ...t, content: pdfFile };
+      return t;
+    }));
 
     setActiveTabId(tabId);
     localVault.set('infinity_office_active_tab_id', tabId);
@@ -327,7 +417,18 @@ export default function App() {
       createdAt: Date.now(),
     };
 
-    setTabs(prev => [...prev, newTab]);
+    // Snapshot current active tab before switching!
+    const updatedTabs = tabs.map((t) => {
+      if (t.id !== activeTabId) return t;
+      if (t.appId === 'docs' && editorRef.current) return { ...t, content: editorRef.current.innerHTML };
+      if (t.appId === 'sheets' && excelData) return { ...t, content: excelData };
+      if (t.appId === 'slides' && slidesData) return { ...t, content: slidesData };
+      if (t.appId === 'base' && accessData) return { ...t, content: accessData };
+      if (t.appId === 'pdf' && pdfFile) return { ...t, content: pdfFile };
+      return t;
+    });
+
+    setTabs([...updatedTabs, newTab]);
     setActiveTabId(newTab.id);
     localVault.set('infinity_office_active_tab_id', newTab.id);
 
@@ -601,53 +702,12 @@ export default function App() {
           const raw = await file.text();
           html = raw.includes('<p') ? raw : `<p style="white-space: pre-wrap;">${raw}</p>`;
         }
-        
-        const newTab: DocumentTabItem = {
-          id: `tab_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-          appId: 'docs',
-          title: fileName,
-          content: html,
-          createdAt: Date.now(),
-        };
-        setTabs(prev => [...prev, newTab]);
-        setActiveTabId(newTab.id);
-        localVault.set('infinity_office_active_tab_id', newTab.id);
-        setActiveAppState('docs');
-        localVault.set(localVault.KEYS.ACTIVE_APP, 'docs');
-        setActiveSectionState('office');
-        localVault.set('infinity_office_active_section', 'office');
-        setDocumentTitleState(fileName);
-        localVault.set('infinity_office_doc_title', fileName);
-        setWordInitialHtml(html);
-        if (editorRef.current) {
-          editorRef.current.innerHTML = html;
-          handleContentChange();
-        }
-        addNotification(`تم فتح مستند Word "${fileName}" في تبويب مستقل بنجاح بكافة التنسيقات والخطوط!`, 'success');
+        openInNewTab('docs', fileName, html);
       } else if (ext === 'xlsx' || ext === 'xls' || (ext === 'csv' && activeApp !== 'base')) {
         addNotification(`جاري قراءة وتحليل مصنف Excel "${fileName}"...`, 'info');
         const parsedSheets = await parseExcelFile(file);
         if (parsedSheets && Object.keys(parsedSheets).length > 0) {
-          const newTab: DocumentTabItem = {
-            id: `tab_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-            appId: 'sheets',
-            title: fileName,
-            content: parsedSheets,
-            createdAt: Date.now(),
-          };
-          setTabs(prev => [...prev, newTab]);
-          setActiveTabId(newTab.id);
-          localVault.set('infinity_office_active_tab_id', newTab.id);
-          setExcelDataState(parsedSheets);
-          localVault.set(localVault.KEYS.SHEETS_DATA, parsedSheets);
-          setActiveAppState('sheets');
-          localVault.set(localVault.KEYS.ACTIVE_APP, 'sheets');
-          setActiveSectionState('office');
-          localVault.set('infinity_office_active_section', 'office');
-          setDocumentTitleState(fileName);
-          localVault.set('infinity_office_doc_title', fileName);
-          setIsSaved(false);
-          addNotification(`تم فتح ملف Excel "${fileName}" في تبويب مستقل بنجاح بكافة الجداول والصيغ والتنسيقات!`, 'success');
+          openInNewTab('sheets', fileName, parsedSheets);
         } else {
           addNotification('تعذر استخراج أوراق العمل من ملف Excel', 'error');
         }
@@ -655,26 +715,7 @@ export default function App() {
         addNotification(`جاري استخراج شرائح عرض PowerPoint "${fileName}"...`, 'info');
         const parsedSlides = await parsePptxFile(file);
         if (parsedSlides && parsedSlides.length > 0) {
-          const newTab: DocumentTabItem = {
-            id: `tab_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-            appId: 'slides',
-            title: fileName,
-            content: parsedSlides,
-            createdAt: Date.now(),
-          };
-          setTabs(prev => [...prev, newTab]);
-          setActiveTabId(newTab.id);
-          localVault.set('infinity_office_active_tab_id', newTab.id);
-          setSlidesDataState(parsedSlides);
-          localVault.set(localVault.KEYS.SLIDES_DATA, parsedSlides);
-          setActiveAppState('slides');
-          localVault.set(localVault.KEYS.ACTIVE_APP, 'slides');
-          setActiveSectionState('office');
-          localVault.set('infinity_office_active_section', 'office');
-          setDocumentTitleState(fileName);
-          localVault.set('infinity_office_doc_title', fileName);
-          setIsSaved(false);
-          addNotification(`تم فتح عرض PowerPoint "${fileName}" في تبويب مستقل بنجاح (${parsedSlides.length} شريحة)!`, 'success');
+          openInNewTab('slides', fileName, parsedSlides);
         } else {
           addNotification('تعذر استخراج شرائح العرض من ملف PowerPoint', 'error');
         }
@@ -682,75 +723,18 @@ export default function App() {
         addNotification(`جاري قراءة واستيراد قاعدة بيانات Access "${fileName}"...`, 'info');
         const tables = await parseAccessFile(file);
         if (tables && tables.length > 0) {
-          const newTab: DocumentTabItem = {
-            id: `tab_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-            appId: 'base',
-            title: fileName,
-            content: tables,
-            createdAt: Date.now(),
-          };
-          setTabs(prev => [...prev, newTab]);
-          setActiveTabId(newTab.id);
-          localVault.set('infinity_office_active_tab_id', newTab.id);
-          setAccessDataState(tables);
-          localVault.set(localVault.KEYS.BASE_DATA, tables);
-          setActiveAppState('base');
-          localVault.set(localVault.KEYS.ACTIVE_APP, 'base');
-          setActiveSectionState('office');
-          localVault.set('infinity_office_active_section', 'office');
-          setDocumentTitleState(fileName);
-          localVault.set('infinity_office_doc_title', fileName);
-          setIsSaved(false);
-          addNotification(`تم فتح قاعدة بيانات Access "${fileName}" في تبويب مستقل بنجاح!`, 'success');
+          openInNewTab('base', fileName, tables);
         } else {
           addNotification('تعذر قراءة الجداول من ملف Access', 'error');
         }
       } else if (ext === 'pdf') {
         addNotification(`جاري فتح مستند PDF "${fileName}"...`, 'info');
-        const newTab: DocumentTabItem = {
-          id: `tab_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-          appId: 'pdf',
-          title: fileName,
-          content: file,
-          createdAt: Date.now(),
-        };
-        setTabs(prev => [...prev, newTab]);
-        setActiveTabId(newTab.id);
-        localVault.set('infinity_office_active_tab_id', newTab.id);
-        setPdfFile(file);
-        setActiveAppState('pdf');
-        localVault.set(localVault.KEYS.ACTIVE_APP, 'pdf');
-        setActiveSectionState('office');
-        localVault.set('infinity_office_active_section', 'office');
-        setDocumentTitleState(fileName);
-        localVault.set('infinity_office_doc_title', fileName);
-        addNotification(`تم فتح مستند PDF "${fileName}" في تبويب مستقل بنجاح!`, 'success');
+        openInNewTab('pdf', fileName, file);
       } else {
         // Fallback: try as Word text
         const text = await file.text();
         const html = `<p style="white-space: pre-wrap;">${text}</p>`;
-        const newTab: DocumentTabItem = {
-          id: `tab_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-          appId: 'docs',
-          title: fileName,
-          content: html,
-          createdAt: Date.now(),
-        };
-        setTabs(prev => [...prev, newTab]);
-        setActiveTabId(newTab.id);
-        localVault.set('infinity_office_active_tab_id', newTab.id);
-        setActiveAppState('docs');
-        localVault.set(localVault.KEYS.ACTIVE_APP, 'docs');
-        setActiveSectionState('office');
-        localVault.set('infinity_office_active_section', 'office');
-        setDocumentTitleState(fileName);
-        localVault.set('infinity_office_doc_title', fileName);
-        setWordInitialHtml(html);
-        if (editorRef.current) {
-          editorRef.current.innerHTML = html;
-          handleContentChange();
-        }
-        addNotification(`تم استيراد الملف "${fileName}" في تبويب مستقل بنجاح`, 'info');
+        openInNewTab('docs', fileName, html);
       }
     } catch (err: unknown) {
       console.error('Error in handleFileUpload:', err);
@@ -1075,14 +1059,8 @@ export default function App() {
   };
 
   const handleApplyTemplate = (templateContent: string, title: string) => {
-    setDocumentTitle(title);
-
     if (activeApp === 'docs') {
-      if (editorRef.current) {
-        editorRef.current.innerHTML = templateContent || '<p><br></p>';
-        handleContentChange();
-      }
-      addNotification(`تم إنشاء مستند Word جديد "${title}"!`, 'success');
+      openInNewTab('docs', title, templateContent || '<p><br></p>');
     } else if (activeApp === 'sheets') {
       let newSheets: Record<string, { label: string; data: SheetData }> = {
         sheet1: {
@@ -1144,9 +1122,7 @@ export default function App() {
         };
       }
 
-      setExcelData(newSheets);
-      localVault.set(localVault.KEYS.SHEETS_DATA, newSheets);
-      addNotification(`تم إنشاء مصنف Excel جديد "${title}" بنجاح!`, 'success');
+      openInNewTab('sheets', title, newSheets);
     } else if (activeApp === 'slides') {
       const newSlides: SlideItem[] = [
         {
@@ -1159,12 +1135,9 @@ export default function App() {
           layout: 'content',
         },
       ];
-      setSlidesData(newSlides);
-      localVault.set(localVault.KEYS.SLIDES_DATA, newSlides);
-      addNotification(`تم إنشاء عرض PowerPoint جديد "${title}" بنجاح!`, 'success');
+      openInNewTab('slides', title, newSlides);
     } else if (activeApp === 'pdf') {
-      setPdfFile(null);
-      addNotification(`تم فتح صفحة ومستند PDF جديد فارغ للكتابة والإدراج!`, 'success');
+      openInNewTab('pdf', title || 'مستند PDF جديد.pdf', null);
     } else if (activeApp === 'base') {
       const newTables: DbTable[] = [
         {
@@ -1182,9 +1155,7 @@ export default function App() {
           ],
         },
       ];
-      setAccessData(newTables);
-      localVault.set(localVault.KEYS.BASE_DATA, newTables);
-      addNotification(`تم إنشاء قاعدة بيانات Access جديدة بنجاح!`, 'success');
+      openInNewTab('base', title, newTables);
     } else if (activeApp === 'notes') {
       setNotesSignal(s => s + 1);
       addNotification(`تم إنشاء دفتر ملاحظات جديد فارغ!`, 'success');
@@ -1367,23 +1338,7 @@ export default function App() {
                 onSheetsChange={setExcelData}
                 onOpenBackstage={() => setIsBackstageOpen(true)}
                 onOpenNewWorkbookTab={(title, newSheets, handle) => {
-                  const newTabId = `tab_sheets_${Date.now()}`;
-                  const newTab: DocumentTabItem = {
-                    id: newTabId,
-                    appId: 'sheets',
-                    title: title,
-                    content: newSheets,
-                    fileHandle: handle,
-                    createdAt: Date.now(),
-                  };
-                  setTabs((prev) => [...prev, newTab]);
-                  setActiveTabId(newTabId);
-                  setExcelDataState(newSheets);
-                  localVault.set(localVault.KEYS.SHEETS_DATA, newSheets);
-                  setDocumentTitleState(title);
-                  localVault.set('infinity_office_doc_title', title);
-                  setActiveAppState('sheets');
-                  addNotification(`تم فتح مصنف Excel "${title}" في تبويب مستقل جديد بنجاح!`, 'success');
+                  openInNewTab('sheets', title, newSheets, handle);
                 }}
                 activeFileHandle={tabs.find(t => t.id === activeTabId)?.fileHandle}
                 onSaveFileHandle={(handle) => {
@@ -1502,45 +1457,16 @@ export default function App() {
           setActiveSection('office');
         }}
         onLoadExcelData={(sheets, title) => {
-          const newTabId = `tab_sheets_${Date.now()}`;
-          const newTab: DocumentTabItem = {
-            id: newTabId,
-            appId: 'sheets',
-            title: title,
-            content: sheets,
-            createdAt: Date.now(),
-          };
-          setTabs((prev) => [...prev, newTab]);
-          setActiveTabId(newTabId);
-          setExcelData(sheets);
-          localVault.set(localVault.KEYS.SHEETS_DATA, sheets);
-          setDocumentTitle(title);
-          setActiveApp('sheets');
-          setActiveSection('office');
-          addNotification(`تم فتح مصنف Excel "${title}" في تبويب مستقل بنجاح!`, 'success');
+          openInNewTab('sheets', title, sheets);
         }}
         onLoadSlidesData={(slides, title) => {
-          setSlidesData(slides);
-          localVault.set(localVault.KEYS.SLIDES_DATA, slides);
-          setDocumentTitle(title);
-          setActiveApp('slides');
-          setActiveSection('office');
-          addNotification(`تم استيراد عرض PowerPoint "${title}" بنجاح!`, 'success');
+          openInNewTab('slides', title, slides);
         }}
         onLoadAccessData={(tables, title) => {
-          setAccessData(tables);
-          localVault.set(localVault.KEYS.BASE_DATA, tables);
-          setDocumentTitle(title);
-          setActiveApp('base');
-          setActiveSection('office');
-          addNotification(`تم استيراد قاعدة بيانات Access "${title}" بنجاح!`, 'success');
+          openInNewTab('base', title, tables);
         }}
         onLoadPdfFile={(file) => {
-          setPdfFile(file);
-          setDocumentTitle(file.name);
-          setActiveApp('pdf');
-          setActiveSection('office');
-          addNotification(`تم استيراد ملف PDF "${file.name}" بنجاح!`, 'success');
+          openInNewTab('pdf', file.name, file);
         }}
       />
 

@@ -742,6 +742,13 @@ export const SheetsApp: React.FC<Props> = ({
   };
 
   const handleSelectTemplate = (template: ExcelTemplateDefinition) => {
+    const title = template.titleEn || template.title;
+    if (onOpenNewWorkbookTab) {
+      onOpenNewWorkbookTab(title, template.sheets);
+      setIsExcelBackstageOpen(false);
+      return;
+    }
+
     setSheets(template.sheets);
     const targetKey = template.defaultSheetKey || (template.id === 'formula_tutorial' && template.sheets['sheet3'] ? 'sheet3' : Object.keys(template.sheets)[0] || 'sheet1');
     setActiveSheetKey(targetKey);
@@ -769,7 +776,6 @@ export const SheetsApp: React.FC<Props> = ({
     }
 
     saveSheets(template.sheets);
-    const title = template.titleEn || template.title;
     setDocTitle(title);
     localVault.set('infinity_office_doc_title', title);
     setSelectedCell('B2');
@@ -779,6 +785,12 @@ export const SheetsApp: React.FC<Props> = ({
   };
 
   const handleLoadExcelData = (loadedSheets: Record<string, { label: string; data: SheetData; colWidths?: Record<string, number>; rowHeights?: Record<number, number>; isRTL?: boolean }>, title: string) => {
+    if (onOpenNewWorkbookTab) {
+      onOpenNewWorkbookTab(title, loadedSheets, fileHandle);
+      setIsExcelBackstageOpen(false);
+      return;
+    }
+
     setSheets(loadedSheets);
     const keys = Object.keys(loadedSheets);
     const introKey = keys.find(k => loadedSheets[k].label?.toLowerCase().includes('introduction to function')) || keys[0] || 'sheet1';
@@ -2139,12 +2151,27 @@ export const SheetsApp: React.FC<Props> = ({
   const handleGridCellMouseDown = (cellId: string, e: React.MouseEvent) => {
     if (e.button !== 0) return;
 
-    // Check if user is actively editing a formula and clicked another cell/sheet to reference it (Excel behavior)
-    // Only enters formula reference mode if cell is actively being edited or cross-sheet formulaOrigin is set
-    const isFormulaMode = (isEditingCell || Boolean(formulaOrigin)) && formulaInput.trim().startsWith('=');
-    const origin = formulaOrigin || (isFormulaMode ? { sheetKey: activeSheetKey, cellId: selectedCell } : null);
+    // Check if user is actively building or editing a formula and clicked another cell/sheet to reference it (Excel behavior)
+    const trimmedFormula = formulaInput.trim();
+    const hasUnclosedParens = (trimmedFormula.match(/\(/g) || []).length > (trimmedFormula.match(/\)/g) || []).length;
+    const endsWithOperator = ['=', '(', '+', '-', '*', '/', ',', ':', '^', '&', '<', '>', '<=', '<>'].some((op) => trimmedFormula.endsWith(op));
+    const isBareFunctionName = /^=[A-Za-z]+$/i.test(trimmedFormula);
+    const isFormulaBarFocused = typeof document !== 'undefined' && document.activeElement === formulaInputRef.current;
+
+    const isActivelyBuildingFormula = Boolean(
+      formulaOrigin ||
+      (trimmedFormula.startsWith('=') && (
+        isEditingCell ||
+        isFormulaBarFocused ||
+        endsWithOperator ||
+        hasUnclosedParens ||
+        isBareFunctionName
+      ))
+    );
+
+    const origin = formulaOrigin || (isActivelyBuildingFormula ? { sheetKey: activeSheetKey, cellId: selectedCell } : null);
     const isSelectingFormulaTarget = Boolean(
-      isFormulaMode && origin && (origin.sheetKey !== activeSheetKey || cellId !== origin.cellId)
+      isActivelyBuildingFormula && origin && (origin.sheetKey !== activeSheetKey || cellId !== origin.cellId)
     );
 
     if (isSelectingFormulaTarget && origin) {
@@ -2166,6 +2193,7 @@ export const SheetsApp: React.FC<Props> = ({
       setIsDraggingFormulaRange(true);
       setFormulaDragStartCell(cellId);
       setFormulaReferencedRange([cellId]);
+      setIsEditingCell(true);
       return;
     }
 
@@ -2195,6 +2223,8 @@ export const SheetsApp: React.FC<Props> = ({
       setIsEditingCell(false);
       setSelectedCell(cellId);
       setSelectedRange([cellId]);
+      setFormulaReferencedRange([]);
+      setFormulaOrigin(null);
       return;
     }
 
@@ -2205,6 +2235,8 @@ export const SheetsApp: React.FC<Props> = ({
     setDragCurrentCell(cellId);
     setSelectedCell(cellId);
     setSelectedRange([cellId]);
+    setFormulaReferencedRange([]);
+    setFormulaOrigin(null);
   };
 
   const getCellsInRange = (startCell: string, endCell: string): string[] => {
@@ -2651,6 +2683,7 @@ export const SheetsApp: React.FC<Props> = ({
   const handleGridMouseUp = () => {
     setIsDraggingRange(false);
     setIsDraggingFormulaRange(false);
+    setFormulaDragStartCell(null);
 
     if (isDraggingFillHandle) {
       setIsDraggingFillHandle(false);
@@ -3378,50 +3411,57 @@ export const SheetsApp: React.FC<Props> = ({
   };
 
   const handleCancelFormulaEdit = () => {
-    const backup = preEditCellBackupRef.current;
-    if (backup) {
-      const targetSheetKey = backup.sheetKey;
-      const targetCellId = backup.cellId;
-      const targetSheet = sheets[targetSheetKey];
-      if (targetSheet) {
-        const nextData = { ...targetSheet.data };
-        if (backup.cell) {
-          nextData[targetCellId] = { ...backup.cell };
-        } else {
-          delete nextData[targetCellId];
+    let finalFormula = formulaInput.trim();
+
+    if (finalFormula.startsWith('=')) {
+      if (finalFormula === '=') {
+        // Solitary '=': clean revert to empty or backup
+        const origin = formulaOrigin || { sheetKey: activeSheetKey, cellId: selectedCell };
+        const backup = preEditCellBackupRef.current;
+        const targetSheetKey = origin.sheetKey;
+        const targetCellId = origin.cellId;
+        const targetSheet = sheets[targetSheetKey];
+        if (targetSheet) {
+          const nextData = { ...targetSheet.data };
+          if (backup && backup.cell) {
+            nextData[targetCellId] = { ...backup.cell };
+          } else {
+            delete nextData[targetCellId];
+          }
+          const fullyComputed = recalculateSheet(nextData);
+          saveSheets({ ...sheets, [targetSheetKey]: { ...targetSheet, data: fullyComputed } });
         }
-        const fullyComputed = recalculateSheet(nextData);
-        const updatedSheets = {
-          ...sheets,
-          [targetSheetKey]: {
-            ...targetSheet,
-            data: fullyComputed,
-          },
-        };
-        saveSheets(updatedSheets);
-      }
-      const restored = backup.cell?.formula || backup.cell?.value || '';
-      setFormulaInput(restored);
-      preEditCellBackupRef.current = null;
-    } else {
-      if (formulaOrigin) {
-        const origSheet = sheets[formulaOrigin.sheetKey];
-        const origCell = origSheet?.data[formulaOrigin.cellId];
-        const orig = origCell?.formula || origCell?.value || '';
-        setFormulaInput(orig);
+        setFormulaInput(backup?.cell?.value || '');
       } else {
-        const currentCell = data[selectedCell];
-        // If cell holds an unfinished formula with no value, clear it cleanly
-        if (currentCell?.formula && !currentCell.value) {
-          const nextData = { ...data };
-          delete nextData[selectedCell];
-          saveSheets({ ...sheets, [activeSheetKey]: { ...currentSheet, data: nextData } });
-          setFormulaInput('');
-        } else {
-          setFormulaInput(currentCell?.formula || currentCell?.value || '');
+        // Formula with content: auto-close parens and evaluate so the formula keeps working!
+        const openCount = (finalFormula.match(/\(/g) || []).length;
+        const closeCount = (finalFormula.match(/\)/g) || []).length;
+        if (openCount > closeCount) {
+          finalFormula += ')'.repeat(openCount - closeCount);
+        }
+        setFormulaInput(finalFormula);
+
+        const origin = formulaOrigin || { sheetKey: activeSheetKey, cellId: selectedCell };
+        const targetSheetKey = origin.sheetKey;
+        const targetCellId = origin.cellId;
+        const targetSheetObj = sheets[targetSheetKey];
+        if (targetSheetObj) {
+          const computedVal = evaluateExcelFormula(finalFormula, targetSheetObj.data, sheets, hiddenRows);
+          const nextTargetData = {
+            ...targetSheetObj.data,
+            [targetCellId]: {
+              ...(targetSheetObj.data[targetCellId] || { value: '' }),
+              formula: finalFormula,
+              value: computedVal,
+            },
+          };
+          const fullyComputed = recalculateSheet(nextTargetData);
+          saveSheets({ ...sheets, [targetSheetKey]: { ...targetSheetObj, data: fullyComputed } });
         }
       }
     }
+
+    preEditCellBackupRef.current = null;
 
     if (formulaOrigin && formulaOrigin.sheetKey !== activeSheetKey) {
       setActiveSheetKey(formulaOrigin.sheetKey);
@@ -3434,10 +3474,11 @@ export const SheetsApp: React.FC<Props> = ({
     setCurrentFunctionSyntax(null);
     setFormulaReferencedRange([]);
     setIsDraggingFormulaRange(false);
+    setFormulaDragStartCell(null);
     setIsDraggingRange(false);
     setIsDraggingColHeader(false);
     setIsDraggingRowHeader(false);
-    setTimeout(() => gridContainerRef.current?.focus(), 0);
+    setTimeout(() => gridContainerRef.current?.focus(), 10);
   };
 
   // Global keydown listener to allow continuous typing into cell immediately after Enter / navigation and cross-sheet keyboard shortcuts

@@ -37,6 +37,22 @@ export const localVault = {
     }
   },
 
+  remove(key: string): void {
+    try {
+      localStorage.removeItem(key);
+    } catch (e) {
+      console.warn('Local storage remove warning:', e);
+    }
+  },
+
+  clear(): void {
+    try {
+      localStorage.clear();
+    } catch (e) {
+      console.warn('Local storage clear warning:', e);
+    }
+  },
+
   exportSovereignBackup(): string {
     const backup: Record<string, any> = {};
     Object.entries(STORAGE_KEYS).forEach(([_, k]) => {
